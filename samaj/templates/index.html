@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SAMAJ Registration</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="SAMAJ Registration home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>SAMAJ</span>
+      </a>
+      <span class="topbar-status" id="connection-status">MongoDB form</span>
+    </header>
+
+    <main>
+      <section class="workspace">
+        <form class="form-surface" id="registration-form" novalidate>
+          <div class="form-header">
+            <div>
+              <p class="eyebrow">New entry</p>
+              <h2>Applicant information</h2>
+            </div>
+            <button class="button-secondary" type="reset">Clear form</button>
+          </div>
+
+          <div class="form-section">
+            <h3>Name</h3>
+            <div class="field-grid" id="name-fields"></div>
+          </div>
+
+          <div class="form-section">
+            <h3>Date of birth</h3>
+            <div class="field-grid">
+              <label class="field">
+                <span>Full date of birth</span>
+                <input id="birthDate" type="date">
+              </label>
+
+              <label class="field">
+                <span>OR Birth year only</span>
+                <input id="birthYear" type="number" min="1900" max="2099" placeholder="1998">
+              </label>
+            </div>
+            <p class="section-note">User can provide either full DOB or only birth year.</p>
+          </div>
+
+          <div class="form-section">
+            <h3>Address</h3>
+            <div class="field-grid" id="address-fields"></div>
+          </div>
+
+          <div class="form-section">
+            <h3>Location</h3>
+            <div class="field-grid">
+              <label class="field">
+                <span>State</span>
+                <select id="state" required>
+                  <option value="">Select state</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>District</span>
+                <select id="district" required>
+                  <option value="">Select district</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Taluka</span>
+                <select id="taluka" required>
+                  <option value="">Select taluka</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3>Contact</h3>
+            <div class="field-grid">
+              <label class="field">
+                <span>Pincode</span>
+                <input id="pincode" name="pincode" inputmode="numeric" maxlength="6" autocomplete="postal-code" required>
+              </label>
+              <label class="field">
+                <span>Mobile number</span>
+                <input id="mobileNumber" name="mobileNumber" inputmode="tel" autocomplete="tel" maxlength="15" required>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="section-row">
+              <div>
+                <h3>Family details</h3>
+                <p class="section-note">Set the count, then fill each member's name, relation, and contact number.</p>
+              </div>
+              <label class="compact-field">
+                <span>Members in family</span>
+                <input id="member-count" type="number" min="0" max="25" value="1">
+              </label>
+            </div>
+            <div id="family-members" class="member-stack"></div>
+            <button class="button-secondary" id="add-member" type="button">Add member</button>
+          </div>
+
+          <div class="message" id="form-message" role="status" aria-live="polite"></div>
+
+          <div class="form-actions">
+            <button class="button-primary" type="submit">Save</button>
+          </div>
+        </form>
+
+        <aside class="recent-panel">
+          <div class="recent-header">
+            <div>
+              <p class="eyebrow">Latest</p>
+              <h2>Saved records</h2>
+            </div>
+            <button class="button-ghost" id="refresh-records" type="button">Refresh</button>
+          </div>
+          <div id="recent-records" class="recent-list"></div>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>
