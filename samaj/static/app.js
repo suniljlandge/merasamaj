@@ -118,96 +118,258 @@ function renderBilingualField(field, key, value = { en: "", mr: "" }, prefix = "
 }
 
 function renderMemberCard(index, value = {}) {
-  const nameValue = value.name ?? { en: "", mr: "" };
-  const relationValue = value.relation ?? { en: "", mr: "" };
-  const contactNumber = value.contactNumber ?? "";
+  const nameValue = value.name ?? {
+    en: "",
+    mr: ""
+  };
+
+  const relationValue =
+    value.relation ?? "";
+
+  const contactNumber =
+    value.contactNumber ?? "";
+
+  const relations = [
+    "Father",
+    "Mother",
+    "Wife",
+    "Husband",
+    "Son",
+    "Daughter",
+	"Daughter-in-law",
+    "Brother",
+    "Sister",
+    "Grandfather",
+    "Grandmother",
+    "Uncle",
+    "Aunt",
+    "Cousin",
+    "Nephew",
+    "Niece",
+    "Father-in-law",
+    "Mother-in-law",
+    "Other"
+  ];
 
   return `
-    <section class="member-card" data-member-index="${index}">
+    <section
+      class="member-card"
+      data-member-index="${index}"
+    >
       <div class="member-card-header">
-        <span class="member-card-title">Family member ${index + 1}</span>
-        <button class="button-ghost" type="button" data-remove-member="${index}">Remove</button>
+        <span class="member-card-title">
+          Family member ${index + 1}
+        </span>
+
+        <button
+          class="button-ghost"
+          type="button"
+          data-remove-member="${index}"
+        >
+          Remove
+        </button>
       </div>
+
       <div class="field-grid">
-        ${renderBilingualField(MEMBER_TEXT_FIELDS[0], "name", nameValue, `member-${index}-`)}
-        ${renderBilingualField(MEMBER_TEXT_FIELDS[1], "relation", relationValue, `member-${index}-`)}
+
+        ${renderBilingualField(
+          MEMBER_TEXT_FIELDS[0],
+          "name",
+          nameValue,
+          `member-${index}-`
+        )}
+
+        <label class="field">
+          <span>Relation</span>
+
+          <select
+            data-member-relation="${index}"
+            required
+          >
+            <option value="">
+              Select relation
+            </option>
+
+            ${relations
+              .map(
+                (relation) => `
+                  <option
+                    value="${relation}"
+                    ${
+                      relationValue === relation
+                        ? "selected"
+                        : ""
+                    }
+                  >
+                    ${relation}
+                  </option>
+                `
+              )
+              .join("")}
+          </select>
+        </label>
+
         <label class="field">
           <span>Contact number</span>
-          <input data-member-contact="${index}" inputmode="tel" value="${escapeAttribute(contactNumber)}" required>
+
+          <input
+            data-member-contact="${index}"
+            inputmode="tel"
+            value="${escapeAttribute(
+              contactNumber
+            )}"
+            required
+          >
         </label>
+
       </div>
     </section>
   `;
 }
 
 function setupLocationDropdowns() {
-  const stateSelect = document.querySelector("#state");
-  const districtSelect = document.querySelector("#district");
-  const talukaSelect = document.querySelector("#taluka");
+  const stateSelect =
+    document.querySelector("#state");
 
-  if (!stateSelect || !districtSelect || !talukaSelect) {
+  const districtSelect =
+    document.querySelector("#district");
+
+  const talukaSelect =
+    document.querySelector("#taluka");
+
+  if (
+    !stateSelect ||
+    !districtSelect ||
+    !talukaSelect
+  ) {
     return;
   }
-
-  if (stateSelect.dataset.wired === "true") {
-    return;
-  }
-
-  stateSelect.dataset.wired = "true";
 
   const populateStates = () => {
     stateSelect.innerHTML =
-      `<option value="">Select state</option>` +
+      `
+        <option value="">
+          Select state
+        </option>
+      ` +
       Object.keys(LOCATION_DATA)
         .map(
           (state) => `
-            <option value="${escapeAttribute(state)}">${escapeHtml(state)}</option>
+            <option
+              value="${escapeAttribute(state)}"
+            >
+              ${escapeHtml(state)}
+            </option>
           `
         )
         .join("");
   };
 
-  const populateDistricts = (stateValue) => {
-    const districts = LOCATION_DATA[stateValue] || {};
+  const populateDistricts = (
+    stateValue
+  ) => {
+    const districts =
+      LOCATION_DATA[stateValue] || {};
 
     districtSelect.innerHTML =
-      `<option value="">Select district</option>` +
+      `
+        <option value="">
+          Select district
+        </option>
+      ` +
       Object.keys(districts)
         .map(
           (district) => `
-            <option value="${escapeAttribute(district)}">${escapeHtml(district)}</option>
+            <option
+              value="${escapeAttribute(
+                district
+              )}"
+            >
+              ${escapeHtml(district)}
+            </option>
           `
         )
         .join("");
 
-    talukaSelect.innerHTML = `<option value="">Select taluka</option>`;
+    talukaSelect.innerHTML =
+      `
+        <option value="">
+          Select taluka
+        </option>
+      `;
   };
 
-  const populateTalukas = (stateValue, districtValue) => {
-    const talukas = LOCATION_DATA[stateValue]?.[districtValue] || [];
+  const populateTalukas = (
+    stateValue,
+    districtValue
+  ) => {
+    const talukas =
+      LOCATION_DATA[stateValue]?.[
+        districtValue
+      ] || [];
 
     talukaSelect.innerHTML =
-      `<option value="">Select taluka</option>` +
+      `
+        <option value="">
+          Select taluka
+        </option>
+      ` +
       talukas
         .map(
           (taluka) => `
-            <option value="${escapeAttribute(taluka)}">${escapeHtml(taluka)}</option>
+            <option
+              value="${escapeAttribute(
+                taluka
+              )}"
+            >
+              ${escapeHtml(taluka)}
+            </option>
           `
         )
         .join("");
   };
 
   populateStates();
-  districtSelect.innerHTML = `<option value="">Select district</option>`;
-  talukaSelect.innerHTML = `<option value="">Select taluka</option>`;
 
-  stateSelect.addEventListener("change", () => {
-    populateDistricts(stateSelect.value);
-  });
+  // DEFAULT VALUES
+  stateSelect.value = "Maharashtra";
 
-  districtSelect.addEventListener("change", () => {
-    populateTalukas(stateSelect.value, districtSelect.value);
-  });
+  populateDistricts("Maharashtra");
+
+  districtSelect.value = "Washim";
+
+  populateTalukas(
+    "Maharashtra",
+    "Washim"
+  );
+
+  stateSelect.addEventListener(
+    "change",
+    () => {
+      populateDistricts(
+        stateSelect.value
+      );
+
+      districtSelect.value = "";
+
+      talukaSelect.innerHTML =
+        `
+          <option value="">
+            Select taluka
+          </option>
+        `;
+    }
+  );
+
+  districtSelect.addEventListener(
+    "change",
+    () => {
+      populateTalukas(
+        stateSelect.value,
+        districtSelect.value
+      );
+    }
+  );
 }
 
 function wireAutoTransliteration() {
@@ -429,10 +591,29 @@ function readRegistration() {
 }
 
 function readFamilyMembers() {
-  return Array.from(memberContainer.querySelectorAll(".member-card")).map((card, index) => ({
-    name: readBilingualValue("name", card),
-    relation: readBilingualValue("relation", card),
-    contactNumber: card.querySelector(`[data-member-contact="${index}"]`)?.value ?? ""
+  return Array.from(
+    memberContainer.querySelectorAll(
+      ".member-card"
+    )
+  ).map((card, index) => ({
+    name: readBilingualValue(
+      "name",
+      card
+    ),
+
+    relation: {
+      en:
+        card.querySelector(
+          `[data-member-relation="${index}"]`
+        )?.value || "",
+
+      mr: ""
+    },
+
+    contactNumber:
+      card.querySelector(
+        `[data-member-contact="${index}"]`
+      )?.value ?? ""
   }));
 }
 
