@@ -38,6 +38,12 @@ def create_app(config=None, collection=None, correction_collection=None):
     def index():
         return render_template("index.html")
 
+    @app.route("/directory")
+    def directory():
+        return render_template(
+            "directory.html"
+        )
+
     @app.get("/api/health")
     def health():
         return jsonify({"ok": True})
@@ -114,6 +120,99 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "items": [
                     serialize_document(document)
                     for document in cursor
+                ]
+            }
+        )
+
+    @app.get("/api/member-search")
+    def member_search():
+        query = (
+            request.args.get("q", "")
+            .strip()
+        )
+
+        state = request.args.get(
+            "state",
+            "",
+        ).strip()
+
+        district = request.args.get(
+            "district",
+            "",
+        ).strip()
+
+        taluka = request.args.get(
+            "taluka",
+            "",
+        ).strip()
+
+        surname = request.args.get(
+            "surname",
+            "",
+        ).strip()
+
+        mongo_query = {}
+
+        if query:
+            mongo_query["$or"] = [
+                {
+                    "firstName.en": {
+                        "$regex": query,
+                        "$options": "i",
+                    }
+                },
+                {
+                    "lastName.en": {
+                        "$regex": query,
+                        "$options": "i",
+                    }
+                },
+                {
+                    "firstName.mr": {
+                        "$regex": query,
+                        "$options": "i",
+                    }
+                },
+                {
+                    "lastName.mr": {
+                        "$regex": query,
+                        "$options": "i",
+                    }
+                },
+                {
+                    "mobileNumber": {
+                        "$regex": query,
+                        "$options": "i",
+                    }
+                },
+            ]
+
+        if state:
+            mongo_query["state"] = state
+
+        if district:
+            mongo_query["district"] = district
+
+        if taluka:
+            mongo_query["taluka"] = taluka
+
+        if surname:
+            mongo_query["surnameGroup"] = (
+                surname.lower()
+            )
+
+        cursor = (
+            get_collection()
+            .find(mongo_query)
+            .sort("createdAt", -1)
+            .limit(200)
+        )
+
+        return jsonify(
+            {
+                "items": [
+                    serialize_document(doc)
+                    for doc in cursor
                 ]
             }
         )

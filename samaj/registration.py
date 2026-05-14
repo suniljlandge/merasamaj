@@ -75,6 +75,11 @@ def normalize_registration(
         normalized["familyMembers"]
     )
 
+    normalized["surnameGroup"] = (
+        normalized["lastName"]["en"]
+        .lower()
+        .strip()
+    )
     return normalized
 
 

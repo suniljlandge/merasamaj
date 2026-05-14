@@ -1,3 +1,28 @@
+const searchInput =
+  document.querySelector(
+    "#searchInput"
+  );
+
+const searchButton =
+  document.querySelector(
+    "#searchButton"
+  );
+
+const filterDistrict =
+  document.querySelector(
+    "#filterDistrict"
+  );
+
+const filterTaluka =
+  document.querySelector(
+    "#filterTaluka"
+  );
+
+const memberDirectory =
+  document.querySelector(
+    "#member-directory"
+  );
+
 const LOCATION_DATA = {
   Maharashtra: {
     Washim: ["Washim", "Malegaon", "Mangrulpir", "Karanja", "Risod", "Manora"],
@@ -43,6 +68,14 @@ renderFamilyMembers();
 setupLocationDropdowns();
 loadRecentRecords();
 checkHealth();
+setupSearchFilters();
+
+searchButton.addEventListener(
+  "click",
+  loadMemberDirectory
+);
+
+loadMemberDirectory();
 
 form.addEventListener("submit", handleSubmit);
 form.addEventListener("reset", () => {
@@ -882,4 +915,150 @@ function escapeHtml(value = "") {
 
 function escapeAttribute(value = "") {
   return escapeHtml(value);
+}
+
+function setupSearchFilters() {
+  const districts =
+    Object.keys(
+      LOCATION_DATA.Maharashtra
+    );
+
+  filterDistrict.innerHTML =
+    `
+      <option value="">
+        All districts
+      </option>
+    ` +
+    districts
+      .map(
+        (district) => `
+          <option value="${district}">
+            ${district}
+          </option>
+        `
+      )
+      .join("");
+
+  filterDistrict.addEventListener(
+    "change",
+    () => {
+      const talukas =
+        LOCATION_DATA.Maharashtra[
+          filterDistrict.value
+        ] || [];
+
+      filterTaluka.innerHTML =
+        `
+          <option value="">
+            All talukas
+          </option>
+        ` +
+        talukas
+          .map(
+            (taluka) => `
+              <option value="${taluka}">
+                ${taluka}
+              </option>
+            `
+          )
+          .join("");
+    }
+  );
+}
+
+async function loadMemberDirectory() {
+  memberDirectory.innerHTML =
+    "Loading members...";
+
+  const params =
+    new URLSearchParams({
+      q:
+        searchInput.value || "",
+      district:
+        filterDistrict.value || "",
+      taluka:
+        filterTaluka.value || "",
+    });
+
+  try {
+    const response = await fetch(
+      `/api/member-search?${params}`
+    );
+
+    const body =
+      await response.json();
+
+    if (!body.items?.length) {
+      memberDirectory.innerHTML =
+        "No members found";
+      return;
+    }
+
+    memberDirectory.innerHTML =
+      body.items
+        .map(renderMemberDirectoryCard)
+        .join("");
+  }
+
+  catch (error) {
+    memberDirectory.innerHTML =
+      "Search failed";
+  }
+}
+
+function renderMemberDirectoryCard(
+  record
+) {
+  const name = [
+    record.firstName?.en,
+    record.middleName?.en,
+    record.lastName?.en
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const marathi = [
+    record.firstName?.mr,
+    record.middleName?.mr,
+    record.lastName?.mr
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return `
+    <article class="directory-card">
+
+      <h3>
+        ${escapeHtml(name)}
+      </h3>
+
+      <div class="mr-name">
+        ${escapeHtml(marathi)}
+      </div>
+
+      <div>
+        📍
+        ${escapeHtml(
+          record.taluka || ""
+        )},
+        ${escapeHtml(
+          record.district || ""
+        )}
+      </div>
+
+      <div>
+        📞
+        ${escapeHtml(
+          record.mobileNumber || ""
+        )}
+      </div>
+
+      <div>
+        👨‍👩‍👧
+        ${record.membersCount || 0}
+        members
+      </div>
+
+    </article>
+  `;
 }

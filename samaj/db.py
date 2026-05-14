@@ -8,6 +8,27 @@ def create_collections(config):
     correction_collection = database[config["MONGO_CORRECTIONS_COLLECTION"]]
     collection.create_index([("createdAt", -1)])
     collection.create_index("mobileNumber")
+
+    collection.create_index(
+        "surnameGroup"
+    )
+
+    collection.create_index(
+        "district"
+    )
+
+    collection.create_index(
+        "taluka"
+    )
+
+    collection.create_index(
+        [
+            ("firstName.en", "text"),
+            ("lastName.en", "text"),
+            ("firstName.mr", "text"),
+            ("lastName.mr", "text"),
+        ]
+    )
     correction_collection.create_index("source", unique=True)
     correction_collection.create_index([("updatedAt", -1)])
     return client, collection, correction_collection

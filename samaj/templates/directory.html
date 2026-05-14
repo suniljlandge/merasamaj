@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>
+    Member Directory
+  </title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='styles.css') }}"
+  >
+
+  <script
+    defer
+    src="{{ url_for('static', filename='directory.js') }}"
+  ></script>
+</head>
+
+<body class="directory-body">
+
+  <header class="topbar">
+
+    <a class="brand" href="/">
+      <span class="brand-mark"></span>
+      <span>SAMAJ</span>
+    </a>
+
+    <div class="directory-top-actions">
+
+      <div class="directory-stat">
+        <span class="directory-stat-label">
+          Total Members
+        </span>
+
+        <strong id="totalMembersCount">
+          0
+        </strong>
+      </div>
+
+      <a
+        href="/"
+        class="button-secondary"
+      >
+        Registration Form
+      </a>
+
+    </div>
+
+  </header>
+
+  <main class="directory-layout">
+
+    <section class="directory-hero">
+
+      <div>
+        <div class="directory-eyebrow">
+          COMMUNITY DIRECTORY
+        </div>
+
+        <h1>
+          SAMAJ Member Directory
+        </h1>
+
+        <p>
+          Search and filter community members instantly.
+        </p>
+      </div>
+
+    </section>
+
+    <section class="directory-search-card">
+
+      <div class="directory-search-grid">
+
+        <div class="search-field">
+          <label>
+            Search
+          </label>
+
+          <input
+            id="searchInput"
+            placeholder="Name, surname, mobile..."
+          >
+        </div>
+
+        <div class="search-field">
+          <label>
+            District
+          </label>
+
+          <select id="filterDistrict">
+            <option value="">
+              All districts
+            </option>
+          </select>
+        </div>
+
+        <div class="search-field">
+          <label>
+            Taluka
+          </label>
+
+          <select id="filterTaluka">
+            <option value="">
+              All talukas
+            </option>
+          </select>
+        </div>
+
+        <button
+          id="searchButton"
+          class="button-primary directory-search-btn"
+          type="button"
+        >
+          Search Members
+        </button>
+
+      </div>
+
+    </section>
+
+    <section class="directory-table-card">
+
+      <div class="directory-table-header">
+
+        <div>
+          <h2>
+            Member List
+          </h2>
+
+          <p>
+            Latest registered members
+          </p>
+        </div>
+
+        <div class="directory-chip">
+          Live Directory
+        </div>
+
+      </div>
+
+      <div class="directory-table-wrapper">
+
+        <table class="directory-table">
+
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Marathi</th>
+              <th>District</th>
+              <th>Taluka</th>
+              <th>Mobile</th>
+              <th>Members</th>
+            </tr>
+          </thead>
+
+          <tbody id="directoryTableBody">
+            <tr>
+              <td colspan="6">
+                Loading members...
+              </td>
+            </tr>
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </section>
+
+  </main>
+
+</body>
+</html>
