@@ -543,31 +543,60 @@ function findMarathiPair(input) {
 
 async function handleSubmit(event) {
   event.preventDefault();
+
   clearMessage();
+
+  clearFieldErrors();
 
   const payload = readRegistration();
 
-  const response = await fetch("/api/registrations", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
+  const response = await fetch(
+    "/api/registrations",
+    {
+      method: "POST",
+      headers: {
+        "content-type":
+          "application/json"
+      },
+      body: JSON.stringify(payload)
+    }
+  );
 
   const body = await response.json();
 
   if (!response.ok) {
-    showMessage(body.error || "Unable to save registration.", "error");
+    showMessage(
+      body.error ||
+        "Validation failed.",
+      "error"
+    );
+
+    if (
+      Array.isArray(body.errors)
+    ) {
+      highlightValidationErrors(
+        body.errors
+      );
+    }
+
     return;
   }
 
-  showMessage("Registration saved to MongoDB.", "success");
+  showMessage(
+    "Registration saved.",
+    "success"
+  );
+
   form.reset();
+
   memberCount = 1;
+
   memberCountInput.value = "1";
+
   renderFamilyMembers();
+
   setupLocationDropdowns();
+
   loadRecentRecords();
 }
 
