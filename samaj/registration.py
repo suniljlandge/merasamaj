@@ -13,7 +13,6 @@ TEXT_FIELDS = (
 
 MEMBER_TEXT_FIELDS = (
     {"key": "name", "label": "Member name", "required": True},
-    {"key": "relation", "label": "Relation", "required": True},
 )
 
 REQUIRED_TEXT_KEYS = {
@@ -22,12 +21,17 @@ REQUIRED_TEXT_KEYS = {
     if field["required"]
 }
 
-PHONE_PATTERN = re.compile(r"^(?:\+91)?[6-9]\d{9}$")
-PINCODE_PATTERN = re.compile(r"^\d{6}$")
+PHONE_PATTERN = re.compile(
+    r"^(?:\+91)?[6-9]\d{9}$"
+)
 
 
-def normalize_registration(payload=None, overrides=None):
+def normalize_registration(
+    payload=None,
+    overrides=None,
+):
     source = deepcopy(payload or {})
+
     normalized = {}
 
     for field in TEXT_FIELDS:
@@ -36,28 +40,60 @@ def normalize_registration(payload=None, overrides=None):
             overrides,
         )
 
-    normalized["birthDate"] = clean_text(source.get("birthDate"))
-    normalized["birthYear"] = clean_text(source.get("birthYear"))
-    normalized["state"] = clean_text(source.get("state"))
-    normalized["district"] = clean_text(source.get("district"))
-    normalized["taluka"] = clean_text(source.get("taluka"))
-    normalized["pincode"] = normalize_digits(source.get("pincode"))
-    normalized["mobileNumber"] = normalize_phone(source.get("mobileNumber"))
-    normalized["familyMembers"] = normalize_family_members(
-        source.get("familyMembers"),
-        overrides,
+    normalized["birthDate"] = clean_text(
+        source.get("birthDate")
     )
-    normalized["membersCount"] = len(normalized["familyMembers"])
+
+    normalized["birthYear"] = clean_text(
+        source.get("birthYear")
+    )
+
+    normalized["state"] = clean_text(
+        source.get("state")
+    )
+
+    normalized["district"] = clean_text(
+        source.get("district")
+    )
+
+    normalized["taluka"] = clean_text(
+        source.get("taluka")
+    )
+
+    normalized["mobileNumber"] = normalize_phone(
+        source.get("mobileNumber")
+    )
+
+    normalized["familyMembers"] = (
+        normalize_family_members(
+            source.get("familyMembers"),
+            overrides,
+        )
+    )
+
+    normalized["membersCount"] = len(
+        normalized["familyMembers"]
+    )
 
     return normalized
 
 
-def validate_registration(payload=None, overrides=None):
-    value = normalize_registration(payload, overrides)
+def validate_registration(
+    payload=None,
+    overrides=None,
+):
+    value = normalize_registration(
+        payload,
+        overrides,
+    )
+
     errors = []
 
     for field in TEXT_FIELDS:
-        if field["key"] in REQUIRED_TEXT_KEYS and not value[field["key"]]["en"]:
+        if (
+            field["key"] in REQUIRED_TEXT_KEYS
+            and not value[field["key"]]["en"]
+        ):
             errors.append(
                 {
                     "field": f"{field['key']}.en",
@@ -66,33 +102,70 @@ def validate_registration(payload=None, overrides=None):
             )
 
     if not value["state"]:
-        errors.append({"field": "state", "message": "State is required."})
+        errors.append({
+            "field": "state",
+            "message": "State is required."
+        })
 
     if not value["district"]:
-        errors.append({"field": "district", "message": "District is required."})
+        errors.append({
+            "field": "district",
+            "message": "District is required."
+        })
 
     if not value["taluka"]:
-        errors.append({"field": "taluka", "message": "Taluka is required."})
+        errors.append({
+            "field": "taluka",
+            "message": "Taluka is required."
+        })
 
-    if not PINCODE_PATTERN.match(value["pincode"]):
-        errors.append({"field": "pincode", "message": "Pincode must be exactly 6 digits."})
-
-    if not PHONE_PATTERN.match(value["mobileNumber"]):
+    if not PHONE_PATTERN.match(
+        value["mobileNumber"]
+    ):
         errors.append(
             {
                 "field": "mobileNumber",
-                "message": "Mobile number must be a valid 10-digit Indian number.",
+                "message": "Mobile number must be valid.",
             }
         )
 
-    birth_date = value.get("birthDate", "").strip()
-    birth_year = value.get("birthYear", "").strip()
+    birth_date = value.get(
+        "birthDate",
+        "",
+    ).strip()
 
-    if birth_date and not re.match(r"^\d{4}-\d{2}-\d{2}$", birth_date):
-        errors.append({"field": "birthDate", "message": "Birth date must be YYYY-MM-DD."})
+    birth_year = value.get(
+        "birthYear",
+        "",
+    ).strip()
 
-    if birth_year and not re.match(r"^\d{4}$", birth_year):
-        errors.append({"field": "birthYear", "message": "Birth year must be 4 digits."})
+    if (
+        birth_date
+        and not re.match(
+            r"^\d{4}-\d{2}-\d{2}$",
+            birth_date,
+        )
+    ):
+        errors.append(
+            {
+                "field": "birthDate",
+                "message": "Birth date must be YYYY-MM-DD.",
+            }
+        )
+
+    if (
+        birth_year
+        and not re.match(
+            r"^\d{4}$",
+            birth_year,
+        )
+    ):
+        errors.append(
+            {
+                "field": "birthYear",
+                "message": "Birth year must be 4 digits.",
+            }
+        )
 
     if not birth_date and not birth_year:
         errors.append(
@@ -102,79 +175,145 @@ def validate_registration(payload=None, overrides=None):
             }
         )
 
-    for index, member in enumerate(value["familyMembers"]):
+    for index, member in enumerate(
+        value["familyMembers"]
+    ):
         if not member["name"]["en"]:
             errors.append(
                 {
                     "field": f"familyMembers.{index}.name.en",
-                    "message": "Family member name is required.",
+                    "message": "Family member name required.",
                 }
             )
 
-        if not member["relation"]["en"]:
+        if not member["relation"]:
             errors.append(
                 {
-                    "field": f"familyMembers.{index}.relation.en",
-                    "message": "Family member relation is required.",
+                    "field": f"familyMembers.{index}.relation",
+                    "message": "Relation required.",
                 }
             )
 
-        if not PHONE_PATTERN.match(member["contactNumber"]):
+        if not PHONE_PATTERN.match(
+            member["contactNumber"]
+        ):
             errors.append(
                 {
                     "field": f"familyMembers.{index}.contactNumber",
-                    "message": "Family member contact number must be a valid 10-digit Indian number.",
+                    "message": "Contact number invalid.",
                 }
             )
 
-    return {"valid": not errors, "errors": errors, "value": value}
-
-
-def normalize_bilingual(value=None, overrides=None):
-    value = value or {}
-
-    english = clean_text(value.get("en") or value.get("english") or "")
-    marathi = clean_text(value.get("mr") or value.get("marathi") or "")
-
     return {
-        "en": english,
-        "mr": marathi or (transliterate_to_marathi(english, overrides) if english else ""),
+        "valid": not errors,
+        "errors": errors,
+        "value": value,
     }
 
 
-def normalize_family_members(value, overrides=None):
+def normalize_bilingual(
+    value=None,
+    overrides=None,
+):
+    value = value or {}
+
+    english = clean_text(
+        value.get("en")
+        or value.get("english")
+        or ""
+    )
+
+    marathi = clean_text(
+        value.get("mr")
+        or value.get("marathi")
+        or ""
+    )
+
+    return {
+        "en": english,
+        "mr": (
+            marathi
+            or (
+                transliterate_to_marathi(
+                    english,
+                    overrides,
+                )
+                if english
+                else ""
+            )
+        ),
+    }
+
+
+def normalize_family_members(
+    value,
+    overrides=None,
+):
     if not isinstance(value, list):
         return []
 
-    members = [_normalize_family_member(member, overrides) for member in value]
-    return [member for member in members if not _is_blank_member(member)]
+    members = [
+        _normalize_family_member(
+            member,
+            overrides,
+        )
+        for member in value
+    ]
+
+    return [
+        member
+        for member in members
+        if not _is_blank_member(member)
+    ]
 
 
 def clean_text(value=""):
-    return re.sub(r"\s+", " ", str(value or "").strip())
+    return re.sub(
+        r"\s+",
+        " ",
+        str(value or "").strip(),
+    )
 
 
 def normalize_phone(value=""):
     text = str(value or "").strip()
-    normalized = re.sub(r"[\s()-]", "", text)
 
-    if normalized.startswith("91") and len(normalized) == 12:
+    normalized = re.sub(
+        r"[\s()-]",
+        "",
+        text,
+    )
+
+    if (
+        normalized.startswith("91")
+        and len(normalized) == 12
+    ):
         return f"+{normalized}"
 
     return normalized
 
 
-def normalize_digits(value=""):
-    return re.sub(r"\D", "", str(value or ""))
-
-
-def _normalize_family_member(member=None, overrides=None):
+def _normalize_family_member(
+    member=None,
+    overrides=None,
+):
     member = member or {}
 
     return {
-        "name": normalize_bilingual(member.get("name"), overrides),
-        "relation": normalize_bilingual(member.get("relation"), overrides),
-        "contactNumber": normalize_phone(member.get("contactNumber")),
+        "name": normalize_bilingual(
+            member.get("name"),
+            overrides,
+        ),
+
+        "relation": clean_text(
+            member.get("relation", {}).get("en")
+            or member.get("relation")
+            or ""
+        ),
+
+        "contactNumber": normalize_phone(
+            member.get("contactNumber")
+        ),
     }
 
 
@@ -182,7 +321,6 @@ def _is_blank_member(member):
     return (
         not member["name"]["en"]
         and not member["name"]["mr"]
-        and not member["relation"]["en"]
-        and not member["relation"]["mr"]
+        and not member["relation"]
         and not member["contactNumber"]
     )

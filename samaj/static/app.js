@@ -612,7 +612,6 @@ function readRegistration() {
   payload.state = document.querySelector("#state")?.value || "";
   payload.district = document.querySelector("#district")?.value || "";
   payload.taluka = document.querySelector("#taluka")?.value || "";
-  payload.pincode = document.querySelector("#pincode")?.value || "";
   payload.mobileNumber = document.querySelector("#mobileNumber")?.value || "";
   payload.familyMembers = readFamilyMembers();
 
