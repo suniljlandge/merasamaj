@@ -619,6 +619,149 @@ function readRegistration() {
   return payload;
 }
 
+function clearFieldErrors() {
+  document
+    .querySelectorAll(
+      ".field-error"
+    )
+    .forEach((element) => {
+      element.classList.remove(
+        "field-error"
+      );
+    });
+
+  document
+    .querySelectorAll(
+      ".field-error-text"
+    )
+    .forEach((element) => {
+      element.remove();
+    });
+}
+
+function highlightValidationErrors(
+  errors
+) {
+  errors.forEach((error) => {
+    const fieldName =
+      error.field || "";
+
+    let input = null;
+
+    // Main fields
+    if (
+      fieldName === "mobileNumber"
+    ) {
+      input =
+        document.querySelector(
+          "#mobileNumber"
+        );
+    }
+
+    else if (
+      fieldName === "birthDate"
+    ) {
+      input =
+        document.querySelector(
+          "#birthDate"
+        );
+    }
+
+    else if (
+      fieldName === "birthYear"
+    ) {
+      input =
+        document.querySelector(
+          "#birthYear"
+        );
+    }
+
+    else if (
+      fieldName === "state"
+    ) {
+      input =
+        document.querySelector(
+          "#state"
+        );
+    }
+
+    else if (
+      fieldName === "district"
+    ) {
+      input =
+        document.querySelector(
+          "#district"
+        );
+    }
+
+    else if (
+      fieldName === "taluka"
+    ) {
+      input =
+        document.querySelector(
+          "#taluka"
+        );
+    }
+
+    // bilingual fields
+    else if (
+      fieldName.endsWith(".en")
+    ) {
+      const key =
+        fieldName.replace(
+          ".en",
+          ""
+        );
+
+      input =
+        document.querySelector(
+          `[data-bilingual="${key}"][data-language="en"]`
+        );
+    }
+
+    if (!input) {
+      return;
+    }
+
+    input.classList.add(
+      "field-error"
+    );
+
+    const field =
+      input.closest(".field");
+
+    if (!field) {
+      return;
+    }
+
+    const errorText =
+      document.createElement("div");
+
+    errorText.className =
+      "field-error-text";
+
+    errorText.textContent =
+      error.message ||
+      "Invalid value";
+
+    field.appendChild(errorText);
+  });
+
+  const firstError =
+    document.querySelector(
+      ".field-error"
+    );
+
+  if (firstError) {
+    firstError.focus();
+
+    firstError.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+  }
+}
+
 function readFamilyMembers() {
   return Array.from(
     memberContainer.querySelectorAll(
