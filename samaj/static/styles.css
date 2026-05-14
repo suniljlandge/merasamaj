@@ -656,3 +656,447 @@ h3 {
     font-size: 34px;
   }
 }
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #f3f6fb;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 32px;
+  border-radius: 24px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  display: grid;
+  gap: 16px;
+}
+
+.login-card input {
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid #d7dee5;
+}
+
+#logoutButton {
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+#logoutButton:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+/* =========================================
+   FINAL MOBILE + UX POLISH
+========================================= */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* BETTER TOPBAR */
+
+.topbar {
+  backdrop-filter: blur(14px);
+  background: rgba(255,255,255,0.88);
+}
+
+.topbar > div,
+.directory-top-actions {
+  flex-wrap: wrap;
+}
+
+/* BUTTONS */
+
+.button-primary,
+.button-secondary,
+.button-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+
+  text-decoration: none;
+}
+
+.button-primary:hover,
+.button-secondary:hover,
+.button-ghost:hover {
+  transform: translateY(-1px);
+}
+
+.button-primary {
+  box-shadow:
+    0 10px 24px rgba(0, 237, 100, 0.18);
+}
+
+.button-primary:hover {
+  box-shadow:
+    0 14px 30px rgba(0, 237, 100, 0.22);
+}
+
+/* FORM */
+
+.form-surface,
+.recent-panel,
+.directory-search-card,
+.directory-table-card,
+.login-card {
+  box-shadow:
+    0 20px 50px rgba(0,0,0,0.04);
+}
+
+.form-section:first-of-type {
+  border-top: 0;
+}
+
+.form-section {
+  padding-top: 30px;
+  padding-bottom: 30px;
+}
+
+/* INPUTS */
+
+.field input,
+.field select,
+.compact-field input,
+.search-field input,
+.search-field select,
+.login-card input {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.field input:hover,
+.field select:hover,
+.compact-field input:hover {
+  border-color: #94a3b8;
+}
+
+.field input:focus,
+.field select:focus,
+.compact-field input:focus,
+.search-field input:focus,
+.search-field select:focus,
+.login-card input:focus {
+  box-shadow:
+    0 0 0 4px rgba(0, 237, 100, 0.12);
+}
+
+/* MEMBER CARD */
+
+.member-card {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.member-card:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 10px 20px rgba(0,0,0,0.05);
+}
+
+/* RECENT RECORDS */
+
+.recent-card {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.recent-card:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 10px 20px rgba(0,0,0,0.04);
+}
+
+/* DIRECTORY TABLE */
+
+.directory-table-wrapper {
+  border-radius: 18px;
+}
+
+.directory-table {
+  min-width: 760px;
+}
+
+.directory-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.directory-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* LOGIN PAGE */
+
+.login-page {
+  padding: 20px;
+}
+
+.login-card {
+  overflow: hidden;
+}
+
+.login-card h1 {
+  text-align: center;
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.login-card button {
+  height: 52px;
+  border-radius: 14px;
+  border: 0;
+  background: var(--brand-green);
+  font-weight: 700;
+}
+
+/* DIRECTORY */
+
+.directory-layout {
+  padding-top: 24px;
+}
+
+.directory-search-card {
+  position: sticky;
+  top: 88px;
+  z-index: 5;
+}
+
+/* TABLE TYPOGRAPHY */
+
+.member-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.member-marathi {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* SCROLLBAR */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* TABLET */
+
+@media (max-width: 1024px) {
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-panel {
+    order: -1;
+  }
+
+  .directory-layout {
+    padding: 22px;
+  }
+}
+
+/* MOBILE */
+
+@media (max-width: 768px) {
+
+  .topbar {
+    padding:
+      14px 18px;
+
+    gap: 14px;
+
+    align-items: stretch;
+  }
+
+  .brand {
+    justify-content: center;
+  }
+
+  .workspace,
+  .directory-layout {
+    padding: 16px;
+  }
+
+  .form-surface,
+  .recent-panel,
+  .directory-search-card,
+  .directory-table-card,
+  .login-card {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .form-header,
+  .recent-header,
+  .section-row,
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-field {
+    width: 100%;
+  }
+
+  .directory-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .directory-hero h1 {
+    font-size: 30px;
+  }
+
+  .directory-hero p {
+    font-size: 14px;
+  }
+
+  .directory-search-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .directory-search-btn {
+    width: 100%;
+  }
+
+  .directory-top-actions {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .directory-table th,
+  .directory-table td {
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .directory-table {
+    min-width: 680px;
+  }
+
+  .member-marathi {
+    font-size: 16px;
+  }
+
+  .button-primary,
+  .button-secondary {
+    width: 100%;
+  }
+
+  .topbar .button-secondary,
+  .topbar .button-ghost {
+    width: auto;
+  }
+
+  .directory-search-card {
+    position: static;
+  }
+}
+
+/* SMALL MOBILE */
+
+@media (max-width: 480px) {
+
+  h2 {
+    font-size: 24px;
+  }
+
+  h3 {
+    font-size: 17px;
+  }
+
+  .directory-hero h1 {
+    font-size: 24px;
+  }
+
+  .directory-stat {
+    width: 100%;
+  }
+
+  .directory-top-actions {
+    gap: 10px;
+  }
+
+  .topbar {
+    padding:
+      12px 14px;
+  }
+
+  .form-surface,
+  .recent-panel,
+  .directory-search-card,
+  .directory-table-card,
+  .login-card {
+    padding: 16px;
+  }
+
+  .member-mobile {
+    font-size: 13px;
+  }
+
+  .directory-table {
+    min-width: 620px;
+  }
+
+  .transliteration-option {
+    min-height: 48px;
+    font-size: 17px;
+  }
+}
+
+/* LOGOUT BUTTON */
+
+#logoutButton {
+  text-decoration: none;
+}
+
+#logoutButton:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fecaca;
+}

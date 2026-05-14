@@ -68,14 +68,21 @@ renderFamilyMembers();
 setupLocationDropdowns();
 loadRecentRecords();
 checkHealth();
-setupSearchFilters();
+if (
+  searchInput &&
+  searchButton &&
+  memberDirectory
+) {
 
-searchButton.addEventListener(
-  "click",
-  loadMemberDirectory
-);
+  setupSearchFilters();
 
-loadMemberDirectory();
+  searchButton.addEventListener(
+    "click",
+    loadMemberDirectory
+  );
+
+  loadMemberDirectory();
+}
 
 form.addEventListener("submit", handleSubmit);
 form.addEventListener("reset", () => {

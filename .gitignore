@@ -4,3 +4,8 @@ __pycache__/
 .venv/
 .env
 instance/
+.flask_session/
+flask_session/
+hash_password.py
+usermanagement.py
+google_Transliteration.py

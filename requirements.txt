@@ -3,3 +3,5 @@ pymongo
 requests
 gunicorn
 python-dotenv
+bcrypt
+Flask-Session

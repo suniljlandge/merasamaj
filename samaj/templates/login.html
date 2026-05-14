@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+  <title>Login</title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='styles.css') }}"
+  >
+</head>
+
+<body class="login-page">
+
+  <form class="login-card">
+
+    <h1>SAMAJ Admin</h1>
+
+    <input
+      id="username"
+      placeholder="Username"
+    >
+
+    <input
+      id="password"
+      type="password"
+      placeholder="Password"
+    >
+
+    <button
+      type="button"
+      id="loginButton"
+    >
+      Login
+    </button>
+
+  </form>
+
+  <script>
+
+    document
+      .querySelector(
+        "#loginButton"
+      )
+      .addEventListener(
+        "click",
+        async () => {
+
+          const response =
+            await fetch(
+              "/login",
+              {
+                method: "POST",
+
+                headers: {
+                  "content-type":
+                    "application/json"
+                },
+
+                body: JSON.stringify({
+                  username:
+                    document.querySelector("#username").value,
+
+                  password:
+                    document.querySelector("#password").value
+                })
+              }
+            );
+
+          if (response.ok) {
+            window.location =
+              "/";
+          }
+
+          else {
+            alert(
+              "Invalid credentials"
+            );
+          }
+
+        }
+      );
+
+  </script>
+
+</body>
+</html>
