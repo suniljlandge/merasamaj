@@ -65,6 +65,11 @@ const directoryTableBody =
     "#directoryTableBody"
   );
 
+const totalMembersCount =
+  document.querySelector(
+    "#totalMembersCount"
+  );
+
 setupSearchFilters();
 
 loadMemberDirectory();
@@ -77,13 +82,16 @@ searchButton.addEventListener(
 searchInput.addEventListener(
   "keydown",
   (event) => {
+
     if (event.key === "Enter") {
       loadMemberDirectory();
     }
+
   }
 );
 
 function setupSearchFilters() {
+
   const districts =
     Object.keys(
       LOCATION_DATA.Maharashtra
@@ -108,6 +116,7 @@ function setupSearchFilters() {
   filterDistrict.addEventListener(
     "change",
     () => {
+
       const talukas =
         LOCATION_DATA.Maharashtra[
           filterDistrict.value
@@ -140,17 +149,19 @@ function setupSearchFilters() {
 }
 
 async function loadMemberDirectory() {
+
   directoryTableBody.innerHTML =
     `
       <tr>
-        <td colspan="6">
-          Loading...
+        <td colspan="7" class="px-6 py-10 text-center text-slate-500">
+          Loading members...
         </td>
       </tr>
     `;
 
   const params =
     new URLSearchParams({
+
       q:
         searchInput.value || "",
 
@@ -159,31 +170,38 @@ async function loadMemberDirectory() {
 
       taluka:
         filterTaluka.value || ""
+
     });
 
   try {
-    const response = await fetch(
-      `/api/member-search?${params}`
-    );
+
+    const response =
+      await fetch(
+        `/api/member-search?${params}`
+      );
 
     const body =
       await response.json();
 
-    const totalMembersCount =
-    document.querySelector(
-        "#totalMembersCount"
-    );
-
     if (totalMembersCount) {
-    totalMembersCount.textContent =
+
+      totalMembersCount.textContent =
         body.items.length;
     }
 
     if (!body.items?.length) {
+
       directoryTableBody.innerHTML =
         `
           <tr>
-            <td colspan="6">
+            <td
+              colspan="7"
+              class="
+                px-6 py-10
+                text-center
+                text-slate-500
+              "
+            >
               No members found
             </td>
           </tr>
@@ -194,17 +212,35 @@ async function loadMemberDirectory() {
 
     directoryTableBody.innerHTML =
       body.items
-        .map(renderDirectoryRow)
+        .map(
+          (
+            item,
+            index
+          ) =>
+            renderMemberRow(
+              item,
+              index
+            )
+        )
         .join("");
+
   }
 
   catch (error) {
+
     console.error(error);
 
     directoryTableBody.innerHTML =
       `
         <tr>
-          <td colspan="6">
+          <td
+            colspan="7"
+            class="
+              px-6 py-10
+              text-center
+              text-red-500
+            "
+          >
             Failed to load members
           </td>
         </tr>
@@ -212,70 +248,123 @@ async function loadMemberDirectory() {
   }
 }
 
-function renderDirectoryRow(
-  record
+function renderMemberRow(
+  record,
+  index
 ) {
-  const englishName = [
+
+  const fullName = [
+
     record.firstName?.en,
+
     record.middleName?.en,
+
     record.lastName?.en
+
   ]
     .filter(Boolean)
     .join(" ");
 
   const marathiName = [
+
     record.firstName?.mr,
+
     record.middleName?.mr,
+
     record.lastName?.mr
+
   ]
     .filter(Boolean)
     .join(" ");
 
+  const district =
+    record.district || "-";
+
+  const taluka =
+    record.taluka || "-";
+
+  const maskedMobile =
+    maskMobile(
+      record.mobileNumber
+    );
+
+  const membersCount =
+    (
+      record.familyMembers || []
+    ).length;
+
   return `
-    <tr>
+    <tr
+      class="
+        hover:bg-slate-50
+        transition
+      "
+    >
 
-      <td>
-        <div class="member-name">
-          ${escapeHtml(
-            englishName
-          )}
-        </div>
+      <td
+        class="
+          px-6 py-4
+          font-semibold
+          text-slate-500
+          whitespace-nowrap
+        "
+      >
+        ${index + 1}
       </td>
 
-      <td>
-        <div class="member-marathi">
-          ${escapeHtml(
-            marathiName
-          )}
-        </div>
+      <td
+        class="
+          px-6 py-4
+          font-semibold
+          whitespace-nowrap
+        "
+      >
+        ${escapeHtml(fullName)}
       </td>
 
-      <td>
-        ${escapeHtml(
-          record.district || ""
-        )}
+      <td
+        class="
+          px-6 py-4
+          whitespace-nowrap
+        "
+      >
+        ${escapeHtml(marathiName)}
       </td>
 
-      <td>
-        ${escapeHtml(
-          record.taluka || ""
-        )}
+      <td
+        class="
+          px-6 py-4
+          whitespace-nowrap
+        "
+      >
+        ${escapeHtml(district)}
       </td>
 
-      <td>
-        <span class="member-mobile">
-          ${maskMobile(
-            record.mobileNumber
-          )}
-        </span>
+      <td
+        class="
+          px-6 py-4
+          whitespace-nowrap
+        "
+      >
+        ${escapeHtml(taluka)}
       </td>
 
-      <td>
-        <span class="member-count-pill">
-          ${
-            record.membersCount || 0
-          }
-        </span>
+      <td
+        class="
+          px-6 py-4
+          whitespace-nowrap
+        "
+      >
+        ${escapeHtml(maskedMobile)}
+      </td>
+
+      <td
+        class="
+          px-6 py-4
+          whitespace-nowrap
+        "
+      >
+        ${membersCount}
       </td>
 
     </tr>
@@ -285,6 +374,7 @@ function renderDirectoryRow(
 function maskMobile(
   mobile
 ) {
+
   mobile =
     String(mobile || "");
 
@@ -301,16 +391,20 @@ function maskMobile(
 function escapeHtml(
   value = ""
 ) {
+
   return String(value)
     .replace(
       /[&<>"']/g,
       (character) => {
+
         const entities = {
+
           "&": "&amp;",
           "<": "&lt;",
           ">": "&gt;",
           '"': "&quot;",
           "'": "&#039;"
+
         };
 
         return entities[
@@ -319,4 +413,3 @@ function escapeHtml(
       }
     );
 }
-

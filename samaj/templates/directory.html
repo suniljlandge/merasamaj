@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
   <meta charset="utf-8">
 
   <meta
@@ -13,119 +14,378 @@
     Member Directory
   </title>
 
-  <link
-    rel="stylesheet"
-    href="{{ url_for('static', filename='styles.css') }}"
-  >
+  <script src="https://cdn.tailwindcss.com"></script>
 
   <script
     defer
     src="{{ url_for('static', filename='directory.js') }}"
   ></script>
+
 </head>
 
-<body class="directory-body">
+<body class="bg-slate-100 text-slate-900 overflow-x-hidden">
 
-  <header class="topbar">
+  <!-- TOPBAR -->
 
-    <a class="brand" href="/">
-      <span class="brand-mark"></span>
-      <span>SAMAJ</span>
+<header
+  class="
+    sticky top-0 z-30
+    bg-white/90 backdrop-blur
+    border-b border-slate-200
+  "
+>
+
+  <div
+    class="
+      max-w-7xl mx-auto
+      px-3 md:px-4
+      py-3
+      flex items-center
+      justify-between
+      gap-3
+    "
+  >
+
+    <!-- LEFT -->
+
+    <a
+      href="/"
+      class="
+        flex items-center gap-2
+        font-bold
+        text-xl md:text-3xl
+        shrink-0
+      "
+    >
+
+      <span
+        class="
+          w-4 h-7 md:w-5 md:h-8
+          rounded-[100%_0_100%_0]
+          rotate-45
+          bg-emerald-400
+          inline-block
+        "
+      ></span>
+
+      <span>
+        SAMAJ
+      </span>
+
     </a>
 
-    <div class="directory-top-actions">
+    <!-- RIGHT -->
 
-      <div class="directory-stat">
-        <span class="directory-stat-label">
-          Total Members
+    <div
+      class="
+        flex items-center
+        gap-2 md:gap-3
+        shrink-0
+      "
+    >
+
+      <!-- COUNT -->
+
+      <div
+        class="
+          hidden sm:flex
+          flex-col
+          items-center
+          justify-center
+
+          min-w-[110px]
+
+          px-4 py-2
+
+          rounded-2xl
+          border border-slate-200
+          bg-white
+        "
+      >
+
+        <span
+          class="
+            text-[11px]
+            text-slate-500
+          "
+        >
+          Members
         </span>
 
-        <strong id="totalMembersCount">
+        <strong
+          id="totalMembersCount"
+          class="
+            text-2xl
+            font-bold
+            leading-none
+            mt-1
+          "
+        >
           0
         </strong>
+
       </div>
+
+      <!-- FORM -->
 
       <a
         href="/"
-        class="button-secondary"
+        class="
+          h-10 md:h-11
+
+          px-4 md:px-5
+
+          rounded-full
+          border border-slate-300
+
+          bg-white
+
+          flex items-center justify-center
+
+          text-sm md:text-base
+          font-semibold
+
+          hover:bg-slate-50
+          transition
+
+          whitespace-nowrap
+        "
       >
-        Registration Form
+        Form
       </a>
-<a
-  href="/logout"
-  class="button-ghost"
-  id="logoutButton"
->
-  Logout
-</a>
+
+      <!-- LOGOUT -->
+
+      <a
+        href="/logout"
+        class="
+          h-10 md:h-11
+
+          px-4 md:px-5
+
+          rounded-full
+          border border-red-200
+
+          bg-white
+          text-red-600
+
+          flex items-center justify-center
+
+          text-sm md:text-base
+          font-semibold
+
+          hover:bg-red-50
+          transition
+
+          whitespace-nowrap
+        "
+      >
+        Logout
+      </a>
 
     </div>
 
-  </header>
+  </div>
 
-  <main class="directory-layout">
+</header>
 
-    <section class="directory-hero">
+  <!-- PAGE -->
 
-      <div>
-        <div class="directory-eyebrow">
-          COMMUNITY DIRECTORY
-        </div>
+  <main
+    class="
+      max-w-7xl mx-auto
+      p-3 md:p-6
+      grid gap-6
+    "
+  >
 
-        <h1>
-          SAMAJ Member Directory
-        </h1>
+    <!-- HERO -->
 
-        <p>
-          Search and filter community members instantly.
-        </p>
+    <section
+      class="
+        bg-white
+        rounded-3xl
+        border border-slate-200
+        p-5 md:p-8
+        shadow-sm
+      "
+    >
+
+      <div
+        class="
+          text-emerald-600
+          text-xs
+          font-bold
+          tracking-widest
+          mb-3
+        "
+      >
+        COMMUNITY DIRECTORY
       </div>
+
+      <h1
+        class="
+          text-3xl md:text-5xl
+          font-bold
+          leading-tight
+        "
+      >
+        SAMAJ Member Directory
+      </h1>
+
+      <p
+        class="
+          mt-3
+          text-slate-500
+          text-sm md:text-base
+        "
+      >
+        Search and filter community members instantly.
+      </p>
 
     </section>
 
-    <section class="directory-search-card">
+    <!-- SEARCH -->
 
-      <div class="directory-search-grid">
+    <section
+      class="
+        bg-white
+        rounded-3xl
+        border border-slate-200
+        p-5
+        shadow-sm
+      "
+    >
 
-        <div class="search-field">
-          <label>
+      <div
+        class="
+          grid
+          grid-cols-1 md:grid-cols-4
+          gap-4
+        "
+      >
+
+        <!-- SEARCH -->
+
+        <div class="grid gap-2">
+
+          <label
+            class="
+              text-sm
+              font-semibold
+              text-slate-600
+            "
+          >
             Search
           </label>
 
           <input
             id="searchInput"
             placeholder="Name, surname, mobile..."
+            class="
+              h-12
+              rounded-2xl
+              border border-slate-300
+              px-4
+              text-base
+              focus:outline-none
+              focus:ring-4
+              focus:ring-emerald-100
+              focus:border-emerald-500
+            "
           >
+
         </div>
 
-        <div class="search-field">
-          <label>
+        <!-- DISTRICT -->
+
+        <div class="grid gap-2">
+
+          <label
+            class="
+              text-sm
+              font-semibold
+              text-slate-600
+            "
+          >
             District
           </label>
 
-          <select id="filterDistrict">
+          <select
+            id="filterDistrict"
+            class="
+              h-12
+              rounded-2xl
+              border border-slate-300
+              px-4
+              text-base
+              focus:outline-none
+              focus:ring-4
+              focus:ring-emerald-100
+            "
+          >
+
             <option value="">
               All districts
             </option>
+
           </select>
+
         </div>
 
-        <div class="search-field">
-          <label>
+        <!-- TALUKA -->
+
+        <div class="grid gap-2">
+
+          <label
+            class="
+              text-sm
+              font-semibold
+              text-slate-600
+            "
+          >
             Taluka
           </label>
 
-          <select id="filterTaluka">
+          <select
+            id="filterTaluka"
+            class="
+              h-12
+              rounded-2xl
+              border border-slate-300
+              px-4
+              text-base
+              focus:outline-none
+              focus:ring-4
+              focus:ring-emerald-100
+            "
+          >
+
             <option value="">
               All talukas
             </option>
+
           </select>
+
         </div>
+
+        <!-- BUTTON -->
 
         <button
           id="searchButton"
-          class="button-primary directory-search-btn"
           type="button"
+          class="
+            h-12
+            rounded-2xl
+            bg-emerald-400
+            hover:bg-emerald-500
+            transition
+            font-bold
+            text-slate-900
+            mt-auto
+            px-6
+            whitespace-nowrap
+          "
         >
           Search Members
         </button>
@@ -134,52 +394,206 @@
 
     </section>
 
-    <section class="directory-table-card">
+    <!-- MEMBER TABLE -->
 
-      <div class="directory-table-header">
+    <section
+      class="
+        bg-white
+        rounded-3xl
+        border border-slate-200
+        p-5
+        shadow-sm
+        overflow-hidden
+      "
+    >
+
+      <!-- HEADER -->
+
+      <div
+        class="
+          flex flex-col md:flex-row
+          md:items-center
+          md:justify-between
+          gap-4
+          mb-6
+        "
+      >
 
         <div>
-          <h2>
+
+          <h2
+            class="
+              text-3xl
+              font-bold
+            "
+          >
             Member List
           </h2>
 
-          <p>
+          <p
+            class="
+              mt-2
+              text-slate-500
+            "
+          >
             Latest registered members
           </p>
+
         </div>
 
-        <div class="directory-chip">
+        <div
+          class="
+            px-4 py-2
+            rounded-full
+            bg-emerald-100
+            text-emerald-700
+            text-sm
+            font-bold
+            w-fit
+          "
+        >
           Live Directory
         </div>
 
       </div>
 
-      <div class="directory-table-wrapper">
+      <!-- RESPONSIVE TABLE -->
+<div
+  class="
+    overflow-x-auto
+    rounded-2xl
+    border border-slate-200
+  "
+>
 
-        <table class="directory-table">
+  <table
+    class="
+      min-w-[820px]
+      w-full
+      border-collapse
+      bg-white
+    "
+  >
 
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Marathi</th>
-              <th>District</th>
-              <th>Taluka</th>
-              <th>Mobile</th>
-              <th>Members</th>
-            </tr>
-          </thead>
+    <thead
+      class="
+        bg-slate-100
+        text-slate-700
+      "
+    >
 
-          <tbody id="directoryTableBody">
-            <tr>
-              <td colspan="6">
-                Loading members...
-              </td>
-            </tr>
-          </tbody>
+      <tr>
 
-        </table>
+        <th
+          class="
+            text-left
+            px-6 py-4
+            font-semibold
+            whitespace-nowrap
+            w-[80px]
+          "
+        >
+          Sr No
+        </th>
 
-      </div>
+        <th
+          class="
+            text-left
+            px-6 py-4
+            font-semibold
+            whitespace-nowrap
+          "
+        >
+          Name
+        </th>
+
+        <th
+          class="
+            text-left
+            px-6 py-4
+            font-semibold
+            whitespace-nowrap
+          "
+        >
+          Marathi
+        </th>
+
+        <th
+          class="
+            text-left
+            px-6 py-4
+            font-semibold
+            whitespace-nowrap
+          "
+        >
+          District
+        </th>
+
+        <th
+          class="
+            text-left
+            px-6 py-4
+            font-semibold
+            whitespace-nowrap
+          "
+        >
+          Taluka
+        </th>
+
+        <th
+          class="
+            text-left
+            px-6 py-4
+            font-semibold
+            whitespace-nowrap
+          "
+        >
+          Mobile
+        </th>
+
+        <th
+          class="
+            text-left
+            px-6 py-4
+            font-semibold
+            whitespace-nowrap
+            w-[120px]
+          "
+        >
+          Members
+        </th>
+
+      </tr>
+
+    </thead>
+
+    <tbody
+      id="directoryTableBody"
+      class="
+        divide-y divide-slate-100
+      "
+    >
+
+      <tr>
+
+        <td
+          colspan="7"
+          class="
+            px-6 py-10
+            text-center
+            text-slate-500
+          "
+        >
+          Loading members...
+        </td>
+
+      </tr>
+
+    </tbody>
+
+  </table>
+
+</div>
 
     </section>
 

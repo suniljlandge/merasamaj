@@ -890,9 +890,29 @@ function renderRecentCard(record) {
   `;
 }
 
-function showMessage(text, type) {
+function showMessage(
+  text,
+  type
+) {
+
   message.textContent = text;
-  message.className = `message is-${type}`;
+
+  message.className =
+    `message is-${type}`;
+
+  message.scrollIntoView({
+    behavior: "smooth",
+    block: "center"
+  });
+
+  if (type === "success") {
+
+    setTimeout(() => {
+
+      clearMessage();
+
+    }, 3500);
+  }
 }
 
 function clearMessage() {

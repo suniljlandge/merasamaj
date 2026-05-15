@@ -696,7 +696,7 @@ h3 {
 }
 
 /* =========================================
-   FINAL MOBILE + UX POLISH
+   FINAL RESPONSIVE SYSTEM
 ========================================= */
 
 html {
@@ -708,19 +708,9 @@ body {
   overflow-x: hidden;
 }
 
-/* BETTER TOPBAR */
-
-.topbar {
-  backdrop-filter: blur(14px);
-  background: rgba(255,255,255,0.88);
-}
-
-.topbar > div,
-.directory-top-actions {
-  flex-wrap: wrap;
-}
-
-/* BUTTONS */
+/* -----------------------------------------
+   BUTTONS
+----------------------------------------- */
 
 .button-primary,
 .button-secondary,
@@ -731,9 +721,9 @@ body {
 
   transition:
     transform 0.15s ease,
-    box-shadow 0.15s ease,
     background 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 
   text-decoration: none;
 }
@@ -746,15 +736,17 @@ body {
 
 .button-primary {
   box-shadow:
-    0 10px 24px rgba(0, 237, 100, 0.18);
+    0 10px 24px rgba(0,237,100,0.18);
 }
 
 .button-primary:hover {
   box-shadow:
-    0 14px 30px rgba(0, 237, 100, 0.22);
+    0 14px 30px rgba(0,237,100,0.22);
 }
 
-/* FORM */
+/* -----------------------------------------
+   CARDS
+----------------------------------------- */
 
 .form-surface,
 .recent-panel,
@@ -765,16 +757,9 @@ body {
     0 20px 50px rgba(0,0,0,0.04);
 }
 
-.form-section:first-of-type {
-  border-top: 0;
-}
-
-.form-section {
-  padding-top: 30px;
-  padding-bottom: 30px;
-}
-
-/* INPUTS */
+/* -----------------------------------------
+   INPUTS
+----------------------------------------- */
 
 .field input,
 .field select,
@@ -784,8 +769,7 @@ body {
 .login-card input {
   transition:
     border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    background 0.15s ease;
+    box-shadow 0.15s ease;
 }
 
 .field input:hover,
@@ -801,43 +785,59 @@ body {
 .search-field select:focus,
 .login-card input:focus {
   box-shadow:
-    0 0 0 4px rgba(0, 237, 100, 0.12);
+    0 0 0 4px rgba(0,237,100,0.12);
 }
 
-/* MEMBER CARD */
+/* -----------------------------------------
+   SUCCESS / ERROR MESSAGE
+----------------------------------------- */
 
-.member-card {
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
-}
+.message {
+  position: sticky;
+  top: 82px;
+  z-index: 20;
 
-.member-card:hover {
-  transform: translateY(-2px);
+  display: none;
+
+  margin-top: 14px;
+  padding: 16px 18px;
+
+  border-radius: 14px;
+
+  font-size: 15px;
+  font-weight: 700;
 
   box-shadow:
-    0 10px 20px rgba(0,0,0,0.05);
+    0 10px 24px rgba(0,0,0,0.08);
 }
 
-/* RECENT RECORDS */
+.message.is-success {
+  display: block;
 
-.recent-card {
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
+  background: #dcfce7;
+  color: #166534;
+
+  border: 1px solid #86efac;
 }
 
-.recent-card:hover {
-  transform: translateY(-2px);
+.message.is-error {
+  display: block;
 
-  box-shadow:
-    0 10px 20px rgba(0,0,0,0.04);
+  background: #fee2e2;
+  color: #b91c1c;
+
+  border: 1px solid #fecaca;
 }
 
-/* DIRECTORY TABLE */
+/* -----------------------------------------
+   DIRECTORY TABLE
+----------------------------------------- */
 
 .directory-table-wrapper {
+  overflow-x: auto;
   border-radius: 18px;
+
+  -webkit-overflow-scrolling: touch;
 }
 
 .directory-table {
@@ -854,7 +854,19 @@ body {
   border-bottom: none;
 }
 
-/* LOGIN PAGE */
+.member-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.member-marathi {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* -----------------------------------------
+   LOGIN
+----------------------------------------- */
 
 .login-page {
   padding: 20px;
@@ -878,31 +890,23 @@ body {
   font-weight: 700;
 }
 
-/* DIRECTORY */
+/* -----------------------------------------
+   LOGOUT
+----------------------------------------- */
 
-.directory-layout {
-  padding-top: 24px;
+#logoutButton {
+  text-decoration: none;
 }
 
-.directory-search-card {
-  position: sticky;
-  top: 88px;
-  z-index: 5;
+#logoutButton:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fecaca;
 }
 
-/* TABLE TYPOGRAPHY */
-
-.member-name {
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.member-marathi {
-  font-size: 17px;
-  font-weight: 600;
-}
-
-/* SCROLLBAR */
+/* -----------------------------------------
+   SCROLLBAR
+----------------------------------------- */
 
 ::-webkit-scrollbar {
   width: 10px;
@@ -918,7 +922,9 @@ body {
   background: #94a3b8;
 }
 
-/* TABLET */
+/* =========================================
+   TABLET
+========================================= */
 
 @media (max-width: 1024px) {
 
@@ -927,51 +933,90 @@ body {
   }
 
   .recent-panel {
-    order: -1;
+    order: 2;
   }
 
   .directory-layout {
-    padding: 22px;
+    padding: 20px;
   }
 }
 
-/* MOBILE */
+/* =========================================
+   MOBILE
+========================================= */
 
 @media (max-width: 768px) {
 
+  /* TOPBAR */
+
   .topbar {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+
+    gap: 12px;
+
     padding:
-      14px 18px;
-
-    gap: 14px;
-
-    align-items: stretch;
+      12px 14px;
   }
 
   .brand {
-    justify-content: center;
+    flex-shrink: 0;
   }
+
+  .brand span {
+    font-size: 18px;
+  }
+
+  /* ACTIONS */
+
+  .directory-top-actions {
+    display: flex;
+    flex-direction: column;
+
+    gap: 10px;
+
+    min-width: 150px;
+  }
+
+  .directory-top-actions a,
+  .directory-top-actions button {
+    width: 100%;
+    min-height: 42px;
+
+    font-size: 14px;
+  }
+
+  /* WORKSPACE */
 
   .workspace,
   .directory-layout {
-    padding: 16px;
+    padding: 12px;
+    gap: 16px;
   }
+
+  /* SURFACES */
 
   .form-surface,
   .recent-panel,
   .directory-search-card,
   .directory-table-card,
   .login-card {
-    padding: 18px;
-    border-radius: 18px;
+    padding: 16px;
+    border-radius: 16px;
   }
+
+  /* FORM */
 
   .form-header,
   .recent-header,
   .section-row,
   .form-actions {
+    display: flex;
     flex-direction: column;
     align-items: stretch;
+
+    gap: 12px;
   }
 
   .field-grid {
@@ -982,63 +1027,128 @@ body {
     width: 100%;
   }
 
+  .button-primary {
+    width: 100%;
+    min-height: 50px;
+
+    font-size: 16px;
+  }
+
+  .clear-form-button {
+    width: 100%;
+  }
+
+  /* HERO */
+
   .directory-hero {
+    display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 14px;
+
+    gap: 12px;
   }
 
   .directory-hero h1 {
-    font-size: 30px;
+    font-size: 24px;
+    line-height: 1.2;
   }
 
   .directory-hero p {
     font-size: 14px;
+    line-height: 1.5;
   }
 
-  .directory-search-grid {
-    grid-template-columns: 1fr;
-  }
+  /* STATS */
 
-  .directory-search-btn {
+  .directory-stat {
     width: 100%;
-  }
 
-  .directory-top-actions {
-    justify-content: center;
-    width: 100%;
-  }
-
-  .directory-table th,
-  .directory-table td {
     padding: 12px;
-    font-size: 14px;
+
+    border-radius: 16px;
   }
 
-  .directory-table {
-    min-width: 680px;
+  .directory-stat strong {
+    font-size: 24px;
   }
 
-  .member-marathi {
-    font-size: 16px;
-  }
-
-  .button-primary,
-  .button-secondary {
-    width: 100%;
-  }
-
-  .topbar .button-secondary,
-  .topbar .button-ghost {
-    width: auto;
-  }
+  /* SEARCH */
 
   .directory-search-card {
     position: static;
   }
+
+  .directory-search-grid {
+    grid-template-columns: 1fr;
+
+    gap: 12px;
+  }
+
+  .search-field input,
+  .search-field select {
+    height: 48px;
+
+    font-size: 16px;
+  }
+
+  .directory-search-btn {
+    width: 100%;
+    min-height: 50px;
+
+    font-size: 16px;
+  }
+
+  /* TABLE */
+
+  .directory-table {
+    min-width: 540px;
+  }
+
+  .directory-table th,
+  .directory-table td {
+    padding: 10px;
+
+    font-size: 13px;
+
+    white-space: nowrap;
+  }
+
+  .member-name {
+    font-size: 14px;
+  }
+
+  .member-marathi {
+    font-size: 15px;
+  }
+
+  .member-mobile {
+    font-size: 12px;
+  }
+
+  .member-count-pill {
+    min-width: 28px;
+    height: 28px;
+
+    font-size: 12px;
+  }
+
+  .directory-table-header {
+    flex-direction: column;
+    align-items: flex-start;
+
+    gap: 10px;
+  }
+
+  .directory-chip {
+    width: 100%;
+
+    text-align: center;
+  }
 }
 
-/* SMALL MOBILE */
+/* =========================================
+   SMALL MOBILE
+========================================= */
 
 @media (max-width: 480px) {
 
@@ -1051,52 +1161,24 @@ body {
   }
 
   .directory-hero h1 {
-    font-size: 24px;
+    font-size: 20px;
   }
 
-  .directory-stat {
-    width: 100%;
-  }
-
-  .directory-top-actions {
-    gap: 10px;
+  .directory-table {
+    min-width: 500px;
   }
 
   .topbar {
     padding:
-      12px 14px;
+      10px 12px;
   }
 
-  .form-surface,
-  .recent-panel,
-  .directory-search-card,
-  .directory-table-card,
-  .login-card {
-    padding: 16px;
-  }
-
-  .member-mobile {
-    font-size: 13px;
-  }
-
-  .directory-table {
-    min-width: 620px;
+  .directory-top-actions {
+    min-width: 130px;
   }
 
   .transliteration-option {
     min-height: 48px;
     font-size: 17px;
   }
-}
-
-/* LOGOUT BUTTON */
-
-#logoutButton {
-  text-decoration: none;
-}
-
-#logoutButton:hover {
-  background: #fee2e2;
-  color: #dc2626;
-  border-color: #fecaca;
 }
