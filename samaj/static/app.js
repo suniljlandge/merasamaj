@@ -997,7 +997,7 @@ function renderRecentCard(record) {
       <strong>${escapeHtml(name || "Unnamed")}</strong>
       <span lang="mr">${escapeHtml(marathi)}</span>
       <span>DOB: ${escapeHtml(dob)}</span>
-      <span>${escapeHtml(geo)} · ${record.membersCount ?? 0} family members</span>
+      <span>${escapeHtml(geo)} · ${(record.membersCount ?? 0) + 1}family members</span>
     </article>
   `;
 }

@@ -291,7 +291,7 @@ function renderMemberRow(
   const membersCount =
     (
       record.familyMembers || []
-    ).length;
+    ).length + 1;
 
   return `
     <tr
