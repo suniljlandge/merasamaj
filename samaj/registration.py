@@ -209,6 +209,36 @@ def validate_registration(
                 }
             )
 
+#Spouse name should be provided if member is married
+        if member.get("isMarried"):
+
+            if not member["spouseName"]["en"]:
+                errors.append(
+                    {
+                        "field": f"familyMembers.{index}.spouseName.en",
+                        "message": "Spouse name required for married member.",
+                    }
+                )
+
+            if not PHONE_PATTERN.match(
+                member["spouseContactNumber"]
+            ):
+                errors.append(
+                    {
+                        "field": f"familyMembers.{index}.spouseContactNumber",
+                        "message": "Valid spouse contact number required.",
+                    }
+                )
+
+
+            if not member["currentCity"]:
+                errors.append(
+                    {
+                        "field": f"familyMembers.{index}.currentCity",
+                        "message": "Current city required for married member.",
+                    }
+                )
+
     return {
         "valid": not errors,
         "errors": errors,
@@ -305,6 +335,7 @@ def _normalize_family_member(
     member = member or {}
 
     return {
+
         "name": normalize_bilingual(
             member.get("name"),
             overrides,
@@ -319,8 +350,24 @@ def _normalize_family_member(
         "contactNumber": normalize_phone(
             member.get("contactNumber")
         ),
-    }
 
+        "isMarried": bool(
+            member.get("isMarried")
+        ),
+
+        "spouseName": normalize_bilingual(
+            member.get("spouseName"),
+            overrides,
+        ),
+
+        "spouseContactNumber": normalize_phone(
+            member.get("spouseContactNumber")
+        ),
+
+        "currentCity": clean_text(
+            member.get("currentCity")
+        ),
+    }
 
 def _is_blank_member(member):
     return (

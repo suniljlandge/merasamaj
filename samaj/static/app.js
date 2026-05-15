@@ -229,6 +229,34 @@ function renderFamilyMembers() {
     });
   });
 
+  memberContainer
+  .querySelectorAll('[data-member-married]')
+  .forEach((checkbox) => {
+
+    checkbox.addEventListener(
+      "change",
+      () => {
+
+        const index =
+          checkbox.dataset.memberMarried;
+
+        const section =
+          memberContainer.querySelector(
+            `[data-married-fields="${index}"]`
+          );
+
+        if (!section) {
+          return;
+        }
+
+        section.style.display =
+          checkbox.checked
+            ? "grid"
+            : "none";
+      }
+    );
+
+  });
   wireAutoTransliteration();
   setupAutoCapitalization();
 }
@@ -259,7 +287,13 @@ function renderBilingualField(field, key, value = { en: "", mr: "" }, prefix = "
 }
 
 function renderMemberCard(index, value = {}) {
+
   const nameValue = value.name ?? {
+    en: "",
+    mr: ""
+  };
+
+  const spouseNameValue = value.spouseName ?? {
     en: "",
     mr: ""
   };
@@ -270,6 +304,12 @@ function renderMemberCard(index, value = {}) {
   const contactNumber =
     value.contactNumber ?? "";
 
+  const currentCity =
+    value.currentCity ?? "";
+
+  const isMarried =
+    value.isMarried ?? false;
+
   const relations = [
     "Father",
     "Mother",
@@ -277,7 +317,7 @@ function renderMemberCard(index, value = {}) {
     "Husband",
     "Son",
     "Daughter",
-	"Daughter-in-law",
+    "Daughter-in-law",
     "Brother",
     "Sister",
     "Grandfather",
@@ -297,7 +337,9 @@ function renderMemberCard(index, value = {}) {
       class="member-card"
       data-member-index="${index}"
     >
+
       <div class="member-card-header">
+
         <span class="member-card-title">
           Family member ${index + 1}
         </span>
@@ -309,6 +351,7 @@ function renderMemberCard(index, value = {}) {
         >
           Remove
         </button>
+
       </div>
 
       <div class="field-grid">
@@ -321,12 +364,14 @@ function renderMemberCard(index, value = {}) {
         )}
 
         <label class="field">
+
           <span>Relation</span>
 
           <select
             data-member-relation="${index}"
             required
           >
+
             <option value="">
               Select relation
             </option>
@@ -347,10 +392,13 @@ function renderMemberCard(index, value = {}) {
                 `
               )
               .join("")}
+
           </select>
+
         </label>
 
         <label class="field">
+
           <span>Contact number</span>
 
           <input
@@ -361,9 +409,75 @@ function renderMemberCard(index, value = {}) {
             )}"
             required
           >
+
         </label>
 
+<label class="married-toggle">
+
+  <input
+    type="checkbox"
+    class="married-checkbox"
+    data-member-married="${index}"
+    ${isMarried ? "checked" : ""}
+  >
+
+  <span>
+    Married
+  </span>
+
+</label>
+
       </div>
+
+      <div
+        class="field-grid married-fields"
+        data-married-fields="${index}"
+        style="
+          display:${isMarried ? "grid" : "none"};
+          margin-top:16px;
+        "
+      >
+
+        ${renderBilingualField(
+          {
+            key: "spouseName",
+            label: "Spouse name",
+            required: false
+          },
+          "spouseName",
+          spouseNameValue,
+          `member-${index}-`
+        )}
+
+<label class="field">
+
+  <span>Spouse contact number</span>
+
+  <input
+    data-member-spouse-contact="${index}"
+    inputmode="tel"
+    value="${escapeAttribute(
+      value.spouseContactNumber || ""
+    )}"
+    placeholder="9876543210"
+  >
+
+</label>
+
+<label class="field">
+
+  <span>Current city</span>
+
+  <input
+    data-member-current-city="${index}"
+    value="${escapeAttribute(currentCity)}"
+    placeholder="Pune"
+  >
+
+</label>
+
+      </div>
+
     </section>
   `;
 }
@@ -931,11 +1045,13 @@ function highlightValidationErrors(
 }
 
 function readFamilyMembers() {
+
   return Array.from(
     memberContainer.querySelectorAll(
       ".member-card"
     )
   ).map((card, index) => ({
+
     name: readBilingualValue(
       "name",
       card
@@ -953,7 +1069,28 @@ function readFamilyMembers() {
     contactNumber:
       card.querySelector(
         `[data-member-contact="${index}"]`
-      )?.value ?? ""
+      )?.value ?? "",
+
+    isMarried:
+      card.querySelector(
+        `[data-member-married="${index}"]`
+      )?.checked || false,
+
+    spouseName: readBilingualValue(
+      "spouseName",
+      card
+    ),
+
+    spouseContactNumber:
+      card.querySelector(
+        `[data-member-spouse-contact="${index}"]`
+      )?.value || "",
+
+    currentCity:
+      card.querySelector(
+        `[data-member-current-city="${index}"]`
+      )?.value || ""
+
   }));
 }
 
