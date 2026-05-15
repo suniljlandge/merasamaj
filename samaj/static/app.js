@@ -63,10 +63,83 @@ const connectionStatus = document.querySelector("#connection-status");
 
 let memberCount = 1;
 
+
+function capitalizeWords(
+  value = ""
+) {
+
+  return value
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      (char) => char.toUpperCase()
+    );
+}
+
+function setupAutoCapitalization() {
+
+  const selectors = [
+
+    '[data-bilingual="firstName"][data-language="en"]',
+
+    '[data-bilingual="middleName"][data-language="en"]',
+
+    '[data-bilingual="lastName"][data-language="en"]',
+
+    '[data-bilingual="address1"][data-language="en"]',
+
+    '[data-bilingual="address2"][data-language="en"]',
+
+    '[data-bilingual="name"][data-language="en"]'
+
+  ];
+
+  selectors.forEach(
+    (selector) => {
+
+      document
+        .querySelectorAll(selector)
+        .forEach(
+          (input) => {
+
+            if (
+              input.dataset.capitalizeWired ===
+              "true"
+            ) {
+              return;
+            }
+
+            input.dataset.capitalizeWired =
+              "true";
+
+            input.addEventListener(
+              "blur",
+              () => {
+
+                input.value =
+                  capitalizeWords(
+                    input.value
+                  );
+              }
+            );
+
+          }
+        );
+
+    }
+  );
+}
+
 renderApplicantFields();
+
 renderFamilyMembers();
+
 setupLocationDropdowns();
+
+setupAutoCapitalization();
+
 loadRecentRecords();
+
 checkHealth();
 if (
   searchInput &&
@@ -93,6 +166,7 @@ form.addEventListener("reset", () => {
     renderFamilyMembers();
     setupLocationDropdowns();
     wireAutoTransliteration();
+    setupAutoCapitalization();
   });
 });
 
@@ -119,6 +193,7 @@ function renderApplicantFields() {
   }
 
   wireAutoTransliteration();
+  setupAutoCapitalization();
 }
 
 function renderFamilyMembers() {
@@ -138,6 +213,7 @@ function renderFamilyMembers() {
   });
 
   wireAutoTransliteration();
+  setupAutoCapitalization();
 }
 
 function renderBilingualField(field, key, value = { en: "", mr: "" }, prefix = "") {
@@ -652,6 +728,8 @@ setTimeout(() => {
   setupLocationDropdowns();
 
   wireAutoTransliteration();
+  setupAutoCapitalization();
+
 
 }, 800);
 
