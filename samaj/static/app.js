@@ -245,7 +245,15 @@ function renderBilingualField(field, key, value = { en: "", mr: "" }, prefix = "
     </label>
     <label class="field">
       <span>${field.label} (Marathi)</span>
-      <input id="${marathiId}" lang="mr" data-bilingual="${key}" data-language="mr" value="${escapeAttribute(value.mr)}">
+      <input
+  id="${marathiId}"
+  lang="mr"
+  data-bilingual="${key}"
+  data-language="mr"
+  value="${escapeAttribute(value.mr)}"
+  readonly
+  tabindex="-1"
+>
     </label>
   `;
 }
@@ -542,7 +550,16 @@ function wireAutoTransliteration() {
         return;
       }
 
+      marathiInput.removeAttribute(
+        "readonly"
+      );
+
       marathiInput.value = suggestion;
+
+      marathiInput.setAttribute(
+        "readonly",
+        "readonly"
+      );
       marathiInput.dataset.manual = "true";
       hideMenu();
     };

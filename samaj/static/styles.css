@@ -1182,3 +1182,8 @@ body {
     font-size: 17px;
   }
 }
+
+input[readonly][lang="mr"] {
+  background: #f8fafc;
+  cursor: pointer;
+}

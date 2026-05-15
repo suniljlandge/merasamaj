@@ -54,15 +54,52 @@ def normalize_source(value):
     return " ".join(clean_text(value).lower().split())
 
 
-def _collect_bilingual_correction(corrections, value):
+def _collect_bilingual_correction(
+    corrections,
+    value
+):
     if not isinstance(value, dict):
         return
 
-    english = clean_text(value.get("en") or value.get("english") or "")
-    marathi = clean_text(value.get("mr") or value.get("marathi") or "")
-    source = normalize_source(english)
+    english = clean_text(
+        value.get("en")
+        or value.get("english")
+        or ""
+    )
 
-    if not source or not marathi:
+    marathi = clean_text(
+        value.get("mr")
+        or value.get("marathi")
+        or ""
+    )
+
+    if not english or not marathi:
         return
 
-    corrections[source] = marathi
+    english_words = [
+        normalize_source(word)
+        for word in english.split()
+        if normalize_source(word)
+    ]
+
+    marathi_words = [
+        clean_text(word)
+        for word in marathi.split()
+        if clean_text(word)
+    ]
+
+    # safety check
+    if (
+        len(english_words)
+        != len(marathi_words)
+    ):
+        return
+
+    for english_word, marathi_word in zip(
+        english_words,
+        marathi_words
+    ):
+
+        corrections[
+            english_word
+        ] = marathi_word
