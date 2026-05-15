@@ -604,6 +604,12 @@ async function handleSubmit(event) {
 
   const body = await response.json();
 
+  console.log(
+  "SAVE RESPONSE:",
+  response.status,
+  body
+);
+
   if (!response.ok) {
     showMessage(
       body.error ||
@@ -622,10 +628,18 @@ async function handleSubmit(event) {
     return;
   }
 
-  showMessage(
-    "Registration saved.",
-    "success"
-  );
+alert(
+  "✅ Registration saved successfully."
+);
+
+window.scrollTo({
+  top: 0,
+  behavior: "smooth"
+});
+
+loadRecentRecords();
+
+setTimeout(() => {
 
   form.reset();
 
@@ -637,7 +651,10 @@ async function handleSubmit(event) {
 
   setupLocationDropdowns();
 
-  loadRecentRecords();
+  wireAutoTransliteration();
+
+}, 800);
+
 }
 
 function readRegistration() {
