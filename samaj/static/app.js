@@ -71,7 +71,7 @@ function capitalizeWords(
   return value
     .toLowerCase()
     .replace(
-      /\b\w/g,
+      /(^|\s)\S/g,
       (char) => char.toUpperCase()
     );
 }
@@ -112,16 +112,33 @@ function setupAutoCapitalization() {
             input.dataset.capitalizeWired =
               "true";
 
-            input.addEventListener(
-              "blur",
-              () => {
+input.addEventListener(
+  "input",
+  () => {
 
-                input.value =
-                  capitalizeWords(
-                    input.value
-                  );
-              }
-            );
+    const cursor =
+      input.selectionStart;
+
+    const capitalized =
+      capitalizeWords(
+        input.value
+      );
+
+    if (
+      input.value !==
+      capitalized
+    ) {
+
+      input.value =
+        capitalized;
+
+      input.setSelectionRange(
+        cursor,
+        cursor
+      );
+    }
+  }
+);
 
           }
         );
