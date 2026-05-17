@@ -288,10 +288,33 @@ function renderMemberRow(
       record.mobileNumber
     );
 
-  const membersCount =
-    (
-      record.familyMembers || []
-    ).length + 1;
+const visibleMembers =
+  (record.familyMembers || []).filter(
+    (member) => {
+
+      const relation =
+        (member.relation || "")
+          .toLowerCase();
+
+      const married =
+        member.isMarried === true;
+
+      if (
+        married &&
+        (
+          relation === "daughter" ||
+          relation === "sister"
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    }
+  );
+
+const membersCount =
+  visibleMembers.length + 1;
 
   return `
     <tr

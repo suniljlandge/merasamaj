@@ -257,6 +257,77 @@ function renderFamilyMembers() {
     );
 
   });
+
+  memberContainer
+  .querySelectorAll(
+    '[data-member-relation]'
+  )
+  .forEach((select) => {
+
+    select.addEventListener(
+      "change",
+      () => {
+
+        const index =
+          select.dataset.memberRelation;
+
+        const checkbox =
+          memberContainer.querySelector(
+            `[data-member-married="${index}"]`
+          );
+
+        const section =
+          memberContainer.querySelector(
+            `[data-married-fields="${index}"]`
+          );
+
+        if (!checkbox || !section) {
+          return;
+        }
+
+        const allowedRelations = [
+          "Son",
+          "Daughter",
+          "Brother",
+          "Sister",
+          "Uncle",
+          "Cousin",
+          "Nephew",
+          "Niece"
+        ];
+
+        const allowed =
+          allowedRelations.includes(
+            select.value
+          );
+
+        checkbox.disabled =
+          !allowed;
+
+        const labelText =
+          checkbox.parentElement.querySelector(
+            "span"
+          );
+
+        if (labelText) {
+
+          labelText.textContent =
+            allowed
+              ? "Married"
+              : "Married (not applicable)";
+        }
+
+        if (!allowed) {
+
+          checkbox.checked = false;
+
+          section.style.display =
+            "none";
+        }
+      }
+    );
+
+  });
   wireAutoTransliteration();
   setupAutoCapitalization();
 }
@@ -331,6 +402,22 @@ function renderMemberCard(index, value = {}) {
     "Mother-in-law",
     "Other"
   ];
+
+    const marriageAllowedRelations = [
+    "Son",
+    "Daughter",
+    "Brother",
+    "Sister",
+    "Uncle",
+    "Cousin",
+    "Nephew",
+    "Niece"
+  ];
+
+  const marriageAllowed =
+    marriageAllowedRelations.includes(
+      relationValue
+    );
 
   return `
     <section
@@ -414,16 +501,24 @@ function renderMemberCard(index, value = {}) {
 
 <label class="married-toggle">
 
-  <input
-    type="checkbox"
-    class="married-checkbox"
-    data-member-married="${index}"
-    ${isMarried ? "checked" : ""}
-  >
+<input
+  type="checkbox"
+  class="married-checkbox"
+  data-member-married="${index}"
 
-  <span>
-    Married
-  </span>
+  ${isMarried ? "checked" : ""}
+
+  ${!marriageAllowed ? "disabled" : ""}
+>
+
+<span>
+  Married
+  ${
+    !marriageAllowed
+      ? "(not applicable)"
+      : ""
+  }
+</span>
 
 </label>
 
