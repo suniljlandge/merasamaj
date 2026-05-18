@@ -1,4 +1,5 @@
 __pycache__/
+.omx/*
 *.py[cod]
 .pytest_cache/
 .venv/
@@ -9,3 +10,10 @@ flask_session/
 hash_password.py
 usermanagement.py
 google_Transliteration.py
+*.json
+*.jsonl
+.omx/
+.omx/
+*.log
+*.csv   
+.omx/

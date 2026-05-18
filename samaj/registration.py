@@ -1,5 +1,6 @@
 import re
 from copy import deepcopy
+from uuid import uuid4
 
 from .transliterate import transliterate_to_marathi
 
@@ -24,6 +25,38 @@ REQUIRED_TEXT_KEYS = {
 PHONE_PATTERN = re.compile(
     r"^(?:\+91)?[6-9]\d{9}$"
 )
+
+FAMILY_TYPES = {
+    "nuclear",
+    "joint",
+}
+
+RELATIONSHIP_TYPES = {
+    "spouse_of",
+    "parent_of",
+    "child_of",
+    "sibling_of",
+    "guardian_of",
+    "belongs_to_household",
+    "other",
+}
+
+MARRIED_MEMBER_EXCLUDED_RELATIONS = {
+    "daughter",
+    "granddaughter",
+    "grand-daughter",
+    "sister",
+}
+
+SPOUSE_COUNTED_RELATIONS = {
+    "son",
+    "grandson",
+    "grand-son",
+    "brother",
+    "uncle",
+    "cousin",
+    "nephew",
+}
 
 
 def normalize_registration(
@@ -64,14 +97,33 @@ def normalize_registration(
         source.get("mobileNumber")
     )
 
+    normalized["familyId"] = clean_text(
+        source.get("familyId")
+    ) or f"family-{uuid4().hex[:12]}"
+
+    family_type = clean_text(
+        source.get("familyType")
+    ).lower()
+
+    normalized["familyType"] = (
+        family_type
+        if family_type in FAMILY_TYPES
+        else "nuclear"
+    )
+
+    normalized["primaryHouseholdId"] = clean_text(
+        source.get("primaryHouseholdId")
+    ) or "household-primary"
+
     normalized["familyMembers"] = (
         normalize_family_members(
             source.get("familyMembers"),
+            normalized["primaryHouseholdId"],
             overrides,
         )
     )
 
-    normalized["membersCount"] = len(
+    normalized["membersCount"] = calculate_family_members_count(
         normalized["familyMembers"]
     )
 
@@ -191,11 +243,11 @@ def validate_registration(
                 }
             )
 
-        if not member["relation"]:
+        if not member["relationToApplicant"]:
             errors.append(
                 {
-                    "field": f"familyMembers.{index}.relation",
-                    "message": "Relation required.",
+                    "field": f"familyMembers.{index}.relationToApplicant",
+                    "message": "Relation to applicant required.",
                 }
             )
 
@@ -209,14 +261,13 @@ def validate_registration(
                 }
             )
 
-#Spouse name should be provided if member is married
-        if member.get("isMarried"):
+        if has_spouse_details(member):
 
             if not member["spouseName"]["en"]:
                 errors.append(
                     {
                         "field": f"familyMembers.{index}.spouseName.en",
-                        "message": "Spouse name required for married member.",
+                        "message": "Spouse name required when spouse details are entered.",
                     }
                 )
 
@@ -282,6 +333,7 @@ def normalize_bilingual(
 
 def normalize_family_members(
     value,
+    primary_household_id="household-primary",
     overrides=None,
 ):
     if not isinstance(value, list):
@@ -290,6 +342,7 @@ def normalize_family_members(
     members = [
         _normalize_family_member(
             member,
+            primary_household_id,
             overrides,
         )
         for member in value
@@ -330,22 +383,41 @@ def normalize_phone(value=""):
 
 def _normalize_family_member(
     member=None,
+    primary_household_id="household-primary",
     overrides=None,
 ):
     member = member or {}
+    person_id = (
+        clean_text(member.get("personId"))
+        or clean_text(member.get("memberId"))
+        or f"person-{uuid4().hex[:12]}"
+    )
+
+    relation_to_applicant = clean_text(
+        read_relation_value(
+            member.get("relationToApplicant")
+        )
+        or read_relation_value(
+            member.get("relation")
+        )
+        or ""
+    )
 
     return {
+        "personId": person_id,
+
+        "memberId": person_id,
+
+        "householdId": clean_text(
+            member.get("householdId")
+        ) or primary_household_id,
 
         "name": normalize_bilingual(
             member.get("name"),
             overrides,
         ),
 
-        "relation": clean_text(
-            member.get("relation", {}).get("en")
-            or member.get("relation")
-            or ""
-        ),
+        "relationToApplicant": relation_to_applicant,
 
         "contactNumber": normalize_phone(
             member.get("contactNumber")
@@ -367,12 +439,177 @@ def _normalize_family_member(
         "currentCity": clean_text(
             member.get("currentCity")
         ),
+
+        "spouseMemberId": clean_text(
+            member.get("spouseMemberId")
+        ),
+
+        "relationshipLinks": normalize_relationship_links(
+            member.get("relationshipLinks"),
+            member,
+        ),
     }
 
 def _is_blank_member(member):
     return (
         not member["name"]["en"]
         and not member["name"]["mr"]
-        and not member["relation"]
+        and not member["relationToApplicant"]
         and not member["contactNumber"]
     )
+
+
+def normalize_relation_key(value=""):
+    return (
+        read_relation_value(value)
+        .strip()
+        .lower()
+    )
+
+
+def calculate_family_members_count(members=None):
+    total = 0
+
+    for member in members or []:
+        relation = normalize_relation_key(
+            member.get("relationToApplicant")
+            or member.get("relation")
+            or ""
+        )
+        is_married = bool(
+            member.get("isMarried")
+        )
+
+        if (
+            is_married
+            and relation in MARRIED_MEMBER_EXCLUDED_RELATIONS
+        ):
+            continue
+
+        total += 1
+
+        if (
+            is_married
+            and relation in SPOUSE_COUNTED_RELATIONS
+            and (member.get("spouseName") or {}).get("en")
+        ):
+            total += 1
+
+    return total
+
+
+def has_spouse_details(member=None):
+    member = member or {}
+    spouse_name = member.get("spouseName") or {}
+
+    return bool(
+        spouse_name.get("en")
+        or spouse_name.get("mr")
+        or member.get("spouseContactNumber")
+        or member.get("currentCity")
+        or member.get("spouseMemberId")
+    )
+
+
+def normalize_relationship_links(value=None, member=None):
+    if isinstance(value, list):
+        links = [
+            normalize_relationship_link(item)
+            for item in value
+        ]
+
+        return [
+            link
+            for link in links
+            if link
+        ]
+
+    member = member or {}
+    legacy_links = []
+
+    spouse_member_id = clean_text(
+        member.get("spouseMemberId")
+    )
+
+    if spouse_member_id:
+        legacy_links.append({
+            "type": "spouse_of",
+            "targetPersonId": spouse_member_id,
+        })
+
+    for parent_id in normalize_member_id_list(
+        member.get("parentMemberIds")
+    ):
+        legacy_links.append({
+            "type": "child_of",
+            "targetPersonId": parent_id,
+        })
+
+    for child_id in normalize_member_id_list(
+        member.get("childMemberIds")
+    ):
+        legacy_links.append({
+            "type": "parent_of",
+            "targetPersonId": child_id,
+        })
+
+    for linked_id in normalize_member_id_list(
+        member.get("linkedMemberIds")
+    ):
+        legacy_links.append({
+            "type": "other",
+            "targetPersonId": linked_id,
+        })
+
+    return legacy_links
+
+
+def normalize_relationship_link(value=None):
+    if not isinstance(value, dict):
+        return None
+
+    link_type = clean_text(
+        value.get("type")
+    ).lower()
+    target_person_id = clean_text(
+        value.get("targetPersonId")
+        or value.get("targetMemberId")
+    )
+
+    if (
+        link_type not in RELATIONSHIP_TYPES
+        or not target_person_id
+    ):
+        return None
+
+    return {
+        "type": link_type,
+        "targetPersonId": target_person_id,
+    }
+
+
+def normalize_member_id_list(value=None):
+    if not isinstance(value, list):
+        return []
+
+    normalized = [
+        clean_text(item)
+        for item in value
+    ]
+
+    return [
+        item
+        for item in normalized
+        if item
+    ]
+
+
+def read_relation_value(value=None):
+    if isinstance(value, dict):
+        return clean_text(
+            value.get("en")
+            or value.get("value")
+            or ""
+        )
+
+    return clean_text(value)

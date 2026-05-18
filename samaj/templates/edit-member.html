@@ -2,104 +2,119 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1"
     >
-
-    <title>
-      SAMAJ Registration
-    </title>
-
+    <title>Edit Member</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='styles.css') }}"
     >
-
+    <script>
+      window.CURRENT_ROLE = "{{ current_role }}";
+    </script>
     <script
       defer
       src="{{ url_for('static', filename='app.js') }}"
     ></script>
   </head>
-
-  <body>
-
+  <body class="directory-body">
     <header class="topbar">
-
       <a
+        href="/directory"
         class="brand"
-        href="/"
-        aria-label="SAMAJ Registration home"
       >
         <span
           class="brand-mark"
           aria-hidden="true"
         ></span>
-
-        <span>
-          SAMAJ
-        </span>
+        <span>SAMAJ</span>
       </a>
 
-      <div
-        style="
-          display:flex;
-          align-items:center;
-          gap:16px;
-        "
-      >
+      <div class="directory-top-actions">
+        <span
+          class="directory-chip"
+          id="edit-role-badge"
+        >
+          {{ current_role|replace('_', ' ')|title }}
+        </span>
 
         <a
           href="/directory"
           class="button-secondary"
         >
-          Member Directory
+          Back to directory
         </a>
-
-<a
-  href="/logout"
-  class="button-ghost"
-  id="logoutButton"
->
-  Logout
-</a>
-
-        <span
-          class="topbar-status"
-          id="connection-status"
-        >
-          Connected
-        </span>
-
       </div>
-
     </header>
 
-    <main>
+    <main class="directory-layout">
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">
+              Admin Editor
+            </p>
+            <h1
+              style="
+                margin: 0;
+                font-size: 34px;
+                line-height: 1.1;
+              "
+              id="edit-page-title"
+            >
+              Edit member
+            </h1>
+            <p id="edit-page-subtitle">
+              Loading registration details...
+            </p>
+          </div>
 
-      <section class="workspace">
+          <div class="directory-top-actions">
+            <a
+              class="button-secondary"
+              id="view-member-link"
+              href="#"
+            >
+              View member
+            </a>
 
+            <a
+              class="button-ghost"
+              href="/directory"
+            >
+              Cancel
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace admin-editor-layout">
         <form
           class="form-surface"
+          data-reset-on-success="false"
+          data-submit-method="PUT"
+          data-success-message="Member updated successfully."
           id="registration-form"
           novalidate
         >
-
           <div class="form-header">
-
             <div>
               <p class="eyebrow">
-                New entry
+                Update record
               </p>
-
               <h2>
                 Applicant information
               </h2>
             </div>
 
-
-
+            <span
+              class="topbar-status"
+              id="connection-status"
+            >
+              Connected
+            </span>
           </div>
 
           <div
@@ -107,9 +122,7 @@
             id="mobile-wizard"
             aria-live="polite"
           >
-
             <div class="mobile-wizard-progress">
-
               <span
                 class="mobile-wizard-step-label"
                 id="mobile-wizard-step-label"
@@ -125,11 +138,9 @@
                 <span class="mobile-wizard-dot"></span>
                 <span class="mobile-wizard-dot"></span>
               </div>
-
             </div>
 
             <div class="mobile-wizard-copy">
-
               <h3 id="mobile-wizard-title">
                 Applicant name
               </h3>
@@ -140,16 +151,13 @@
               >
                 Fill in the applicant's name and date of birth.
               </p>
-
             </div>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="1"
           >
-
             <h3>
               Name
             </h3>
@@ -158,7 +166,6 @@
               class="field-grid"
               id="name-fields"
             ></div>
-
           </div>
 
           <input
@@ -177,15 +184,12 @@
             class="form-section"
             data-wizard-step="2"
           >
-
             <h3>
               Contact
             </h3>
 
             <div class="field-grid">
-
               <label class="field">
-
                 <span>
                   Mobile number
                 </span>
@@ -198,26 +202,20 @@
                   maxlength="15"
                   required
                 >
-
               </label>
-
             </div>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="1"
           >
-
             <h3>
               Date of birth
             </h3>
 
             <div class="field-grid">
-
               <label class="field">
-
                 <span>
                   Full date of birth
                 </span>
@@ -226,11 +224,9 @@
                   id="birthDate"
                   type="date"
                 >
-
               </label>
 
               <label class="field">
-
                 <span>
                   OR Birth year only
                 </span>
@@ -242,22 +238,18 @@
                   max="2099"
                   placeholder="1998"
                 >
-
               </label>
-
             </div>
 
             <p class="section-note">
               User can provide either full DOB or only birth year.
             </p>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="2"
           >
-
             <h3>
               Address
             </h3>
@@ -266,22 +258,18 @@
               class="field-grid"
               id="address-fields"
             ></div>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="2"
           >
-
             <h3>
               Location
             </h3>
 
             <div class="field-grid">
-
               <label class="field">
-
                 <span>
                   State
                 </span>
@@ -294,11 +282,9 @@
                     Select state
                   </option>
                 </select>
-
               </label>
 
               <label class="field">
-
                 <span>
                   District
                 </span>
@@ -311,11 +297,9 @@
                     Select district
                   </option>
                 </select>
-
               </label>
 
               <label class="field">
-
                 <span>
                   Taluka
                 </span>
@@ -328,35 +312,25 @@
                     Select taluka
                   </option>
                 </select>
-
               </label>
-
             </div>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="3"
           >
-
             <div class="section-row">
-
               <div>
-
                 <h3>
                   Family details
                 </h3>
-
                 <p class="section-note">
-                  Set the count, then fill each member's
-                  name, relation to applicant, and contact number.
+                  Edit each family member with relation to applicant, contact details, and marriage details where needed.
                 </p>
-
               </div>
 
               <label class="compact-field">
-
                 <span>
                   Members in family
                 </span>
@@ -368,14 +342,12 @@
                   max="25"
                   value="1"
                 >
-
               </label>
-
             </div>
 
             <div
-              id="family-members"
               class="member-stack"
+              id="family-members"
             ></div>
 
             <button
@@ -385,7 +357,6 @@
             >
               Add member
             </button>
-
           </div>
 
           <div
@@ -396,7 +367,6 @@
           ></div>
 
           <div class="form-actions">
-
             <button
               class="button-secondary mobile-wizard-back"
               id="mobile-wizard-back"
@@ -418,63 +388,142 @@
               id="mobile-wizard-submit"
               type="submit"
             >
-              Save and submit
+              Save changes
             </button>
 
             <button
               class="button-primary desktop-submit"
               type="submit"
             >
-              Save
+              Save changes
             </button>
 
-              <button
-    class="button-secondary clear-form-button"
-    type="reset"
-  >
-    Clear form
-  </button>
-
+            <a
+              class="button-secondary clear-form-button"
+              href="/directory"
+            >
+              Cancel
+            </a>
           </div>
-
         </form>
 
-        <aside class="recent-panel">
-
+        <aside class="recent-panel admin-side-panel">
           <div class="recent-header">
-
             <div>
-
               <p class="eyebrow">
-                Latest
+                Editing guide
               </p>
-
               <h2>
-                Saved records
+                Admin checklist
               </h2>
-
             </div>
-
-            <button
-              class="button-ghost"
-              id="refresh-records"
-              type="button"
-            >
-              Refresh
-            </button>
-
           </div>
 
-          <div
-            id="recent-records"
-            class="recent-list"
-          ></div>
+          <div class="recent-list">
+            <article class="recent-card">
+              <strong>
+                Review applicant basics
+              </strong>
+              <span>
+                Make sure name, DOB, and contact details match the original record.
+              </span>
+            </article>
 
+            <article class="recent-card">
+              <strong>
+                Update family carefully
+              </strong>
+              <span>
+                Each family member stores a household ID and can include optional relationship links for joint-family trees.
+              </span>
+            </article>
+
+            <article class="recent-card">
+              <strong>
+                Save without losing context
+              </strong>
+              <span>
+                The form stays open after save so you can verify the result immediately.
+              </span>
+            </article>
+          </div>
         </aside>
-
       </section>
-
     </main>
 
+    <script>
+      window.addEventListener(
+        "DOMContentLoaded",
+        () => {
+          const editMemberId =
+            window.location.pathname
+              .split("/")
+              .pop();
+
+          const editForm =
+            document.querySelector(
+              "#registration-form"
+            );
+
+          const pageTitle =
+            document.querySelector(
+              "#edit-page-title"
+            );
+
+          const pageSubtitle =
+            document.querySelector(
+              "#edit-page-subtitle"
+            );
+
+          document.querySelector(
+            "#view-member-link"
+          ).href =
+            `/view-member/${editMemberId}`;
+
+          editForm.dataset.submitUrl =
+            `/api/registrations/${editMemberId}`;
+
+          async function loadMemberForEdit() {
+            const response =
+              await fetch(
+                `/api/registrations/${editMemberId}`
+              );
+
+            if (!response.ok) {
+              throw new Error(
+                `Failed to load member: ${response.status}`
+              );
+            }
+
+            const member =
+              await response.json();
+
+            window.registrationFormApi.populateRegistrationForm(
+              member
+            );
+
+            const fullName = [
+              member.firstName?.en,
+              member.middleName?.en,
+              member.lastName?.en
+            ]
+              .filter(Boolean)
+              .join(" ");
+
+            pageTitle.textContent =
+              fullName || "Edit member";
+
+            pageSubtitle.textContent =
+              `${member.mobileNumber || "No mobile"} · ${member.district || "Unknown district"}, ${member.taluka || "Unknown taluka"}`;
+          }
+
+          loadMemberForEdit().catch((error) => {
+            console.error(error);
+            pageSubtitle.textContent =
+              "Failed to load member details.";
+          });
+        }
+      );
+    </script>
   </body>
 </html>

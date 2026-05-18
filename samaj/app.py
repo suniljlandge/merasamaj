@@ -20,7 +20,10 @@ from .corrections import (
     save_corrections,
 )
 from .db import create_collections
-from .registration import validate_registration
+from .registration import (
+    normalize_relationship_links,
+    validate_registration,
+)
 from .transliterate import transliteration_suggestions
 
 
@@ -71,6 +74,32 @@ def create_app(config=None, collection=None, correction_collection=None):
             "index.html"
         )
 
+    @app.route("/view-member/<id>")
+    def view_member_page(id):
+
+        if not require_auth():
+            return redirect("/login")
+
+        return render_template(
+            "view-member.html",
+            current_role=session.get("role")
+        )
+
+
+    @app.route("/edit-member/<id>")
+    def edit_member_page(id):
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return redirect("/directory")
+
+        return render_template(
+            "edit-member.html",
+            current_role=session.get("role")
+        )
+
     @app.route("/directory")
     def directory():
 
@@ -78,7 +107,8 @@ def create_app(config=None, collection=None, correction_collection=None):
             return redirect("/login")
 
         return render_template(
-            "directory.html"
+            "directory.html",
+            current_role=session.get("role")
         )
 
     @app.get("/api/health")
@@ -167,6 +197,81 @@ def create_app(config=None, collection=None, correction_collection=None):
             "role": user["role"]
         })
 
+
+    @app.get("/api/registrations/<id>")
+    def get_registration(id):
+
+        document = (
+            get_collection()
+            .find_one({
+                "_id": ObjectId(id)
+            })
+        )
+
+        if not document:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        return jsonify(
+            serialize_registration_document(
+                document
+            )
+        )
+
+    @app.put("/api/registrations/<id>")
+    def update_registration(id):
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        payload = (
+            request.get_json(
+                silent=True
+            ) or {}
+        )
+
+        correction_store = get_correction_collection()
+
+        corrections = load_corrections(correction_store)
+
+        result = validate_registration(
+                payload,
+                corrections,
+            )
+
+        if not result["valid"]:
+            return jsonify({
+                "error": "Validation failed",
+                "errors": result["errors"]
+            }), 400
+
+        document = {
+            **result["value"],
+            "updatedAt":
+                datetime.now(
+                    timezone.utc
+                )
+        }
+
+        get_collection().update_one(
+            {
+                "_id": ObjectId(id)
+            },
+            {
+                "$set": document
+            }
+        )
+
+        return jsonify({
+            "ok": True
+        })
+
     @app.post("/api/registrations")
 
     def create_registration():
@@ -213,7 +318,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             jsonify(
                 {
                     "id": str(insert_result.inserted_id),
-                    "registration": serialize_document(document),
+                    "registration": serialize_registration_document(document),
                     "learnedCorrections": learned_corrections,
                 }
             ),
@@ -238,7 +343,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         return jsonify(
             {
                 "items": [
-                    serialize_document(document)
+                    serialize_registration_document(document)
                     for document in cursor
                 ]
             }
@@ -331,7 +436,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         return jsonify(
             {
                 "items": [
-                    serialize_document(doc)
+                    serialize_registration_document(doc)
                     for doc in cursor
                 ]
             }
@@ -447,6 +552,64 @@ def serialize_document(value):
         }
 
     return value
+
+
+def serialize_registration_document(document):
+    serialized = serialize_document(document)
+
+    serialized["familyId"] = (
+        serialized.get("familyId")
+        or ""
+    )
+    serialized["familyType"] = (
+        serialized.get("familyType")
+        or "nuclear"
+    )
+    serialized["primaryHouseholdId"] = (
+        serialized.get("primaryHouseholdId")
+        or "household-primary"
+    )
+
+    family_members = serialized.get(
+        "familyMembers"
+    )
+
+    if not isinstance(family_members, list):
+        return serialized
+
+    for member in family_members:
+        if not isinstance(member, dict):
+            continue
+
+        relation = (
+            member.get("relationToApplicant")
+            or member.get("relation")
+            or ""
+        )
+        person_id = (
+            member.get("personId")
+            or member.get("memberId")
+            or ""
+        )
+
+        member["personId"] = person_id
+        member["memberId"] = person_id
+        member["householdId"] = (
+            member.get("householdId")
+            or serialized["primaryHouseholdId"]
+        )
+        member["relationToApplicant"] = relation
+        member["relation"] = relation
+        member["spouseMemberId"] = (
+            member.get("spouseMemberId")
+            or ""
+        )
+        member["relationshipLinks"] = normalize_relationship_links(
+            member.get("relationshipLinks"),
+            member,
+        )
+
+    return serialized
 
 
 def clamp(value, minimum, maximum):

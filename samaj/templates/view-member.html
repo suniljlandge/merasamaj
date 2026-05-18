@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>View Member</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    >
+    <script>
+      window.CURRENT_ROLE = "{{ current_role }}";
+    </script>
+  </head>
+  <body class="directory-body">
+    <header class="topbar">
+      <a
+        href="/directory"
+        class="brand"
+      >
+        <span
+          class="brand-mark"
+          aria-hidden="true"
+        ></span>
+        <span>SAMAJ</span>
+      </a>
+
+      <div class="directory-top-actions">
+        <a
+          href="/directory"
+          class="button-secondary"
+        >
+          Back to directory
+        </a>
+
+        <a
+          class="button-primary"
+          href="#"
+          id="view-edit-link"
+          hidden
+        >
+          Edit member
+        </a>
+      </div>
+    </header>
+
+    <main class="directory-layout">
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">
+              Member Profile
+            </p>
+            <h1
+              id="member-name"
+              style="
+                margin: 0;
+                font-size: 36px;
+                line-height: 1.1;
+              "
+            >
+              Loading member...
+            </h1>
+            <p
+              id="member-name-mr"
+              style="
+                margin-top: 10px;
+                color: #475569;
+                font-size: 22px;
+              "
+            ></p>
+          </div>
+
+          <div class="directory-top-actions">
+            <div class="directory-stat">
+              <span class="directory-stat-label">
+                Family size
+              </span>
+              <strong id="member-family-count">
+                -
+              </strong>
+            </div>
+
+            <div class="directory-stat">
+              <span class="directory-stat-label">
+                Location
+              </span>
+              <strong
+                id="member-location-short"
+                style="
+                  font-size: 18px;
+                "
+              >
+                -
+              </strong>
+            </div>
+
+            <div class="directory-stat">
+              <span class="directory-stat-label">
+                Family type
+              </span>
+              <strong
+                id="member-family-type"
+                style="
+                  font-size: 18px;
+                  text-transform: capitalize;
+                "
+              >
+                -
+              </strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace admin-view-layout">
+        <div class="form-surface">
+          <div class="form-section" style="border-top: 0; padding-top: 0;">
+            <h3>
+              Applicant summary
+            </h3>
+
+            <div
+              class="field-grid"
+              id="member-summary-grid"
+            ></div>
+          </div>
+
+          <div class="form-section">
+            <div class="section-row">
+              <div>
+                <h3>
+                  Family members
+                </h3>
+                <p class="section-note">
+                  Full household details with relation to applicant and marriage details where available.
+                </p>
+              </div>
+            </div>
+
+            <div
+              class="member-stack"
+              id="member-family-grid"
+            ></div>
+          </div>
+        </div>
+
+        <aside class="recent-panel admin-side-panel">
+          <div class="recent-header">
+            <div>
+              <p class="eyebrow">
+                Admin actions
+              </p>
+              <h2>
+                Quick controls
+              </h2>
+            </div>
+          </div>
+
+          <div class="recent-list">
+            <article class="recent-card">
+              <strong>
+                Review before editing
+              </strong>
+              <span>
+                Use this page to verify family structure and applicant details before making changes.
+              </span>
+            </article>
+
+            <article class="recent-card">
+              <strong>
+                Preserve relationship links
+              </strong>
+              <span>
+                The member schema now keeps future-ready relationship link fields even if they are not shown directly here.
+              </span>
+            </article>
+
+            <article class="recent-card">
+              <strong>
+                Edit access
+              </strong>
+              <span id="admin-permission-copy">
+                Admins and super admins can update this record.
+              </span>
+            </article>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script>
+      const memberId =
+        window.location.pathname
+          .split("/")
+          .pop();
+
+      const currentRole =
+        window.CURRENT_ROLE;
+
+      const canEdit =
+        currentRole === "admin"
+        || currentRole === "super_admin";
+
+      const editLink =
+        document.querySelector(
+          "#view-edit-link"
+        );
+
+      if (canEdit) {
+        editLink.hidden = false;
+        editLink.href = `/edit-member/${memberId}`;
+      }
+
+      if (!canEdit) {
+        document.querySelector(
+          "#admin-permission-copy"
+        ).textContent =
+          "This account can view records but cannot edit them.";
+      }
+
+      async function loadMember() {
+        const response =
+          await fetch(
+            `/api/registrations/${memberId}`
+          );
+
+        if (!response.ok) {
+          throw new Error("Unable to load member");
+        }
+
+        const member =
+          await response.json();
+
+        renderMember(member);
+      }
+
+      function renderMember(member) {
+        const fullName = [
+          member.firstName?.en,
+          member.middleName?.en,
+          member.lastName?.en
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        const marathiName = [
+          member.firstName?.mr,
+          member.middleName?.mr,
+          member.lastName?.mr
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        const familyMembers =
+          Array.isArray(member.familyMembers)
+            ? member.familyMembers
+            : [];
+
+        document.querySelector(
+          "#member-name"
+        ).textContent =
+          fullName || "Unnamed member";
+
+        document.querySelector(
+          "#member-name-mr"
+        ).textContent =
+          marathiName || "Marathi name not available";
+
+        document.querySelector(
+          "#member-family-count"
+        ).textContent =
+          String((member.membersCount ?? familyMembers.length) + 1);
+
+        document.querySelector(
+          "#member-location-short"
+        ).textContent =
+          [
+            member.district,
+            member.taluka
+          ]
+          .filter(Boolean)
+          .join(" / ")
+          || "-";
+
+        document.querySelector(
+          "#member-family-type"
+        ).textContent =
+          member.familyType || "nuclear";
+
+        document.querySelector(
+          "#member-summary-grid"
+        ).innerHTML = [
+          renderInfo("Mobile", member.mobileNumber),
+          renderInfo("Birth", member.birthDate || member.birthYear),
+          renderInfo("State", member.state),
+          renderInfo("District", member.district),
+          renderInfo("Taluka", member.taluka),
+          renderInfo(
+            "Address",
+            [
+              member.address1?.en,
+              member.address2?.en
+            ]
+            .filter(Boolean)
+            .join(", ")
+          ),
+          renderInfo("Family ID", member.familyId),
+          renderInfo("Primary household", member.primaryHouseholdId),
+        ].join("");
+
+        document.querySelector(
+          "#member-family-grid"
+        ).innerHTML =
+          familyMembers.length
+            ? familyMembers
+                .map((familyMember, index) =>
+                  renderFamilyMember(
+                    familyMember,
+                    index,
+                    familyMembers
+                  )
+                )
+                .join("")
+            : `
+              <article class="recent-card">
+                <strong>
+                  No family members added
+                </strong>
+                <span>
+                  This record currently has no linked family member entries.
+                </span>
+              </article>
+            `;
+      }
+
+      function renderFamilyMember(member, index, familyMembers = []) {
+        return `
+          <section class="member-card">
+            <div class="member-card-header">
+              <span class="member-card-title">
+                Family member ${index + 1}
+              </span>
+
+              <span class="directory-chip">
+                ${escapeHtml(member.relationToApplicant || member.relation || "-")}
+              </span>
+            </div>
+
+            <div class="field-grid">
+              ${renderInfo("Person ID", member.personId || member.memberId)}
+              ${renderInfo("Household", member.householdId)}
+              ${renderInfo("Name", member.name?.en)}
+              ${renderInfo("Marathi", member.name?.mr)}
+              ${renderInfo("Relation to applicant", member.relationToApplicant || member.relation)}
+              ${renderInfo("Contact", member.contactNumber)}
+              ${renderInfo("Married", member.isMarried ? "Yes" : "No")}
+              ${member.isMarried ? renderInfo("Spouse", member.spouseName?.en) : ""}
+              ${member.isMarried ? renderInfo("Spouse contact", member.spouseContactNumber) : ""}
+              ${member.isMarried ? renderInfo("Current city", member.currentCity) : ""}
+            </div>
+
+            ${renderRelationshipLinks(member.relationshipLinks, familyMembers)}
+          </section>
+        `;
+      }
+
+      function renderRelationshipLinks(links = [], familyMembers = []) {
+        if (!Array.isArray(links) || !links.length) {
+          return "";
+        }
+
+        return `
+          <div class="relationship-panel">
+            <div class="member-card-header">
+              <span class="member-card-title">
+                Relationship links
+              </span>
+              <span class="identity-pill">
+                ${links.length} link${links.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div class="relationship-stack">
+              ${links
+                .map((link) => `
+                  <div class="relationship-row">
+                    ${renderInfo("Type", formatRelationshipType(link.type))}
+                    ${renderInfo("Target person", resolveTargetPersonName(link.targetPersonId, familyMembers))}
+                  </div>
+                `)
+                .join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      function resolveTargetPersonName(targetPersonId = "", familyMembers = []) {
+        const targetMember = familyMembers.find(
+          (member) =>
+            (member.personId || member.memberId) === targetPersonId
+        );
+
+        if (!targetMember) {
+          return targetPersonId;
+        }
+
+        const name =
+          targetMember.name?.en
+          || targetMember.name?.mr
+          || "Unnamed member";
+        const relation =
+          targetMember.relationToApplicant
+          || targetMember.relation
+          || "";
+
+        return relation
+          ? `${name} (${relation})`
+          : name;
+      }
+
+      function formatRelationshipType(type = "") {
+        return String(type)
+          .replaceAll("_", " ")
+          .replace(/\b\w/g, (char) => char.toUpperCase());
+      }
+
+      function renderInfo(label, value) {
+        return `
+          <div class="field">
+            <span>${escapeHtml(label)}</span>
+            <div
+              style="
+                min-height: 44px;
+                padding: 12px 14px;
+                border-radius: 10px;
+                background: #f8fafc;
+                border: 1px solid #dbe4ea;
+                color: #0f172a;
+              "
+            >
+              ${escapeHtml(value || "-")}
+            </div>
+          </div>
+        `;
+      }
+
+      function escapeHtml(value = "") {
+        return String(value).replace(/[&<>"']/g, (character) => {
+          const entities = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#039;"
+          };
+          return entities[character];
+        });
+      }
+
+      loadMember().catch(() => {
+        document.querySelector(
+          "#member-name"
+        ).textContent =
+          "Unable to load member";
+      });
+    </script>
+  </body>
+</html>

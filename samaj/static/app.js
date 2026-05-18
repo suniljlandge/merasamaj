@@ -44,7 +44,68 @@ const TEXT_FIELDS = [
 
 const MEMBER_TEXT_FIELDS = [
   { key: "name", label: "Member name", required: true },
-  { key: "relation", label: "Relation", required: true }
+  { key: "relationToApplicant", label: "Relation to applicant", required: true }
+];
+
+const MEMBER_RELATIONS = [
+  "Father",
+  "Mother",
+  "Wife",
+  "Husband",
+  "Son",
+  "Daughter",
+  "Daughter-in-law",
+  "Brother",
+  "Sister",
+  "Grandfather",
+  "Grandmother",
+  "Grandson",
+  "Granddaughter",
+  "Uncle",
+  "Aunt",
+  "Cousin",
+  "Nephew",
+  "Niece",
+  "Father-in-law",
+  "Mother-in-law",
+  "Other"
+];
+
+const MARRIAGE_ALLOWED_RELATIONS = [
+  "Father",
+  "Mother",
+  "Wife",
+  "Husband",
+  "Son",
+  "Daughter",
+  "Daughter-in-law",
+  "Grandfather",
+  "Grandmother",
+  "Grandson",
+  "Granddaughter",
+  "Brother",
+  "Sister",
+  "Uncle",
+  "Aunt",
+  "Cousin",
+  "Nephew",
+  "Niece",
+  "Father-in-law",
+  "Mother-in-law"
+];
+
+const OBVIOUS_MARRIED_RELATIONS = [
+  "Father",
+  "Mother",
+  "Wife",
+  "Husband",
+  "Daughter-in-law",
+  "Grandfather",
+  "Grandmother",
+  "Uncle",
+  "Aunt",
+  "Father-in-law",
+  "Mother-in-law"
 ];
 
 const FIELD_GROUPS = {
@@ -60,8 +121,38 @@ const addMemberButton = document.querySelector("#add-member");
 const recentRecords = document.querySelector("#recent-records");
 const refreshButton = document.querySelector("#refresh-records");
 const connectionStatus = document.querySelector("#connection-status");
+const wizardPanel = document.querySelector("#mobile-wizard");
+const wizardStepLabel = document.querySelector("#mobile-wizard-step-label");
+const wizardTitle = document.querySelector("#mobile-wizard-title");
+const wizardDescription = document.querySelector("#mobile-wizard-description");
+const wizardBackButton = document.querySelector("#mobile-wizard-back");
+const wizardNextButton = document.querySelector("#mobile-wizard-next");
+const wizardSubmitButton = document.querySelector("#mobile-wizard-submit");
+const wizardSections = Array.from(document.querySelectorAll("[data-wizard-step]"));
+const familyTypeInput = document.querySelector("#familyType");
+const primaryHouseholdInput = document.querySelector("#primaryHouseholdId");
+
+const MOBILE_WIZARD_BREAKPOINT = window.matchMedia("(max-width: 768px)");
+const MOBILE_WIZARD_STEPS = [
+  {
+    number: 1,
+    title: "Applicant name",
+    description: "Fill in the applicant's name and date of birth."
+  },
+  {
+    number: 2,
+    title: "Contact and address",
+    description: "Add family type, mobile number, address, and location details."
+  },
+  {
+    number: 3,
+    title: "Family details",
+    description: "Review family members and finish the registration."
+  }
+];
 
 let memberCount = 1;
+let currentWizardStep = 1;
 
 
 function capitalizeWords(
@@ -147,17 +238,92 @@ input.addEventListener(
   );
 }
 
-renderApplicantFields();
+if (form) {
+  renderApplicantFields();
+  renderFamilyMembers();
+  setupLocationDropdowns();
+  setupAutoCapitalization();
+  syncWizardMode();
 
-renderFamilyMembers();
+  form.addEventListener("submit", handleSubmit);
+  form.addEventListener("reset", () => {
+    window.setTimeout(() => {
+      clearMessage();
+      memberCount = 1;
+      currentWizardStep = 1;
 
-setupLocationDropdowns();
+      if (memberCountInput) {
+        memberCountInput.value = "1";
+      }
 
-setupAutoCapitalization();
+      renderFamilyMembers();
+      setupLocationDropdowns();
+      wireAutoTransliteration();
+      setupAutoCapitalization();
+      syncWizardMode();
+    });
+  });
 
-loadRecentRecords();
+  if (memberCountInput) {
+    memberCountInput.addEventListener("input", () => {
+      memberCount = clamp(Number(memberCountInput.value || 0), 0, 25);
+      memberCountInput.value = String(memberCount);
+      renderFamilyMembers();
+    });
+  }
 
-checkHealth();
+  if (addMemberButton) {
+    addMemberButton.addEventListener("click", () => {
+      memberCount = clamp(memberCount + 1, 0, 25);
+
+      if (memberCountInput) {
+        memberCountInput.value = String(memberCount);
+      }
+
+      renderFamilyMembers();
+    });
+  }
+
+  if (wizardBackButton) {
+    wizardBackButton.addEventListener("click", () => {
+      clearMessage();
+      clearFieldErrors();
+      activateWizardStep(currentWizardStep - 1);
+    });
+  }
+
+  if (wizardNextButton) {
+    wizardNextButton.addEventListener("click", () => {
+      clearMessage();
+      clearFieldErrors();
+
+      const errors = validateWizardStep(currentWizardStep);
+
+      if (errors.length) {
+        highlightValidationErrors(errors);
+        return;
+      }
+
+      activateWizardStep(currentWizardStep + 1);
+    });
+  }
+
+  if (MOBILE_WIZARD_BREAKPOINT.addEventListener) {
+    MOBILE_WIZARD_BREAKPOINT.addEventListener("change", syncWizardMode);
+  } else {
+    MOBILE_WIZARD_BREAKPOINT.addListener(syncWizardMode);
+  }
+}
+
+if (recentRecords && refreshButton) {
+  loadRecentRecords();
+  refreshButton.addEventListener("click", loadRecentRecords);
+}
+
+if (connectionStatus) {
+  checkHealth();
+}
+
 if (
   searchInput &&
   searchButton &&
@@ -174,33 +340,6 @@ if (
   loadMemberDirectory();
 }
 
-form.addEventListener("submit", handleSubmit);
-form.addEventListener("reset", () => {
-  window.setTimeout(() => {
-    clearMessage();
-    memberCount = 1;
-    memberCountInput.value = "1";
-    renderFamilyMembers();
-    setupLocationDropdowns();
-    wireAutoTransliteration();
-    setupAutoCapitalization();
-  });
-});
-
-memberCountInput.addEventListener("input", () => {
-  memberCount = clamp(Number(memberCountInput.value || 0), 0, 25);
-  memberCountInput.value = String(memberCount);
-  renderFamilyMembers();
-});
-
-addMemberButton.addEventListener("click", () => {
-  memberCount = clamp(memberCount + 1, 0, 25);
-  memberCountInput.value = String(memberCount);
-  renderFamilyMembers();
-});
-
-refreshButton.addEventListener("click", loadRecentRecords);
-
 function renderApplicantFields() {
   const fieldByKey = new Map(TEXT_FIELDS.map((field) => [field.key, field]));
 
@@ -213,21 +352,131 @@ function renderApplicantFields() {
   setupAutoCapitalization();
 }
 
-function renderFamilyMembers() {
-  const existing = readFamilyMembers();
+function renderFamilyMembers(providedMembers = null) {
+  const existing =
+    Array.isArray(providedMembers)
+      ? providedMembers
+      : readFamilyMembers();
+
+  const preparedMembers = existing.map((member, index) => {
+    const personId =
+      member.personId
+      || member.memberId
+      || createTemporaryPersonId(index);
+
+    return {
+      ...member,
+      personId,
+      memberId: member.memberId || personId
+    };
+  });
+
   memberContainer.innerHTML = "";
 
   for (let index = 0; index < memberCount; index += 1) {
-    memberContainer.insertAdjacentHTML("beforeend", renderMemberCard(index, existing[index]));
+    if (!preparedMembers[index]) {
+      const personId = createTemporaryPersonId(index);
+
+      preparedMembers[index] = {
+        personId,
+        memberId: personId
+      };
+    }
+
+    memberContainer.insertAdjacentHTML(
+      "beforeend",
+      renderMemberCard(index, preparedMembers[index], preparedMembers)
+    );
   }
 
-  memberContainer.querySelectorAll("[data-remove-member]").forEach((button) => {
-    button.addEventListener("click", () => {
-      memberCount = Math.max(0, memberCount - 1);
-      memberCountInput.value = String(memberCount);
-      renderFamilyMembers();
-    });
+memberContainer
+  .querySelectorAll("[data-remove-member]")
+  .forEach((button) => {
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        const removeIndex =
+          Number(
+            button.dataset.removeMember
+          );
+
+        const members =
+          readFamilyMembers();
+
+        members.splice(
+          removeIndex,
+          1
+        );
+
+        memberCount =
+          members.length;
+
+        if (memberCountInput) {
+          memberCountInput.value =
+            String(memberCount);
+        }
+
+        renderFamilyMembers(
+          members
+        );
+
+      }
+    );
+
   });
+
+  memberContainer
+    .querySelectorAll("[data-add-relationship]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const index =
+          button.dataset.addRelationship;
+        const stack =
+          memberContainer.querySelector(
+            `[data-relationship-stack="${index}"]`
+          );
+
+        if (!stack) {
+          return;
+        }
+
+        const nextIndex =
+          stack.querySelectorAll(
+            ".relationship-row"
+          ).length;
+
+        stack.insertAdjacentHTML(
+          "beforeend",
+          renderRelationshipLink(
+            index,
+            nextIndex,
+            {},
+            readFamilyMembers()
+          )
+        );
+
+        stack
+          .lastElementChild
+          ?.querySelector("[data-remove-relationship]")
+          ?.addEventListener("click", (event) => {
+            event.currentTarget
+              .closest(".relationship-row")
+              ?.remove();
+          });
+      });
+    });
+
+  memberContainer
+    .querySelectorAll("[data-remove-relationship]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        button
+          .closest(".relationship-row")
+          ?.remove();
+      });
+    });
 
   memberContainer
   .querySelectorAll('[data-member-married]')
@@ -250,7 +499,7 @@ function renderFamilyMembers() {
         }
 
         section.style.display =
-          checkbox.checked
+          hasMemberSpouseDetails(readFamilyMembers()[Number(index)])
             ? "grid"
             : "none";
       }
@@ -285,24 +534,21 @@ function renderFamilyMembers() {
           return;
         }
 
-        const allowedRelations = [
-          "Son",
-          "Daughter",
-          "Brother",
-          "Sister",
-          "Uncle",
-          "Cousin",
-          "Nephew",
-          "Niece"
-        ];
-
         const allowed =
-          allowedRelations.includes(
+          MARRIAGE_ALLOWED_RELATIONS.includes(
+            select.value
+          );
+        const obvious =
+          OBVIOUS_MARRIED_RELATIONS.includes(
             select.value
           );
 
         checkbox.disabled =
           !allowed;
+
+        if (allowed && obvious) {
+          checkbox.checked = true;
+        }
 
         const labelText =
           checkbox.parentElement.querySelector(
@@ -323,7 +569,12 @@ function renderFamilyMembers() {
 
           section.style.display =
             "none";
+
+          return;
         }
+
+        section.style.display =
+          "none";
       }
     );
 
@@ -357,7 +608,8 @@ function renderBilingualField(field, key, value = { en: "", mr: "" }, prefix = "
   `;
 }
 
-function renderMemberCard(index, value = {}) {
+function renderMemberCard(index, value = {}, allMembers = []) {
+  value = value || {};
 
   const nameValue = value.name ?? {
     en: "",
@@ -370,7 +622,11 @@ function renderMemberCard(index, value = {}) {
   };
 
   const relationValue =
-    value.relation ?? "";
+    readRelationText(
+      value.relationToApplicant
+      ?? value.relation
+      ?? ""
+    );
 
   const contactNumber =
     value.contactNumber ?? "";
@@ -379,43 +635,31 @@ function renderMemberCard(index, value = {}) {
     value.currentCity ?? "";
 
   const isMarried =
-    value.isMarried ?? false;
+    value.isMarried
+    ?? OBVIOUS_MARRIED_RELATIONS.includes(relationValue);
+  const hasSpouseDetails =
+    hasMemberSpouseDetails(value);
 
-  const relations = [
-    "Father",
-    "Mother",
-    "Wife",
-    "Husband",
-    "Son",
-    "Daughter",
-    "Daughter-in-law",
-    "Brother",
-    "Sister",
-    "Grandfather",
-    "Grandmother",
-    "Uncle",
-    "Aunt",
-    "Cousin",
-    "Nephew",
-    "Niece",
-    "Father-in-law",
-    "Mother-in-law",
-    "Other"
-  ];
+  const memberId =
+    value.personId
+    ?? value.memberId
+    ?? "";
 
-    const marriageAllowedRelations = [
-    "Son",
-    "Daughter",
-    "Brother",
-    "Sister",
-    "Uncle",
-    "Cousin",
-    "Nephew",
-    "Niece"
-  ];
+  const householdId =
+    value.householdId
+    ?? primaryHouseholdInput?.value
+    ?? "household-primary";
+
+  const spouseMemberId =
+    value.spouseMemberId ?? "";
+
+  const relationshipLinks =
+    Array.isArray(value.relationshipLinks)
+      ? value.relationshipLinks
+      : [];
 
   const marriageAllowed =
-    marriageAllowedRelations.includes(
+    MARRIAGE_ALLOWED_RELATIONS.includes(
       relationValue
     );
 
@@ -423,13 +667,27 @@ function renderMemberCard(index, value = {}) {
     <section
       class="member-card"
       data-member-index="${index}"
+      data-person-id="${escapeAttribute(memberId)}"
+      data-member-id="${escapeAttribute(memberId)}"
+      data-spouse-member-id="${escapeAttribute(spouseMemberId)}"
     >
 
       <div class="member-card-header">
 
-        <span class="member-card-title">
-          Family member ${index + 1}
-        </span>
+        <div>
+          <span class="member-card-title">
+            Family member ${index + 1}
+          </span>
+          ${
+            memberId
+              ? `
+                <span class="identity-pill">
+                  ${escapeHtml(memberId)}
+                </span>
+              `
+              : ""
+          }
+        </div>
 
         <button
           class="button-ghost"
@@ -452,7 +710,7 @@ function renderMemberCard(index, value = {}) {
 
         <label class="field">
 
-          <span>Relation</span>
+          <span>Relation to applicant</span>
 
           <select
             data-member-relation="${index}"
@@ -463,7 +721,7 @@ function renderMemberCard(index, value = {}) {
               Select relation
             </option>
 
-            ${relations
+            ${MEMBER_RELATIONS
               .map(
                 (relation) => `
                   <option
@@ -499,6 +757,12 @@ function renderMemberCard(index, value = {}) {
 
         </label>
 
+        <input
+          type="hidden"
+          data-member-household="${index}"
+          value="${escapeAttribute(householdId)}"
+        >
+
 <label class="married-toggle">
 
 <input
@@ -528,7 +792,7 @@ function renderMemberCard(index, value = {}) {
         class="field-grid married-fields"
         data-married-fields="${index}"
         style="
-          display:${isMarried ? "grid" : "none"};
+          display:${hasSpouseDetails ? "grid" : "none"};
           margin-top:16px;
         "
       >
@@ -573,11 +837,214 @@ function renderMemberCard(index, value = {}) {
 
       </div>
 
+      <div class="relationship-panel">
+
+        <div class="member-card-header">
+          <span class="member-card-title">
+            Relationship links
+          </span>
+          <button
+            class="button-ghost"
+            type="button"
+            data-add-relationship="${index}"
+          >
+            Add link
+          </button>
+        </div>
+
+        <p class="section-note">
+          Optional for joint families. IDs are handled automatically; choose a person from the list when you need an extra link.
+        </p>
+
+        <div
+          class="relationship-stack"
+          data-relationship-stack="${index}"
+        >
+          ${renderRelationshipLinks(index, relationshipLinks, allMembers)}
+        </div>
+
+      </div>
+
     </section>
   `;
 }
 
-function setupLocationDropdowns() {
+function renderRelationshipLinks(memberIndex, links = [], allMembers = []) {
+  const rows =
+    links.length
+      ? links
+      : [];
+
+  return rows
+    .map((link, linkIndex) =>
+      renderRelationshipLink(memberIndex, linkIndex, link, allMembers)
+    )
+    .join("");
+}
+
+function renderRelationshipLink(
+  memberIndex,
+  linkIndex,
+  link = {},
+  allMembers = []
+) {
+  const relationshipTypes = [
+    ["spouse_of", "Spouse of"],
+    ["parent_of", "Parent of"],
+    ["child_of", "Child of"],
+    ["sibling_of", "Sibling of"],
+    ["guardian_of", "Guardian of"],
+    ["belongs_to_household", "Belongs to household"],
+    ["other", "Other"],
+  ];
+  const targetOptions = buildRelationshipTargetOptions(
+    memberIndex,
+    link.targetPersonId || "",
+    allMembers
+  );
+
+  return `
+    <div
+      class="relationship-row"
+      data-relationship-row="${memberIndex}"
+    >
+      <label class="field">
+        <span>Type</span>
+        <select data-relationship-type="${memberIndex}">
+          <option value="">Select type</option>
+          ${relationshipTypes
+            .map(([value, label]) => `
+              <option
+                value="${value}"
+                ${link.type === value ? "selected" : ""}
+              >
+                ${label}
+              </option>
+            `)
+            .join("")}
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Target member</span>
+        <select
+          data-relationship-target="${memberIndex}"
+        >
+          <option value="">Select member</option>
+          ${targetOptions}
+        </select>
+      </label>
+
+      <button
+        class="button-ghost relationship-remove"
+        type="button"
+        data-remove-relationship="${memberIndex}"
+        aria-label="Remove relationship link ${linkIndex + 1}"
+      >
+        Remove
+      </button>
+    </div>
+  `;
+}
+
+function buildRelationshipTargetOptions(
+  memberIndex,
+  selectedPersonId = "",
+  allMembers = []
+) {
+  const options = allMembers
+    .map((member, index) => {
+      if (String(index) === String(memberIndex)) {
+        return "";
+      }
+
+      const personId =
+        member.personId
+        || member.memberId
+        || "";
+
+      if (!personId) {
+        return "";
+      }
+
+      const name =
+        member.name?.en
+        || `Family member ${index + 1}`;
+      const relation =
+        readRelationText(
+          member.relationToApplicant
+          ?? member.relation
+          ?? ""
+        );
+      const label =
+        relation
+          ? `${name} (${relation})`
+          : name;
+
+      return `
+        <option
+          value="${escapeAttribute(personId)}"
+          ${selectedPersonId === personId ? "selected" : ""}
+        >
+          ${escapeHtml(label)}
+        </option>
+      `;
+    })
+    .join("");
+
+  if (
+    selectedPersonId
+    && !allMembers.some((member) =>
+      (member.personId || member.memberId) === selectedPersonId
+    )
+  ) {
+    return `
+      <option
+        value="${escapeAttribute(selectedPersonId)}"
+        selected
+      >
+        Existing linked member (${escapeHtml(selectedPersonId)})
+      </option>
+      ${options}
+    `;
+  }
+
+  return options;
+}
+
+function createTemporaryPersonId(index) {
+  return `person-temp-${Date.now().toString(36)}-${index}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+}
+
+function readRelationText(value = "") {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value && typeof value === "object") {
+    return value.en || value.mr || "";
+  }
+
+  return "";
+}
+
+function hasMemberSpouseDetails(member = {}) {
+  return Boolean(
+    member.spouseName?.en
+    || member.spouseName?.mr
+    || member.spouseContactNumber
+    || member.currentCity
+    || member.spouseMemberId
+  );
+}
+
+function setupLocationDropdowns(
+  selectedState = "Maharashtra",
+  selectedDistrict = "Washim",
+  selectedTaluka = ""
+) {
   const stateSelect =
     document.querySelector("#state");
 
@@ -681,17 +1148,19 @@ function setupLocationDropdowns() {
 
   populateStates();
 
-  // DEFAULT VALUES
-  stateSelect.value = "Maharashtra";
+  stateSelect.value = selectedState;
 
-  populateDistricts("Maharashtra");
+  populateDistricts(selectedState);
 
-  districtSelect.value = "Washim";
+  districtSelect.value = selectedDistrict;
 
   populateTalukas(
-    "Maharashtra",
-    "Washim"
+    selectedState,
+    selectedDistrict
   );
+
+  talukaSelect.value =
+    selectedTaluka;
 
   stateSelect.addEventListener(
     "change",
@@ -907,12 +1376,27 @@ async function handleSubmit(event) {
 
   clearFieldErrors();
 
+  if (isMobileWizardEnabled()) {
+    const errors = validateWizardStep(3);
+
+    if (errors.length) {
+      highlightValidationErrors(errors);
+      return;
+    }
+  }
+
   const payload = readRegistration();
+  const submitUrl =
+    form?.dataset.submitUrl
+    || "/api/registrations";
+  const submitMethod =
+    form?.dataset.submitMethod
+    || "POST";
 
   const response = await fetch(
-    "/api/registrations",
+    submitUrl,
     {
-      method: "POST",
+      method: submitMethod,
       headers: {
         "content-type":
           "application/json"
@@ -947,16 +1431,33 @@ async function handleSubmit(event) {
     return;
   }
 
-alert(
-  "✅ Registration saved successfully."
-);
+  const successMessage =
+    form?.dataset.successMessage
+    || (
+      submitMethod === "PUT"
+        ? "Member updated successfully."
+        : "Registration saved successfully."
+    );
+
+  showMessage(
+    successMessage,
+    "success"
+  );
+
+  alert(successMessage);
 
 window.scrollTo({
   top: 0,
   behavior: "smooth"
 });
 
-loadRecentRecords();
+if (recentRecords) {
+  loadRecentRecords();
+}
+
+if (form?.dataset.resetOnSuccess === "false") {
+  return;
+}
 
 setTimeout(() => {
 
@@ -964,7 +1465,9 @@ setTimeout(() => {
 
   memberCount = 1;
 
-  memberCountInput.value = "1";
+  if (memberCountInput) {
+    memberCountInput.value = "1";
+  }
 
   renderFamilyMembers();
 
@@ -991,9 +1494,106 @@ function readRegistration() {
   payload.district = document.querySelector("#district")?.value || "";
   payload.taluka = document.querySelector("#taluka")?.value || "";
   payload.mobileNumber = document.querySelector("#mobileNumber")?.value || "";
+  payload.familyType = familyTypeInput?.value || "nuclear";
+  payload.primaryHouseholdId =
+    primaryHouseholdInput?.value || "household-primary";
+  payload.familyId =
+    form?.dataset.familyId || "";
   payload.familyMembers = readFamilyMembers();
 
   return payload;
+}
+
+function populateRegistrationForm(record = {}) {
+  for (const field of TEXT_FIELDS) {
+    setBilingualFieldValue(
+      field.key,
+      record[field.key]
+    );
+  }
+
+  const birthDateInput =
+    document.querySelector("#birthDate");
+  const birthYearInput =
+    document.querySelector("#birthYear");
+  const mobileInput =
+    document.querySelector("#mobileNumber");
+
+  if (birthDateInput) {
+    birthDateInput.value =
+      record.birthDate || "";
+  }
+
+  if (birthYearInput) {
+    birthYearInput.value =
+      record.birthYear || "";
+  }
+
+  if (mobileInput) {
+    mobileInput.value =
+      record.mobileNumber || "";
+  }
+
+  if (familyTypeInput) {
+    familyTypeInput.value =
+      record.familyType || "nuclear";
+  }
+
+  if (primaryHouseholdInput) {
+    primaryHouseholdInput.value =
+      record.primaryHouseholdId || "household-primary";
+  }
+
+  if (form) {
+    form.dataset.familyId =
+      record.familyId || "";
+  }
+
+  setupLocationDropdowns(
+    record.state || "Maharashtra",
+    record.district || "Washim",
+    record.taluka || ""
+  );
+
+  const familyMembers =
+    Array.isArray(record.familyMembers)
+      ? record.familyMembers
+      : [];
+
+  memberCount = clamp(
+    familyMembers.length,
+    0,
+    25
+  );
+
+  if (memberCountInput) {
+    memberCountInput.value = String(memberCount);
+  }
+
+  renderFamilyMembers(familyMembers);
+  wireAutoTransliteration();
+  setupAutoCapitalization();
+  clearFieldErrors();
+  clearMessage();
+}
+
+function setBilingualFieldValue(key, value) {
+  const englishInput = document.querySelector(
+    `[data-bilingual="${key}"][data-language="en"]`
+  );
+  const marathiInput = document.querySelector(
+    `[data-bilingual="${key}"][data-language="mr"]`
+  );
+
+  if (englishInput) {
+    englishInput.value =
+      value?.en || "";
+  }
+
+  if (marathiInput) {
+    marathiInput.value =
+      value?.mr || "";
+  }
 }
 
 function clearFieldErrors() {
@@ -1019,82 +1619,13 @@ function clearFieldErrors() {
 function highlightValidationErrors(
   errors
 ) {
+  activateWizardStepForErrors(errors);
+
   errors.forEach((error) => {
     const fieldName =
       error.field || "";
 
-    let input = null;
-
-    // Main fields
-    if (
-      fieldName === "mobileNumber"
-    ) {
-      input =
-        document.querySelector(
-          "#mobileNumber"
-        );
-    }
-
-    else if (
-      fieldName === "birthDate"
-    ) {
-      input =
-        document.querySelector(
-          "#birthDate"
-        );
-    }
-
-    else if (
-      fieldName === "birthYear"
-    ) {
-      input =
-        document.querySelector(
-          "#birthYear"
-        );
-    }
-
-    else if (
-      fieldName === "state"
-    ) {
-      input =
-        document.querySelector(
-          "#state"
-        );
-    }
-
-    else if (
-      fieldName === "district"
-    ) {
-      input =
-        document.querySelector(
-          "#district"
-        );
-    }
-
-    else if (
-      fieldName === "taluka"
-    ) {
-      input =
-        document.querySelector(
-          "#taluka"
-        );
-    }
-
-    // bilingual fields
-    else if (
-      fieldName.endsWith(".en")
-    ) {
-      const key =
-        fieldName.replace(
-          ".en",
-          ""
-        );
-
-      input =
-        document.querySelector(
-          `[data-bilingual="${key}"][data-language="en"]`
-        );
-    }
+    const input = findInputForFieldName(fieldName);
 
     if (!input) {
       return;
@@ -1146,20 +1677,31 @@ function readFamilyMembers() {
       ".member-card"
     )
   ).map((card, index) => ({
+    personId:
+      card.dataset.personId || "",
+
+    memberId:
+      card.dataset.memberId || "",
+
+    householdId:
+      card.querySelector(
+        `[data-member-household="${index}"]`
+      )?.value || "household-primary",
 
     name: readBilingualValue(
       "name",
       card
     ),
 
-    relation: {
-      en:
-        card.querySelector(
-          `[data-member-relation="${index}"]`
-        )?.value || "",
+    relationToApplicant:
+      card.querySelector(
+        `[data-member-relation="${index}"]`
+      )?.value || "",
 
-      mr: ""
-    },
+    relation:
+      card.querySelector(
+        `[data-member-relation="${index}"]`
+      )?.value || "",
 
     contactNumber:
       card.querySelector(
@@ -1184,9 +1726,39 @@ function readFamilyMembers() {
     currentCity:
       card.querySelector(
         `[data-member-current-city="${index}"]`
-      )?.value || ""
+      )?.value || "",
+
+    spouseMemberId:
+      card.dataset.spouseMemberId || "",
+
+    relationshipLinks: readRelationshipLinks(
+      card,
+      index
+    )
 
   }));
+}
+
+function readRelationshipLinks(card, index) {
+  return Array.from(
+    card.querySelectorAll(
+      `[data-relationship-row="${index}"]`
+    )
+  )
+    .map((row) => ({
+      type:
+        row.querySelector(
+          `[data-relationship-type="${index}"]`
+        )?.value || "",
+      targetPersonId:
+        row.querySelector(
+          `[data-relationship-target="${index}"]`
+        )?.value || ""
+    }))
+    .filter((link) =>
+      link.type &&
+      link.targetPersonId.trim()
+    );
 }
 
 function readBilingualValue(key, root = document) {
@@ -1196,7 +1768,339 @@ function readBilingualValue(key, root = document) {
   };
 }
 
+function parseMemberIdList(value = "") {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function isMobileWizardEnabled() {
+  return MOBILE_WIZARD_BREAKPOINT.matches;
+}
+
+function syncWizardMode() {
+  const enabled = isMobileWizardEnabled();
+
+  document.body.classList.toggle("is-mobile-wizard", enabled);
+
+  if (!enabled) {
+    wizardSections.forEach((section) => {
+      section.hidden = false;
+      section.classList.remove("is-active");
+    });
+
+    if (wizardBackButton) {
+      wizardBackButton.hidden = true;
+    }
+
+    if (wizardNextButton) {
+      wizardNextButton.hidden = true;
+    }
+
+    if (wizardSubmitButton) {
+      wizardSubmitButton.hidden = true;
+    }
+
+    return;
+  }
+
+  activateWizardStep(currentWizardStep);
+}
+
+function activateWizardStep(stepNumber) {
+  if (!isMobileWizardEnabled()) {
+    return;
+  }
+
+  currentWizardStep = clamp(stepNumber, 1, MOBILE_WIZARD_STEPS.length);
+
+  wizardSections.forEach((section) => {
+    const sectionStep = Number(section.dataset.wizardStep || 0);
+    const isActive = sectionStep === currentWizardStep;
+    section.hidden = !isActive;
+    section.classList.toggle("is-active", isActive);
+  });
+
+  const step = MOBILE_WIZARD_STEPS[currentWizardStep - 1];
+
+  if (wizardPanel) {
+    wizardPanel.dataset.step = String(currentWizardStep);
+  }
+
+  if (wizardStepLabel) {
+    wizardStepLabel.textContent = `Step ${step.number} of ${MOBILE_WIZARD_STEPS.length}`;
+  }
+
+  if (wizardTitle) {
+    wizardTitle.textContent = step.title;
+  }
+
+  if (wizardDescription) {
+    wizardDescription.textContent = step.description;
+  }
+
+  if (wizardBackButton) {
+    wizardBackButton.hidden = currentWizardStep === 1;
+  }
+
+  if (wizardNextButton) {
+    wizardNextButton.hidden = currentWizardStep === MOBILE_WIZARD_STEPS.length;
+  }
+
+  if (wizardSubmitButton) {
+    wizardSubmitButton.hidden = currentWizardStep !== MOBILE_WIZARD_STEPS.length;
+  }
+}
+
+function activateWizardStepForErrors(errors) {
+  if (!isMobileWizardEnabled() || !Array.isArray(errors) || !errors.length) {
+    return;
+  }
+
+  const nextStep = errors
+    .map((error) => getWizardStepForField(error.field || ""))
+    .find(Boolean);
+
+  if (nextStep) {
+    activateWizardStep(nextStep);
+  }
+}
+
+function getWizardStepForField(fieldName = "") {
+  if (!fieldName) {
+    return null;
+  }
+
+  if (
+    fieldName.startsWith("firstName")
+    || fieldName.startsWith("middleName")
+    || fieldName.startsWith("lastName")
+    || fieldName === "birthDate"
+    || fieldName === "birthYear"
+  ) {
+    return 1;
+  }
+
+  if (fieldName.startsWith("familyMembers.")) {
+    return 3;
+  }
+
+  return 2;
+}
+
+function validateWizardStep(stepNumber) {
+  const payload = readRegistration();
+  const errors = [];
+  const phonePattern = /^(?:\+91)?[6-9]\d{9}$/;
+
+  if (stepNumber === 1) {
+    if (!payload.firstName.en.trim()) {
+      errors.push({
+        field: "firstName.en",
+        message: "First name in English is required."
+      });
+    }
+
+    if (!payload.lastName.en.trim()) {
+      errors.push({
+        field: "lastName.en",
+        message: "Last name in English is required."
+      });
+    }
+
+    const birthDate = payload.birthDate.trim();
+    const birthYear = payload.birthYear.trim();
+
+    if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+      errors.push({
+        field: "birthDate",
+        message: "Birth date must be YYYY-MM-DD."
+      });
+    }
+
+    if (birthYear && !/^\d{4}$/.test(birthYear)) {
+      errors.push({
+        field: "birthYear",
+        message: "Birth year must be 4 digits."
+      });
+    }
+
+    if (!birthDate && !birthYear) {
+      errors.push({
+        field: "birthDate",
+        message: "Provide full DOB or birth year."
+      });
+    }
+  }
+
+  if (stepNumber === 2) {
+    if (!phonePattern.test(payload.mobileNumber.trim())) {
+      errors.push({
+        field: "mobileNumber",
+        message: "Mobile number must be valid."
+      });
+    }
+
+    if (!payload.address1.en.trim()) {
+      errors.push({
+        field: "address1.en",
+        message: "Address 1 in English is required."
+      });
+    }
+
+    if (!payload.state.trim()) {
+      errors.push({
+        field: "state",
+        message: "State is required."
+      });
+    }
+
+    if (!payload.district.trim()) {
+      errors.push({
+        field: "district",
+        message: "District is required."
+      });
+    }
+
+    if (!payload.taluka.trim()) {
+      errors.push({
+        field: "taluka",
+        message: "Taluka is required."
+      });
+    }
+  }
+
+  if (stepNumber === 3) {
+    payload.familyMembers.forEach((member, index) => {
+      if (!member.name.en.trim()) {
+        errors.push({
+          field: `familyMembers.${index}.name.en`,
+          message: "Family member name required."
+        });
+      }
+
+      if (!readRelationText(member.relationToApplicant).trim()) {
+        errors.push({
+          field: `familyMembers.${index}.relationToApplicant`,
+          message: "Relation to applicant required."
+        });
+      }
+
+      if (!phonePattern.test(member.contactNumber.trim())) {
+        errors.push({
+          field: `familyMembers.${index}.contactNumber`,
+          message: "Contact number invalid."
+        });
+      }
+
+      if (hasMemberSpouseDetails(member)) {
+        if (!member.spouseName.en.trim()) {
+          errors.push({
+            field: `familyMembers.${index}.spouseName.en`,
+            message: "Spouse name required when spouse details are entered."
+          });
+        }
+
+        if (!phonePattern.test(member.spouseContactNumber.trim())) {
+          errors.push({
+            field: `familyMembers.${index}.spouseContactNumber`,
+            message: "Valid spouse contact number required."
+          });
+        }
+
+        if (!member.currentCity.trim()) {
+          errors.push({
+            field: `familyMembers.${index}.currentCity`,
+            message: "Current city required for married member."
+          });
+        }
+      }
+    });
+  }
+
+  return errors;
+}
+
+function findInputForFieldName(fieldName = "") {
+  if (!fieldName) {
+    return null;
+  }
+
+  if (fieldName.startsWith("familyMembers.")) {
+    const parts = fieldName.split(".");
+    const index = parts[1];
+    const fieldKey = parts[2];
+
+    if (fieldKey === "name" || fieldKey === "spouseName") {
+      return document.querySelector(
+        `#member-${index}-${fieldKey}-en`
+      );
+    }
+
+    if (
+      fieldKey === "relationToApplicant"
+      || fieldKey === "relation"
+    ) {
+      return document.querySelector(
+        `[data-member-relation="${index}"]`
+      );
+    }
+
+    if (fieldKey === "contactNumber") {
+      return document.querySelector(
+        `[data-member-contact="${index}"]`
+      );
+    }
+
+    if (fieldKey === "spouseContactNumber") {
+      return document.querySelector(
+        `[data-member-spouse-contact="${index}"]`
+      );
+    }
+
+    if (fieldKey === "currentCity") {
+      return document.querySelector(
+        `[data-member-current-city="${index}"]`
+      );
+    }
+  }
+
+  const fieldSelectors = {
+    mobileNumber: "#mobileNumber",
+    birthDate: "#birthDate",
+    birthYear: "#birthYear",
+    state: "#state",
+    district: "#district",
+    taluka: "#taluka"
+  };
+
+  if (fieldSelectors[fieldName]) {
+    return document.querySelector(fieldSelectors[fieldName]);
+  }
+
+  if (fieldName.endsWith(".en")) {
+    const key = fieldName.replace(".en", "");
+
+    return document.querySelector(
+      `[data-bilingual="${key}"][data-language="en"]`
+    );
+  }
+
+  return null;
+}
+
 async function loadRecentRecords() {
+  if (!recentRecords) {
+    return;
+  }
+
   recentRecords.innerHTML = "Loading...";
 
   try {
@@ -1221,6 +2125,10 @@ async function loadRecentRecords() {
 }
 
 async function checkHealth() {
+  if (!connectionStatus) {
+    return;
+  }
+
   try {
     const response = await fetch("/api/health");
     connectionStatus.textContent = response.ok ? "Connected" : "Offline";
@@ -1255,6 +2163,9 @@ function showMessage(
   text,
   type
 ) {
+  if (!message) {
+    return;
+  }
 
   message.textContent = text;
 
@@ -1277,6 +2188,10 @@ function showMessage(
 }
 
 function clearMessage() {
+  if (!message) {
+    return;
+  }
+
   message.textContent = "";
   message.className = "message";
 }
@@ -1450,3 +2365,12 @@ function renderMemberDirectoryCard(
     </article>
   `;
 }
+
+window.registrationFormApi = {
+  populateRegistrationForm,
+  readRegistration,
+  clearFieldErrors,
+  clearMessage,
+  highlightValidationErrors,
+  activateWizardStep,
+};

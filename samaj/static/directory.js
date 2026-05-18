@@ -288,33 +288,10 @@ function renderMemberRow(
       record.mobileNumber
     );
 
-const visibleMembers =
-  (record.familyMembers || []).filter(
-    (member) => {
-
-      const relation =
-        (member.relation || "")
-          .toLowerCase();
-
-      const married =
-        member.isMarried === true;
-
-      if (
-        married &&
-        (
-          relation === "daughter" ||
-          relation === "sister"
-        )
-      ) {
-        return false;
-      }
-
-      return true;
-    }
-  );
-
 const membersCount =
-  visibleMembers.length + 1;
+  calculateFamilyMembersCount(
+    record.familyMembers || []
+  ) + 1;
 
   return `
     <tr
@@ -389,9 +366,139 @@ const membersCount =
       >
         ${membersCount}
       </td>
+<td class="px-6 py-4">
 
+  ${renderActionButtons(record)}
+
+</td>
     </tr>
   `;
+}
+
+
+function renderActionButtons(
+  record
+) {
+
+  const role =
+    window.CURRENT_ROLE;
+
+  const canEdit =
+    role === "admin" ||
+    role === "super_admin";
+
+  return `
+    <div
+      style="
+        display:flex;
+        gap:8px;
+      "
+    >
+
+      <button
+        class="button-secondary"
+        onclick="viewMember('${record._id}')"
+      >
+        View
+      </button>
+
+      ${
+        canEdit
+          ? `
+            <button
+              class="button-primary"
+              onclick="editMember('${record._id}')"
+            >
+              Edit
+            </button>
+          `
+          : ""
+      }
+
+    </div>
+  `;
+}
+
+
+function viewMember(id) {
+
+  window.location.href =
+    `/view-member/${id}`;
+}
+
+function editMember(id) {
+
+  window.location.href =
+    `/edit-member/${id}`;
+}
+
+function calculateFamilyMembersCount(
+  members = []
+) {
+  const excludedMarriedRelations =
+    new Set([
+      "daughter",
+      "granddaughter",
+      "grand-daughter",
+      "sister"
+    ]);
+  const countedSpouseRelations =
+    new Set([
+      "son",
+      "grandson",
+      "grand-son",
+      "brother",
+      "uncle",
+      "cousin",
+      "nephew"
+    ]);
+
+  return members.reduce(
+    (total, member) => {
+      const relation =
+        readRelationText(
+          member.relationToApplicant
+          || member.relation
+          || ""
+        )
+          .toLowerCase();
+      const married =
+        member.isMarried === true;
+
+      if (
+        married
+        && excludedMarriedRelations.has(relation)
+      ) {
+        return total;
+      }
+
+      let nextTotal =
+        total + 1;
+
+      if (
+        married
+        && countedSpouseRelations.has(relation)
+        && member.spouseName?.en
+      ) {
+        nextTotal += 1;
+      }
+
+      return nextTotal;
+    },
+    0
+  );
+}
+
+function readRelationText(value = "") {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value && typeof value === "object") {
+    return value.en || value.mr || "";
+  }
+
+  return "";
 }
 
 function maskMobile(
