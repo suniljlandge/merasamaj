@@ -277,8 +277,8 @@ function renderMemberRow(
     .filter(Boolean)
     .join(" ");
 
-  const district =
-    record.district || "-";
+  const address =
+    record.address1?.en || "-";
 
   const taluka =
     record.taluka || "-";
@@ -334,10 +334,9 @@ const membersCount =
       <td
         class="
           px-6 py-4
-          whitespace-nowrap
         "
       >
-        ${escapeHtml(district)}
+        ${escapeHtml(address)}
       </td>
 
       <td

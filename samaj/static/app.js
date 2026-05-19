@@ -952,8 +952,35 @@ function buildRelationshipTargetOptions(
   selectedPersonId = "",
   allMembers = []
 ) {
-  const options = allMembers
+
+  const applicantId =
+    "applicant-primary";
+
+  const applicantName = [
+
+    readBilingualValue("firstName").en,
+
+    readBilingualValue("middleName").en,
+
+    readBilingualValue("lastName").en
+
+  ]
+    .filter(Boolean)
+    .join(" ")
+    || "Main Applicant";
+
+  let options = `
+    <option
+      value="${escapeAttribute(applicantId)}"
+      ${selectedPersonId === applicantId ? "selected" : ""}
+    >
+      ${escapeHtml(applicantName)} (Applicant)
+    </option>
+  `;
+
+  options += allMembers
     .map((member, index) => {
+
       if (String(index) === String(memberIndex)) {
         return "";
       }
@@ -970,12 +997,14 @@ function buildRelationshipTargetOptions(
       const name =
         member.name?.en
         || `Family member ${index + 1}`;
+
       const relation =
         readRelationText(
           member.relationToApplicant
           ?? member.relation
           ?? ""
         );
+
       const label =
         relation
           ? `${name} (${relation})`
@@ -994,19 +1023,21 @@ function buildRelationshipTargetOptions(
 
   if (
     selectedPersonId
+    && selectedPersonId !== applicantId
     && !allMembers.some((member) =>
       (member.personId || member.memberId) === selectedPersonId
     )
   ) {
-    return `
-      <option
-        value="${escapeAttribute(selectedPersonId)}"
-        selected
-      >
-        Existing linked member (${escapeHtml(selectedPersonId)})
-      </option>
-      ${options}
-    `;
+
+    options =
+      `
+        <option
+          value="${escapeAttribute(selectedPersonId)}"
+          selected
+        >
+          Existing linked member (${escapeHtml(selectedPersonId)})
+        </option>
+      ` + options;
   }
 
   return options;

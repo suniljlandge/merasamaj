@@ -239,6 +239,7 @@
       }
 
       function renderMember(member) {
+        window.currentMember = member;
         const fullName = [
           member.firstName?.en,
           member.middleName?.en,
@@ -397,29 +398,54 @@
         `;
       }
 
-      function resolveTargetPersonName(targetPersonId = "", familyMembers = []) {
-        const targetMember = familyMembers.find(
-          (member) =>
-            (member.personId || member.memberId) === targetPersonId
-        );
+function resolveTargetPersonName(
+  targetPersonId = "",
+  familyMembers = []
+) {
 
-        if (!targetMember) {
-          return targetPersonId;
-        }
+  if (targetPersonId === "applicant-primary") {
 
-        const name =
-          targetMember.name?.en
-          || targetMember.name?.mr
-          || "Unnamed member";
-        const relation =
-          targetMember.relationToApplicant
-          || targetMember.relation
-          || "";
+    const applicantName = [
 
-        return relation
-          ? `${name} (${relation})`
-          : name;
-      }
+      window.currentMember?.firstName?.en,
+
+      window.currentMember?.middleName?.en,
+
+      window.currentMember?.lastName?.en
+
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return applicantName
+      ? `${applicantName} (Applicant)`
+      : "Main Applicant";
+  }
+
+  const targetMember = familyMembers.find(
+    (member) =>
+      (member.personId || member.memberId)
+      === targetPersonId
+  );
+
+  if (!targetMember) {
+    return targetPersonId;
+  }
+
+  const name =
+    targetMember.name?.en
+    || targetMember.name?.mr
+    || "Unnamed member";
+
+  const relation =
+    targetMember.relationToApplicant
+    || targetMember.relation
+    || "";
+
+  return relation
+    ? `${name} (${relation})`
+    : name;
+}
 
       function formatRelationshipType(type = "") {
         return String(type)
