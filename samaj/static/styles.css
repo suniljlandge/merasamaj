@@ -746,10 +746,13 @@ h3 {
 }
 
 .login-card input {
-  height: 48px;
-  padding: 0 14px;
+  height: 52px;
+  padding: 0 16px;
   border-radius: 12px;
   border: 1px solid #d7dee5;
+
+  font-size: 16px;
+  width: 100%;
 }
 
 #logoutButton {
@@ -1463,4 +1466,27 @@ input[readonly][lang="mr"] {
   color: #008548;
 
   font-weight: 700;
+}
+
+@media (max-width: 480px) {
+
+  .login-page {
+    padding: 16px;
+  }
+
+  .login-card {
+    max-width: 100%;
+    padding: 22px;
+    border-radius: 18px;
+  }
+
+  .login-card h1 {
+    font-size: 28px;
+  }
+
+  .login-card input,
+  .login-card button {
+    min-height: 52px;
+    font-size: 16px;
+  }
 }
