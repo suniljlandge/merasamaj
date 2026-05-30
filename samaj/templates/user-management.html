@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>User Management</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    >
+    <script>
+      window.CURRENT_ROLE = "{{ current_role }}";
+      window.ALLOWED_USER_ROLES = {{ allowed_roles|tojson }};
+    </script>
+    <script
+      defer
+      src="{{ url_for('static', filename='user-management.js') }}"
+    ></script>
+  </head>
+  <body class="directory-body">
+    <header class="topbar">
+      <a
+        class="brand"
+        href="/"
+        aria-label="SAMAJ Registration home"
+      >
+        <span
+          class="brand-mark"
+          aria-hidden="true"
+        ></span>
+        <span>SAMAJ</span>
+      </a>
+
+      <div
+        style="
+          display:flex;
+          align-items:center;
+          gap:16px;
+        "
+      >
+        <a
+          href="/directory"
+          class="button-secondary"
+        >
+          Member Directory
+        </a>
+        <a
+          href="/logout"
+          class="button-ghost"
+        >
+          Logout
+        </a>
+      </div>
+    </header>
+
+    <main class="directory-layout">
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">
+              Access control
+            </p>
+            <h2>
+              User Management
+            </h2>
+            <p>
+              Create users and assign only the roles your account is allowed to manage.
+            </p>
+          </div>
+
+          <div class="directory-top-actions">
+            <span class="directory-chip">
+              {{ current_role|replace('_', ' ')|title }}
+            </span>
+          </div>
+        </div>
+
+        <form
+          class="form-surface"
+          id="user-management-form"
+          novalidate
+        >
+          <div class="field-grid">
+            <label class="field">
+              <span>
+                Username
+              </span>
+              <input
+                id="new-username"
+                autocomplete="username"
+                required
+              >
+            </label>
+
+            <label class="field">
+              <span>
+                Password
+              </span>
+              <input
+                id="new-password"
+                type="password"
+                autocomplete="new-password"
+                minlength="6"
+                required
+              >
+            </label>
+
+            <label class="field">
+              <span>
+                Role
+              </span>
+              <select
+                id="new-role"
+                required
+              ></select>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button
+              class="button-primary"
+              type="submit"
+            >
+              Create user
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section class="directory-table-card">
+        <div class="directory-table-header">
+          <div>
+            <h2>
+              Existing users
+            </h2>
+            <p>
+              Recent accounts and their assigned access.
+            </p>
+          </div>
+        </div>
+
+        <div class="directory-table-wrapper">
+          <table class="directory-table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Active</th>
+                <th>Created by</th>
+                <th>Created at</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="users-table-body">
+              <tr>
+                <td colspan="6">
+                  Loading users...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -91,6 +91,23 @@ def create_app(config=None, collection=None, correction_collection=None):
             current_role=session.get("role")
         )
 
+    @app.route("/user-management")
+    def user_management_page():
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return redirect("/directory")
+
+        return render_template(
+            "user-management.html",
+            current_role=session.get("role"),
+            allowed_roles=get_assignable_roles(
+                current_role()
+            )
+        )
+
     @app.post("/api/bulk-import")
     def bulk_import_endpoint():
 
@@ -319,6 +336,183 @@ def create_app(config=None, collection=None, correction_collection=None):
         return jsonify({
             "ok": True,
             "role": user["role"]
+        })
+
+    @app.get("/api/users")
+    def list_users():
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        filters = {}
+
+        if current_role() != "super_admin":
+            filters["role"] = {
+                "$ne": "super_admin"
+            }
+
+        cursor = (
+            get_users_collection()
+            .find(
+                filters,
+                {
+                    "passwordHash": 0
+                }
+            )
+            .sort("createdAt", -1)
+            .limit(100)
+        )
+
+        return jsonify({
+            "items": [
+                serialize_document(user)
+                for user in cursor
+            ],
+            "allowedRoles": get_assignable_roles(
+                current_role()
+            ),
+        })
+
+    @app.post("/api/users")
+    def create_user():
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        payload = (
+            request.get_json(silent=True)
+            or {}
+        )
+
+        username = (
+            payload.get("username", "")
+            .strip()
+        )
+        password = payload.get(
+            "password",
+            ""
+        )
+        role = (
+            payload.get("role", "")
+            .strip()
+        )
+        allowed_roles = get_assignable_roles(
+            current_role()
+        )
+
+        if not username:
+            return jsonify({
+                "error": "Username required"
+            }), 400
+
+        if role not in allowed_roles:
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        if len(password) < 6:
+            return jsonify({
+                "error": "Password must be at least 6 characters"
+            }), 400
+
+        users_collection = (
+            get_users_collection()
+        )
+
+        if users_collection.find_one({
+            "username": username
+        }):
+            return jsonify({
+                "error": "Username already exists"
+            }), 409
+
+        now = datetime.now(timezone.utc)
+        password_hash = bcrypt.hashpw(
+            password.encode(),
+            bcrypt.gensalt()
+        ).decode()
+
+        document = {
+            "username": username,
+            "passwordHash": password_hash,
+            "role": role,
+            "isActive": True,
+            "createdAt": now,
+            "createdBy": session.get("username"),
+            "lastLoginAt": None,
+        }
+
+        result = users_collection.insert_one(
+            document
+        )
+
+        document["_id"] = (
+            result.inserted_id
+        )
+        document.pop("passwordHash", None)
+
+        return jsonify({
+            "ok": True,
+            "user": serialize_document(
+                document
+            ),
+        }), 201
+
+    @app.delete("/api/users/<username>")
+    def delete_user(username):
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        target_username = username.strip()
+
+        if not target_username:
+            return jsonify({
+                "error": "Username required"
+            }), 400
+
+        users_collection = (
+            get_users_collection()
+        )
+        user = users_collection.find_one({
+            "username": target_username
+        })
+
+        if not user:
+            return jsonify({
+                "error": "User not found"
+            }), 404
+
+        allowed_roles = get_deletable_roles(
+            current_role()
+        )
+
+        if user.get("role") not in allowed_roles:
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        users_collection.delete_one({
+            "username": target_username
+        })
+
+        return jsonify({
+            "ok": True
         })
 
 
@@ -751,3 +945,44 @@ def require_role(*roles):
 
 def current_role():
     return session.get("role")
+
+
+ROLE_ASSIGNMENT_RULES = {
+    "super_admin": [
+        "super_admin",
+        "admin",
+        "operator",
+        "viewer",
+    ],
+    "admin": [
+        "operator",
+        "viewer",
+    ],
+}
+
+ROLE_DELETION_RULES = {
+    "super_admin": [
+        "super_admin",
+        "admin",
+        "operator",
+        "viewer",
+    ],
+    "admin": [
+        "operator",
+        "viewer",
+    ],
+}
+
+
+def get_assignable_roles(role):
+    return ROLE_ASSIGNMENT_RULES.get(
+        role,
+        [],
+    )
+
+
+def get_deletable_roles(role):
+    return ROLE_DELETION_RULES.get(
+        role,
+        [],
+    )

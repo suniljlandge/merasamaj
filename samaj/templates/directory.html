@@ -159,6 +159,34 @@
         Form
       </a>
 
+      {% if current_role in ["admin", "super_admin"] %}
+      <a
+        href="/user-management"
+        class="
+          h-10 md:h-11
+
+          px-4 md:px-5
+
+          rounded-full
+          border border-slate-300
+
+          bg-white
+
+          flex items-center justify-center
+
+          text-sm md:text-base
+          font-semibold
+
+          hover:bg-slate-50
+          transition
+
+          whitespace-nowrap
+        "
+      >
+        Users
+      </a>
+      {% endif %}
+
       <!-- LOGOUT -->
 
       <a

@@ -50,6 +50,15 @@
         "
       >
 
+        {% if session.get("role") in ["admin", "super_admin"] %}
+        <a
+          href="/user-management"
+          class="button-secondary"
+        >
+          User Management
+        </a>
+        {% endif %}
+
         <a
           href="/directory"
           class="button-secondary"
