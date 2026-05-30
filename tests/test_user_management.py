@@ -16,6 +16,13 @@ class FakeDeleteResult:
         self.deleted_count = deleted_count
 
 
+class FakeUpdateResult:
+    def __init__(self, matched_count, modified_count, upserted_id=None):
+        self.matched_count = matched_count
+        self.modified_count = modified_count
+        self.upserted_id = upserted_id
+
+
 class FakeCursor:
     def __init__(self, documents):
         self.documents = documents
@@ -81,6 +88,22 @@ class FakeCollection:
 
         return FakeDeleteResult(0)
 
+    def update_one(self, query, update, upsert=False):
+        for index, document in enumerate(self.documents):
+            if matches_query(document, query):
+                updated = deepcopy(document)
+                apply_update(updated, update)
+                self.documents[index] = updated
+                return FakeUpdateResult(1, 1)
+
+        if not upsert:
+            return FakeUpdateResult(0, 0)
+
+        document = deepcopy(query)
+        apply_update(document, update)
+        result = self.insert_one(document)
+        return FakeUpdateResult(0, 0, result.inserted_id)
+
 
 class FakeDatabase:
     def __init__(self):
@@ -122,6 +145,23 @@ def matches_query(document, query):
             return False
 
     return True
+
+
+def apply_update(document, update):
+    for operator, values in (update or {}).items():
+        if operator == "$set":
+            for key, value in values.items():
+                document[key] = deepcopy(value)
+
+        if operator == "$push":
+            for key, value in values.items():
+                existing = document.get(key)
+
+                if not isinstance(existing, list):
+                    existing = []
+
+                existing.append(deepcopy(value))
+                document[key] = existing
 
 
 class UserManagementTests(unittest.TestCase):
@@ -213,6 +253,16 @@ class UserManagementTests(unittest.TestCase):
         self.login_as("viewer")
 
         response = self.client.get("/user-management")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            response.headers["Location"].endswith("/directory")
+        )
+
+    def test_viewer_cannot_access_view_member_page(self):
+        self.login_as("viewer")
+
+        response = self.client.get("/view-member/test-id")
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(

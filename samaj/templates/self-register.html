@@ -2,44 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1"
     >
-
-    <title>
-      SAMAJ Registration
-    </title>
-
+    <title>Self Registration</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='styles.css') }}"
     >
-
+    <script>
+      window.SELF_REGISTRATION_ACCOUNT = {{ public_account|tojson }};
+      window.INITIAL_SELF_REGISTRATION = {{ initial_submission|tojson }};
+    </script>
     <script
       defer
       src="{{ url_for('static', filename='app.js') }}"
     ></script>
+    <script
+      defer
+      src="{{ url_for('static', filename='self-register.js') }}"
+    ></script>
   </head>
 
   <body>
-
     <header class="topbar">
-
       <a
         class="brand"
-        href="/"
-        aria-label="SAMAJ Registration home"
+        href="/self-register"
+        aria-label="SAMAJ self registration"
       >
         <span
           class="brand-mark"
           aria-hidden="true"
         ></span>
-
-        <span>
-          SAMAJ
-        </span>
+        <span>SAMAJ</span>
       </a>
 
       <div
@@ -49,82 +46,43 @@
           gap:16px;
         "
       >
-
-        {% if session.get("role") in ["admin", "super_admin"] %}
-        <a
-          href="/user-management"
-          class="button-secondary"
-        >
-          User Management
-        </a>
-
-        <a
-          href="/self-registration-review"
-          class="button-secondary"
-        >
-          Review Self Registrations
-        </a>
-        {% endif %}
-
-        {% if session.get("role") == "super_admin" %}
-        <a
-          href="/otp-settings"
-          class="button-secondary"
-        >
-          OTP Settings
-        </a>
-        {% endif %}
-
-        <a
-          href="/directory"
-          class="button-secondary"
-        >
-          Member Directory
-        </a>
-
-<a
-  href="/logout"
-  class="button-ghost"
-  id="logoutButton"
->
-  Logout
-</a>
-
-        <span
-          class="topbar-status"
-          id="connection-status"
-        >
-          Connected
+        <span class="topbar-status">
+          Pending review flow
         </span>
-
+        <a
+          href="/logout"
+          class="button-ghost"
+        >
+          Logout
+        </a>
       </div>
-
     </header>
 
     <main>
-
       <section class="workspace">
-
         <form
           class="form-surface"
           id="registration-form"
+          data-submit-url="/api/self-registrations"
+          data-success-message="Submission saved. Your pending registration history has been updated."
+          data-reset-on-success="false"
           novalidate
         >
-
           <div class="form-header">
-
             <div>
               <p class="eyebrow">
-                New entry
+                Self registration
               </p>
 
               <h2>
-                Applicant information
+                Fill your samaj details
               </h2>
+
+              <p class="section-note">
+                Verified mobile:
+                <strong id="verified-mobile-copy"></strong>
+              </p>
             </div>
-
-
-
           </div>
 
           <div
@@ -132,9 +90,7 @@
             id="mobile-wizard"
             aria-live="polite"
           >
-
             <div class="mobile-wizard-progress">
-
               <span
                 class="mobile-wizard-step-label"
                 id="mobile-wizard-step-label"
@@ -150,40 +106,30 @@
                 <span class="mobile-wizard-dot"></span>
                 <span class="mobile-wizard-dot"></span>
               </div>
-
             </div>
 
             <div class="mobile-wizard-copy">
-
               <h3 id="mobile-wizard-title">
                 Applicant name
               </h3>
-
               <p
                 class="section-note"
                 id="mobile-wizard-description"
               >
-                Fill in the applicant's name and date of birth.
+                Fill in your name and date of birth.
               </p>
-
             </div>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="1"
           >
-
-            <h3>
-              Name
-            </h3>
-
+            <h3>Name</h3>
             <div
               class="field-grid"
               id="name-fields"
             ></div>
-
           </div>
 
           <input
@@ -202,19 +148,11 @@
             class="form-section"
             data-wizard-step="2"
           >
-
-            <h3>
-              Contact
-            </h3>
+            <h3>Contact</h3>
 
             <div class="field-grid">
-
               <label class="field">
-
-                <span>
-                  Mobile number
-                </span>
-
+                <span>Mobile number</span>
                 <input
                   id="mobileNumber"
                   name="mobileNumber"
@@ -223,44 +161,29 @@
                   maxlength="10"
                   placeholder="9876543210 (without +91)"
                   required
+                  readonly
                 >
-
               </label>
-
             </div>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="1"
           >
-
-            <h3>
-              Date of birth
-            </h3>
+            <h3>Date of birth</h3>
 
             <div class="field-grid">
-
               <label class="field">
-
-                <span>
-                  Full date of birth
-                </span>
-
+                <span>Full date of birth</span>
                 <input
                   id="birthDate"
                   type="date"
                 >
-
               </label>
 
               <label class="field">
-
-                <span>
-                  OR Birth year only
-                </span>
-
+                <span>OR Birth year only</span>
                 <input
                   id="birthYear"
                   type="number"
@@ -268,125 +191,73 @@
                   max="2099"
                   placeholder="1998"
                 >
-
               </label>
-
             </div>
-
-            <p class="section-note">
-              User can provide either full DOB or only birth year.
-            </p>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="2"
           >
-
-            <h3>
-              Address
-            </h3>
-
+            <h3>Address</h3>
             <div
               class="field-grid"
               id="address-fields"
             ></div>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="2"
           >
-
-            <h3>
-              Location
-            </h3>
-
+            <h3>Location</h3>
             <div class="field-grid">
-
               <label class="field">
-
-                <span>
-                  State
-                </span>
-
+                <span>State</span>
                 <select
                   id="state"
                   required
                 >
-                  <option value="">
-                    Select state
-                  </option>
+                  <option value="">Select state</option>
                 </select>
-
               </label>
 
               <label class="field">
-
-                <span>
-                  District
-                </span>
-
+                <span>District</span>
                 <select
                   id="district"
                   required
                 >
-                  <option value="">
-                    Select district
-                  </option>
+                  <option value="">Select district</option>
                 </select>
-
               </label>
 
               <label class="field">
-
-                <span>
-                  Taluka
-                </span>
-
+                <span>Taluka</span>
                 <select
                   id="taluka"
                   required
                 >
-                  <option value="">
-                    Select taluka
-                  </option>
+                  <option value="">Select taluka</option>
                 </select>
-
               </label>
-
             </div>
-
           </div>
 
           <div
             class="form-section"
             data-wizard-step="3"
           >
-
             <div class="section-row">
-
               <div>
-
-                <h3>
-                  Family details
-                </h3>
-
+                <h3>Family details</h3>
                 <p class="section-note">
-                  Set the count, then fill each member's
-                  name, relation to applicant, and contact number.
+                  Add family members. Every resubmission is saved as a new pending version for staff review.
                 </p>
-
               </div>
 
               <label class="compact-field">
-
-                <span>
-                  Members in family
-                </span>
-
+                <span>Members in family</span>
                 <input
                   id="member-count"
                   type="number"
@@ -394,9 +265,7 @@
                   max="25"
                   value="1"
                 >
-
               </label>
-
             </div>
 
             <div
@@ -411,7 +280,6 @@
             >
               Add member
             </button>
-
           </div>
 
           <div
@@ -422,7 +290,6 @@
           ></div>
 
           <div class="form-actions">
-
             <button
               class="button-secondary mobile-wizard-back"
               id="mobile-wizard-back"
@@ -444,63 +311,34 @@
               id="mobile-wizard-submit"
               type="submit"
             >
-              Save and submit
+              Submit pending version
             </button>
 
             <button
               class="button-primary desktop-submit"
               type="submit"
             >
-              Save
+              Save pending version
             </button>
-
-              <button
-    class="button-secondary clear-form-button"
-    type="reset"
-  >
-    Clear form
-  </button>
-
           </div>
-
         </form>
 
         <aside class="recent-panel">
-
           <div class="recent-header">
-
             <div>
-
-              <p class="eyebrow">
-                Latest
-              </p>
-
-              <h2>
-                Saved records
-              </h2>
-
+              <p class="eyebrow">Audit trail</p>
+              <h2>Pending submission history</h2>
             </div>
-
-            <button
-              class="button-ghost"
-              id="refresh-records"
-              type="button"
-            >
-              Refresh
-            </button>
-
           </div>
 
           <div
-            id="recent-records"
+            id="submission-history"
             class="recent-list"
-          ></div>
-
+          >
+            Loading history...
+          </div>
         </aside>
-
       </section>
-
     </main>
-
   </body>
 </html>

@@ -1,90 +1,144 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="utf-8">
   <title>Login</title>
-
   <meta
-  name="viewport"
-  content="width=device-width, initial-scale=1">
-
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
   <link
     rel="stylesheet"
     href="{{ url_for('static', filename='styles.css') }}"
   >
+  <script
+    defer
+    src="{{ url_for('static', filename='login.js') }}"
+  ></script>
 </head>
-
 <body class="login-page">
+  <main style="width:min(460px, 100%);">
+    <section class="login-card">
+      <p class="eyebrow">
+        Welcome
+      </p>
+      <h1>SAMAJ Login</h1>
+      <p class="section-note" id="login-mode-copy">
+        Username and password login for super admin, admin, operator, and viewer accounts.
+      </p>
 
-  <form class="login-card">
+      <div
+        style="
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:10px;
+          margin-bottom:8px;
+        "
+      >
+        <button
+          type="button"
+          id="staffModeButton"
+          class="button-primary"
+        >
+          Username & Password
+        </button>
 
-    <h1>SAMAJ Login</h1>
+        <button
+          type="button"
+          id="mobileModeButton"
+          class="button-secondary"
+        >
+          Login With Mobile
+        </button>
+      </div>
 
-    <input
-      id="username"
-      placeholder="Username"
-    >
+      <div id="staff-login-panel">
+        <input
+          id="username"
+          placeholder="Username"
+          autocomplete="username"
+        >
 
-    <input
-      id="password"
-      type="password"
-      placeholder="Password"
-    >
+        <input
+          id="password"
+          type="password"
+          placeholder="Password"
+          autocomplete="current-password"
+        >
 
-    <button
-      type="button"
-      id="loginButton"
-    >
-      Login
-    </button>
+        <button
+          type="button"
+          id="loginButton"
+        >
+          Login
+        </button>
+      </div>
 
-  </form>
+      <div id="mobile-login-panel" hidden>
+        <input
+          id="public-mobile"
+          placeholder="Enter 10-digit mobile number"
+          autocomplete="tel"
+          inputmode="tel"
+          maxlength="10"
+        >
 
-  <script>
+        <p
+          class="section-note"
+          id="mobile-help-text"
+          style="margin-top:-6px;"
+        >
+          Enter a valid Indian mobile number to continue.
+        </p>
 
-    document
-      .querySelector(
-        "#loginButton"
-      )
-      .addEventListener(
-        "click",
-        async () => {
+        <p
+          class="section-note"
+          id="otp-status-note"
+          hidden
+        ></p>
 
-          const response =
-            await fetch(
-              "/login",
-              {
-                method: "POST",
+        <button
+          type="button"
+          id="requestOtpButton"
+          hidden
+        >
+          Send OTP
+        </button>
 
-                headers: {
-                  "content-type":
-                    "application/json"
-                },
+        <div id="otp-panel" hidden>
+          <input
+            id="public-otp"
+            placeholder="Enter OTP"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+          >
 
-                body: JSON.stringify({
-                  username:
-                    document.querySelector("#username").value,
+          <div
+            style="
+              display:flex;
+              gap:12px;
+              flex-wrap:wrap;
+            "
+          >
+            <button
+              type="button"
+              id="verifyOtpButton"
+            >
+              Verify OTP
+            </button>
 
-                  password:
-                    document.querySelector("#password").value
-                })
-              }
-            );
-
-          if (response.ok) {
-            window.location =
-              "/";
-          }
-
-          else {
-            alert(
-              "Invalid credentials"
-            );
-          }
-
-        }
-      );
-
-  </script>
-
+            <button
+              type="button"
+              id="resendOtpButton"
+              class="button-secondary"
+            >
+              Resend OTP
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 </body>
 </html>

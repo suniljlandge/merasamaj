@@ -1,8 +1,11 @@
 import os
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 import bcrypt
+import requests
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from flask_session import Session
 
 from .migration import (
@@ -28,6 +31,7 @@ from .corrections import (
 from .db import create_collections
 from .registration import (
     normalize_relationship_links,
+    normalize_phone,
     validate_registration,
 )
 from .transliterate import transliteration_suggestions
@@ -54,6 +58,8 @@ def create_app(config=None, collection=None, correction_collection=None):
             "MONGO_CORRECTIONS_COLLECTION",
             "transliteration_corrections",
         ),
+        OTP_TEST_MODE=env_flag("OTP_TEST_MODE"),
+        OTP_FIXED_CODE=os.getenv("OTP_FIXED_CODE", "").strip(),
     )
 
     if config:
@@ -69,6 +75,11 @@ def create_app(config=None, collection=None, correction_collection=None):
         if not require_auth():
             return redirect("/login")
 
+        if is_pending_public_session():
+            return redirect(
+                "/self-register"
+            )
+
         role = current_role()
 
         if role == "viewer":
@@ -83,12 +94,100 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.route("/view-member/<id>")
     def view_member_page(id):
 
-        if not require_auth():
+        if not can_access_directory():
             return redirect("/login")
+
+        document_id = object_id_or_none(id)
+
+        if not document_id:
+            return redirect("/directory")
+
+        document = (
+            get_collection()
+            .find_one({
+                "_id": document_id
+            })
+        )
+
+        if not can_view_registration(document):
+            return redirect("/directory")
 
         return render_template(
             "view-member.html",
             current_role=session.get("role")
+        )
+
+    @app.route("/self-register")
+    def self_register_page():
+
+        if not is_public_session():
+            return redirect("/login")
+
+        if session.get("public_status") == "approved":
+            return redirect("/directory")
+
+        public_account = (
+            get_public_accounts_collection()
+            .find_one({
+                "_id": ensure_object_id(
+                    session["public_account_id"]
+                )
+            })
+        )
+
+        if not public_account:
+            session.clear()
+            return redirect("/login")
+
+        latest_submission = None
+        latest_submission_id = public_account.get(
+            "latestSubmissionId"
+        )
+
+        if latest_submission_id:
+            latest_submission = (
+                get_self_registrations_collection()
+                .find_one({
+                    "_id": latest_submission_id
+                })
+            )
+
+        return render_template(
+            "self-register.html",
+            current_role=current_role(),
+            public_account=serialize_public_account(
+                public_account
+            ),
+            initial_submission=serialize_self_registration(
+                latest_submission or {}
+            ),
+        )
+
+    @app.route("/otp-settings")
+    def otp_settings_page():
+
+        if not require_role(
+            "super_admin"
+        ):
+            return redirect("/directory")
+
+        return render_template(
+            "otp-settings.html",
+            current_role=current_role()
+        )
+
+    @app.route("/self-registration-review")
+    def self_registration_review_page():
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return redirect("/directory")
+
+        return render_template(
+            "self-registration-review.html",
+            current_role=current_role()
         )
 
     @app.route("/user-management")
@@ -229,10 +328,20 @@ def create_app(config=None, collection=None, correction_collection=None):
 
     @app.route("/edit-member/<id>")
     def edit_member_page(id):
+        document_id = object_id_or_none(id)
 
-        if not require_role(
-            "admin",
-            "super_admin"
+        if not document_id:
+            return redirect("/directory")
+
+        document = (
+            get_collection()
+            .find_one({
+                "_id": document_id
+            })
+        )
+
+        if not can_edit_registration(
+            document
         ):
             return redirect("/directory")
 
@@ -247,9 +356,16 @@ def create_app(config=None, collection=None, correction_collection=None):
         if not require_auth():
             return redirect("/login")
 
+        if is_pending_public_session():
+            return redirect("/self-register")
+
+        if not can_access_directory():
+            return redirect("/login")
+
         return render_template(
             "directory.html",
-            current_role=session.get("role")
+            current_role=current_role(),
+            current_owned_registration_id=current_owned_registration_id(),
         )
 
     @app.get("/api/health")
@@ -285,6 +401,15 @@ def create_app(config=None, collection=None, correction_collection=None):
     def login():
 
         if request.method == "GET":
+            if require_auth():
+                if is_pending_public_session():
+                    return redirect("/self-register")
+
+                if current_role() == "viewer":
+                    return redirect("/directory")
+
+                return redirect("/")
+
             return render_template(
                 "login.html"
             )
@@ -323,6 +448,8 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Invalid credentials"
             }), 401
 
+        session.clear()
+        session["auth_type"] = "staff"
         session["user_id"] = str(
             user["_id"]
         )
@@ -336,6 +463,423 @@ def create_app(config=None, collection=None, correction_collection=None):
         return jsonify({
             "ok": True,
             "role": user["role"]
+        })
+
+    @app.post("/api/public/request-otp")
+    def request_public_otp():
+
+        payload = (
+            request.get_json(silent=True)
+            or {}
+        )
+        mobile_number = normalize_phone(
+            payload.get("mobileNumber")
+        )
+
+        if not mobile_number:
+            return jsonify({
+                "error": "Mobile number required"
+            }), 400
+
+        settings_collection = (
+            get_settings_collection()
+        )
+        existing_settings = (
+            settings_collection.find_one({
+                "key": OTP_SETTINGS_KEY
+            })
+        )
+        settings = normalize_otp_settings(
+            existing=existing_settings,
+            test_mode=app.config.get(
+                "OTP_TEST_MODE",
+                False,
+            ),
+        )
+        active_provider = (
+            settings.get("activeProvider")
+            or OTP_PROVIDER_TEST
+        )
+        fixed_code = app.config.get(
+            "OTP_FIXED_CODE",
+            "",
+        )
+
+        if (
+            not fixed_code
+            and active_provider == OTP_PROVIDER_TEST
+        ):
+            fixed_code = "123456"
+
+        otp_code = generate_otp_code(
+            fixed_code
+        )
+
+        try:
+            provider_result = send_otp_message(
+                settings,
+                mobile_number,
+                otp_code,
+                app.config,
+            )
+        except Exception as error:
+            return jsonify({
+                "error": str(error)
+            }), 400
+
+        now = now_utc()
+        expires_at = now + timedelta(
+            minutes=OTP_EXPIRY_MINUTES
+        )
+        resend_at = now + timedelta(
+            seconds=OTP_RESEND_SECONDS
+        )
+        otp_collection = (
+            get_public_otp_collection()
+        )
+
+        challenge = {
+            "mobileNumber": mobile_number,
+            "provider": provider_result["provider"],
+            "providerRef": provider_result["providerRef"],
+            "otpCode": otp_code,
+            "attempts": 0,
+            "verifiedAt": None,
+            "expiresAt": expires_at,
+            "resendAvailableAt": resend_at,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+
+        existing_challenge = (
+            otp_collection.find_one({
+                "mobileNumber": mobile_number
+            })
+        )
+
+        if existing_challenge:
+            otp_collection.update_one(
+                {
+                    "mobileNumber": mobile_number
+                },
+                {
+                    "$set": challenge
+                }
+            )
+        else:
+            otp_collection.insert_one(
+                challenge
+            )
+
+        response = {
+            "ok": True,
+            "mobileNumber": mobile_number,
+            "provider": provider_result["provider"],
+        }
+
+        if app.config.get(
+            "OTP_TEST_MODE"
+        ) or provider_result["provider"] == OTP_PROVIDER_TEST:
+            response["otpCode"] = otp_code
+
+        return jsonify(response)
+
+    @app.post("/api/public/resend-otp")
+    def resend_public_otp():
+
+        payload = (
+            request.get_json(silent=True)
+            or {}
+        )
+        mobile_number = normalize_phone(
+            payload.get("mobileNumber")
+        )
+        otp_collection = (
+            get_public_otp_collection()
+        )
+        challenge = otp_collection.find_one({
+            "mobileNumber": mobile_number
+        })
+
+        if not challenge:
+            return jsonify({
+                "error": "OTP not requested"
+            }), 404
+
+        now = now_utc()
+        resend_available_at = as_utc_datetime(
+            challenge.get("resendAvailableAt")
+        )
+
+        if (
+            resend_available_at
+            and now < resend_available_at
+        ):
+            return jsonify({
+                "error": "Please wait before resending OTP"
+            }), 429
+
+        settings_collection = (
+            get_settings_collection()
+        )
+        existing_settings = (
+            settings_collection.find_one({
+                "key": OTP_SETTINGS_KEY
+            })
+        )
+        settings = normalize_otp_settings(
+            existing=existing_settings,
+            test_mode=app.config.get(
+                "OTP_TEST_MODE",
+                False,
+            ),
+        )
+
+        try:
+            provider_result = send_otp_message(
+                settings,
+                mobile_number,
+                challenge["otpCode"],
+                app.config,
+            )
+        except Exception as error:
+            return jsonify({
+                "error": str(error)
+            }), 400
+
+        otp_collection.update_one(
+            {
+                "mobileNumber": mobile_number
+            },
+            {
+                "$set": {
+                    "provider": provider_result["provider"],
+                    "providerRef": provider_result["providerRef"],
+                    "updatedAt": now,
+                    "resendAvailableAt": now + timedelta(
+                        seconds=OTP_RESEND_SECONDS
+                    ),
+                }
+            }
+        )
+
+        response = {
+            "ok": True
+        }
+
+        if app.config.get(
+            "OTP_TEST_MODE"
+        ) or provider_result["provider"] == OTP_PROVIDER_TEST:
+            response["otpCode"] = challenge["otpCode"]
+
+        return jsonify(response)
+
+    @app.post("/api/public/verify-otp")
+    def verify_public_otp():
+
+        payload = (
+            request.get_json(silent=True)
+            or {}
+        )
+        mobile_number = normalize_phone(
+            payload.get("mobileNumber")
+        )
+        provided_otp = clean_text(
+            payload.get("otp")
+        )
+        otp_collection = (
+            get_public_otp_collection()
+        )
+        challenge = otp_collection.find_one({
+            "mobileNumber": mobile_number
+        })
+
+        if not challenge:
+            return jsonify({
+                "error": "OTP not requested"
+            }), 404
+
+        now = now_utc()
+        expires_at = as_utc_datetime(
+            challenge.get("expiresAt")
+        )
+
+        if (
+            expires_at
+            and now > expires_at
+        ):
+            return jsonify({
+                "error": "OTP expired"
+            }), 400
+
+        if challenge.get("attempts", 0) >= OTP_MAX_ATTEMPTS:
+            return jsonify({
+                "error": "Too many OTP attempts"
+            }), 429
+
+        if provided_otp != str(
+            challenge.get("otpCode", "")
+        ):
+            otp_collection.update_one(
+                {
+                    "mobileNumber": mobile_number
+                },
+                {
+                    "$set": {
+                        "attempts": challenge.get(
+                            "attempts",
+                            0,
+                        ) + 1,
+                        "updatedAt": now,
+                    }
+                }
+            )
+
+            return jsonify({
+                "error": "Invalid OTP"
+            }), 401
+
+        public_accounts = (
+            get_public_accounts_collection()
+        )
+        account = public_accounts.find_one({
+            "mobileNumber": mobile_number
+        })
+
+        if not account:
+            account = {
+                "mobileNumber": mobile_number,
+                "status": "pending",
+                "approvedRegistrationId": "",
+                "latestSubmissionId": "",
+                "latestVersion": 0,
+                "createdAt": now,
+                "updatedAt": now,
+                "lastOtpVerifiedAt": now,
+            }
+            result = public_accounts.insert_one(
+                account
+            )
+            account["_id"] = result.inserted_id
+        else:
+            public_accounts.update_one(
+                {
+                    "_id": account["_id"]
+                },
+                {
+                    "$set": {
+                        "updatedAt": now,
+                        "lastOtpVerifiedAt": now,
+                    }
+                }
+            )
+            account["updatedAt"] = now
+            account["lastOtpVerifiedAt"] = now
+
+        otp_collection.update_one(
+            {
+                "mobileNumber": mobile_number
+            },
+            {
+                "$set": {
+                    "verifiedAt": now,
+                    "updatedAt": now,
+                }
+            }
+        )
+
+        build_public_session(account)
+
+        return jsonify({
+            "ok": True,
+            "role": current_role(),
+            "account": serialize_public_account(
+                account
+            ),
+            "redirectTo": (
+                "/directory"
+                if account.get("status") == "approved"
+                else "/self-register"
+            ),
+        })
+
+    @app.get("/api/otp-settings")
+    def get_otp_settings():
+
+        if not require_role(
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        settings = normalize_otp_settings(
+            existing=get_settings_collection().find_one({
+                "key": OTP_SETTINGS_KEY
+            }),
+            test_mode=app.config.get(
+                "OTP_TEST_MODE",
+                False,
+            ),
+        )
+
+        return jsonify(
+            serialize_document(settings)
+        )
+
+    @app.put("/api/otp-settings")
+    def save_otp_settings():
+
+        if not require_role(
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        payload = (
+            request.get_json(silent=True)
+            or {}
+        )
+        settings_collection = (
+            get_settings_collection()
+        )
+        existing = settings_collection.find_one({
+            "key": OTP_SETTINGS_KEY
+        })
+        settings = normalize_otp_settings(
+            payload,
+            existing=existing,
+            test_mode=app.config.get(
+                "OTP_TEST_MODE",
+                False,
+            ),
+        )
+        settings["updatedAt"] = now_utc()
+        settings["updatedBy"] = session.get(
+            "username",
+            "",
+        )
+
+        if existing:
+            settings_collection.update_one(
+                {
+                    "key": OTP_SETTINGS_KEY
+                },
+                {
+                    "$set": settings
+                }
+            )
+        else:
+            settings_collection.insert_one(
+                settings
+            )
+
+        return jsonify({
+            "ok": True,
+            "settings": serialize_document(
+                settings
+            )
         })
 
     @app.get("/api/users")
@@ -515,14 +1059,455 @@ def create_app(config=None, collection=None, correction_collection=None):
             "ok": True
         })
 
+    @app.get("/api/self-registrations/me")
+    def get_my_self_registration():
+
+        if not is_public_session():
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        account_id = ensure_object_id(
+            session["public_account_id"]
+        )
+        account = (
+            get_public_accounts_collection()
+            .find_one({
+                "_id": account_id
+            })
+        )
+
+        if not account:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        submissions = list(
+            get_self_registrations_collection()
+            .find({
+                "accountId": account_id
+            })
+            .sort("version", -1)
+        )
+
+        latest_submission = (
+            submissions[0]
+            if submissions
+            else None
+        )
+
+        return jsonify({
+            "account": serialize_public_account(
+                account
+            ),
+            "submission": serialize_self_registration(
+                latest_submission or {}
+            ),
+            "history": [
+                serialize_self_registration(item)
+                for item in submissions
+            ],
+        })
+
+    @app.post("/api/self-registrations")
+    def save_self_registration():
+
+        if not is_public_session():
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        payload = (
+            request.get_json(silent=True)
+            or {}
+        )
+        payload["mobileNumber"] = session.get(
+            "public_mobile",
+            "",
+        )
+
+        correction_store = get_correction_collection()
+        corrections = load_corrections(correction_store)
+        result = validate_registration(
+            payload,
+            corrections,
+        )
+
+        if not result["valid"]:
+            return jsonify({
+                "error": "Validation failed.",
+                "errors": result["errors"],
+            }), 400
+
+        public_accounts = (
+            get_public_accounts_collection()
+        )
+        submissions = (
+            get_self_registrations_collection()
+        )
+        now = now_utc()
+        account_id = ensure_object_id(
+            session["public_account_id"]
+        )
+        account = public_accounts.find_one({
+            "_id": account_id
+        })
+
+        if not account:
+            return jsonify({
+                "error": "Account not found"
+            }), 404
+
+        document = create_pending_submission_for_account(
+            public_accounts,
+            submissions,
+            account,
+            result["value"],
+            session.get(
+                "public_mobile",
+                "",
+            ),
+            now,
+            prior_status=account.get(
+                "status",
+                "pending",
+            ),
+        )
+
+        learned_corrections = collect_transliteration_corrections(
+            payload,
+            corrections,
+        )
+        save_corrections(
+            correction_store,
+            learned_corrections,
+            now,
+        )
+
+        build_public_session(account)
+
+        return jsonify({
+            "ok": True,
+            "submission": serialize_self_registration(
+                document
+            ),
+            "redirectTo": "/self-register",
+        }), 201
+
+    @app.get("/api/self-registrations/review")
+    def list_self_registrations_for_review():
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        public_accounts = list(
+            get_public_accounts_collection()
+            .find({})
+        )
+        submissions = (
+            get_self_registrations_collection()
+        )
+        items = []
+
+        for account in public_accounts:
+            latest_submission_id = account.get(
+                "latestSubmissionId"
+            )
+            latest_submission = None
+
+            if latest_submission_id:
+                latest_submission = submissions.find_one({
+                    "_id": latest_submission_id
+                })
+
+            history = list(
+                submissions.find({
+                    "accountId": account["_id"]
+                }).sort("version", -1)
+            )
+
+            items.append({
+                "account": serialize_public_account(
+                    account
+                ),
+                "latestSubmission": serialize_self_registration(
+                    latest_submission or {}
+                ),
+                "history": [
+                    serialize_self_registration(item)
+                    for item in history
+                ],
+            })
+
+        return jsonify({
+            "items": items
+        })
+
+    @app.post("/api/self-registrations/<account_id>/approve")
+    def approve_self_registration(account_id):
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        payload = (
+            request.get_json(silent=True)
+            or {}
+        )
+        note = clean_text(
+            payload.get("note")
+        )
+        public_accounts = (
+            get_public_accounts_collection()
+        )
+        submissions = (
+            get_self_registrations_collection()
+        )
+        account_object_id = ensure_object_id(
+            account_id
+        )
+        account = public_accounts.find_one({
+            "_id": account_object_id
+        })
+
+        if not account:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        latest_submission_id = account.get(
+            "latestSubmissionId"
+        )
+
+        if not latest_submission_id:
+            return jsonify({
+                "error": "Submission not found"
+            }), 404
+
+        submission = submissions.find_one({
+            "_id": latest_submission_id
+        })
+
+        if not submission:
+            return jsonify({
+                "error": "Submission not found"
+            }), 404
+
+        now = now_utc()
+        registration_collection = (
+            get_collection()
+        )
+        approved_registration_id = account.get(
+            "approvedRegistrationId"
+        )
+        registration_document = {
+            key: value
+            for key, value in submission.items()
+            if key not in {
+                "_id",
+                "accountId",
+                "version",
+                "submissionStatus",
+                "auditTrail",
+                "reviewedAt",
+                "reviewedBy",
+                "reviewNote",
+                "approvedRegistrationId",
+            }
+        }
+        registration_document["updatedAt"] = now
+
+        if approved_registration_id:
+            registration_collection.update_one(
+                {
+                    "_id": ensure_object_id(
+                        approved_registration_id
+                    )
+                },
+                {
+                    "$set": registration_document
+                }
+            )
+            registration_id = approved_registration_id
+        else:
+            registration_document["createdAt"] = now
+            insert_result = registration_collection.insert_one(
+                registration_document
+            )
+            registration_id = insert_result.inserted_id
+
+        append_audit_event(
+            submission,
+            "approved",
+            session.get("username", "staff"),
+            note=note,
+            timestamp=now,
+        )
+        submission["submissionStatus"] = "approved"
+        submission["reviewedAt"] = now
+        submission["reviewedBy"] = session.get(
+            "username",
+            "",
+        )
+        submission["reviewNote"] = note
+        submission["approvedRegistrationId"] = registration_id
+        submissions.update_one(
+            {
+                "_id": submission["_id"]
+            },
+            {
+                "$set": {
+                    "submissionStatus": "approved",
+                    "reviewedAt": now,
+                    "reviewedBy": session.get(
+                        "username",
+                        "",
+                    ),
+                    "reviewNote": note,
+                    "approvedRegistrationId": registration_id,
+                    "auditTrail": submission["auditTrail"],
+                    "updatedAt": now,
+                }
+            }
+        )
+
+        public_accounts.update_one(
+            {
+                "_id": account_object_id
+            },
+            {
+                "$set": {
+                    "status": "approved",
+                    "approvedRegistrationId": registration_id,
+                    "updatedAt": now,
+                }
+            }
+        )
+
+        return jsonify({
+            "ok": True,
+            "registrationId": str(
+                registration_id
+            ),
+        })
+
+    @app.post("/api/self-registrations/<account_id>/reject")
+    def reject_self_registration(account_id):
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        payload = (
+            request.get_json(silent=True)
+            or {}
+        )
+        note = clean_text(
+            payload.get("note")
+        )
+        account_object_id = ensure_object_id(
+            account_id
+        )
+        public_accounts = (
+            get_public_accounts_collection()
+        )
+        submissions = (
+            get_self_registrations_collection()
+        )
+        account = public_accounts.find_one({
+            "_id": account_object_id
+        })
+
+        if not account or not account.get(
+            "latestSubmissionId"
+        ):
+            return jsonify({
+                "error": "Submission not found"
+            }), 404
+
+        submission = submissions.find_one({
+            "_id": account["latestSubmissionId"]
+        })
+
+        if not submission:
+            return jsonify({
+                "error": "Submission not found"
+            }), 404
+
+        now = now_utc()
+        append_audit_event(
+            submission,
+            "rejected",
+            session.get("username", "staff"),
+            note=note,
+            timestamp=now,
+        )
+        submissions.update_one(
+            {
+                "_id": submission["_id"]
+            },
+            {
+                "$set": {
+                    "submissionStatus": "rejected",
+                    "reviewedAt": now,
+                    "reviewedBy": session.get(
+                        "username",
+                        "",
+                    ),
+                    "reviewNote": note,
+                    "auditTrail": submission["auditTrail"],
+                    "updatedAt": now,
+                }
+            }
+        )
+        public_accounts.update_one(
+            {
+                "_id": account_object_id
+            },
+            {
+                "$set": {
+                    "status": "rejected",
+                    "updatedAt": now,
+                }
+            }
+        )
+
+        return jsonify({
+            "ok": True
+        })
+
 
     @app.get("/api/registrations/<id>")
     def get_registration(id):
+        document_id = object_id_or_none(id)
+
+        if not document_id:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        if not can_access_directory():
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
 
         document = (
             get_collection()
             .find_one({
-                "_id": ObjectId(id)
+                "_id": document_id
             })
         )
 
@@ -530,6 +1515,11 @@ def create_app(config=None, collection=None, correction_collection=None):
             return jsonify({
                 "error": "Not found"
             }), 404
+
+        if not can_view_registration(document):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
 
         return jsonify(
             serialize_registration_document(
@@ -539,10 +1529,27 @@ def create_app(config=None, collection=None, correction_collection=None):
 
     @app.put("/api/registrations/<id>")
     def update_registration(id):
+        document_id = object_id_or_none(id)
 
-        if not require_role(
-            "admin",
-            "super_admin"
+        if not document_id:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        existing_document = (
+            get_collection()
+            .find_one({
+                "_id": document_id
+            })
+        )
+
+        if not existing_document:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        if not can_edit_registration(
+            existing_document
         ):
             return jsonify({
                 "error": "Forbidden"
@@ -569,8 +1576,63 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "errors": result["errors"]
             }), 400
 
+        if (
+            is_public_session()
+            and current_role() == "viewer"
+        ):
+            public_accounts = (
+                get_public_accounts_collection()
+            )
+            submissions = (
+                get_self_registrations_collection()
+            )
+            account = public_accounts.find_one({
+                "_id": ensure_object_id(
+                    session["public_account_id"]
+                )
+            })
+
+            if not account:
+                return jsonify({
+                    "error": "Account not found"
+                }), 404
+
+            now = now_utc()
+            document = create_pending_submission_for_account(
+                public_accounts,
+                submissions,
+                account,
+                result["value"],
+                session.get(
+                    "public_mobile",
+                    "",
+                ),
+                now,
+                prior_status=account.get(
+                    "status",
+                    "approved",
+                ),
+            )
+            build_public_session(account)
+
+            return jsonify({
+                "ok": True,
+                "submission": serialize_self_registration(
+                    document
+                ),
+                "redirectTo": "/self-register",
+                "message": "Changes submitted for review.",
+            }), 202
+
         document = {
             **result["value"],
+            "createdAt": existing_document.get(
+                "createdAt"
+            ),
+            "createdBy": existing_document.get(
+                "createdBy",
+                ""
+            ),
             "updatedAt":
                 datetime.now(
                     timezone.utc
@@ -579,7 +1641,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         get_collection().update_one(
             {
-                "_id": ObjectId(id)
+                "_id": document_id
             },
             {
                 "$set": document
@@ -593,6 +1655,15 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.post("/api/registrations")
 
     def create_registration():
+        if not require_role(
+            "operator",
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
         payload = request.get_json(silent=True) or {}
 
         correction_store = get_correction_collection()
@@ -615,6 +1686,10 @@ def create_app(config=None, collection=None, correction_collection=None):
         document = {
             **result["value"],
             "createdAt": now,
+            "createdBy": session.get(
+                "username",
+                "",
+            ),
             "updatedAt": now,
         }
 
@@ -645,6 +1720,15 @@ def create_app(config=None, collection=None, correction_collection=None):
 
     @app.get("/api/registrations")
     def list_registrations():
+        if not require_role(
+            "operator",
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
         limit = clamp(
             request.args.get("limit", default=10, type=int),
             1,
@@ -669,6 +1753,11 @@ def create_app(config=None, collection=None, correction_collection=None):
 
     @app.get("/api/member-search")
     def member_search():
+        if not can_access_directory():
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
         query = (
             request.args.get("q", "")
             .strip()
@@ -830,6 +1919,38 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         return database["users"]
 
+    def get_public_accounts_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["public_accounts"]
+
+    def get_public_otp_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["public_otp"]
+
+    def get_self_registrations_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["self_registrations"]
+
+    def get_settings_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["app_settings"]
+
     def _ensure_mongo_collections():
         (
             client,
@@ -848,6 +1969,10 @@ def create_app(config=None, collection=None, correction_collection=None):
     app.get_collection = get_collection
     app.get_correction_collection = get_correction_collection
     app.get_users_collection = get_users_collection
+    app.get_public_accounts_collection = get_public_accounts_collection
+    app.get_public_otp_collection = get_public_otp_collection
+    app.get_self_registrations_collection = get_self_registrations_collection
+    app.get_settings_collection = get_settings_collection
     app.close_mongo = close_mongo
 
     return app
@@ -935,16 +2060,532 @@ def clamp(value, minimum, maximum):
 
 
 def require_auth():
-    return "user_id" in session
+    return is_staff_session() or is_public_session()
 
 def require_role(*roles):
     return (
-        session.get("role")
+        current_role()
         in roles
     )
 
 def current_role():
+    if is_public_session():
+        if session.get("public_status") == "approved":
+            return "viewer"
+
+        return "pending_public"
+
     return session.get("role")
+
+
+def is_staff_session():
+    return (
+        "user_id" in session
+        and session.get("auth_type") != "public"
+    )
+
+
+def is_public_session():
+    return (
+        session.get("auth_type") == "public"
+        and "public_account_id" in session
+    )
+
+
+def is_pending_public_session():
+    return (
+        is_public_session()
+        and session.get("public_status") != "approved"
+    )
+
+
+def can_access_directory():
+    if not require_auth():
+        return False
+
+    if is_pending_public_session():
+        return False
+
+    return True
+
+
+def current_owned_registration_id():
+    if not is_public_session():
+        return ""
+
+    public_account_id = session.get(
+        "public_account_id",
+        "",
+    )
+
+    if not public_account_id:
+        return ""
+
+    account = (
+        current_app_registration_database_lookup(
+            "public_accounts",
+            public_account_id,
+        )
+    )
+
+    if not account:
+        return ""
+
+    approved_registration_id = account.get(
+        "approvedRegistrationId",
+        "",
+    )
+
+    return str(approved_registration_id or "")
+
+
+def current_app_registration_database_lookup(collection_name, object_id):
+    from flask import current_app
+
+    collection_getters = {
+        "public_accounts": current_app.get_public_accounts_collection,
+    }
+
+    getter = collection_getters.get(collection_name)
+
+    if getter is None:
+        return None
+
+    try:
+        return getter().find_one({
+            "_id": ensure_object_id(object_id)
+        })
+    except Exception:
+        return None
+
+
+def can_view_registration(document):
+    if not document:
+        return False
+
+    role = current_role()
+
+    if role in {"admin", "super_admin"}:
+        return True
+
+    if role == "operator":
+        return document.get("createdBy") == session.get(
+            "username",
+            "",
+        )
+
+    if role == "viewer":
+        if is_public_session():
+            return str(document.get("_id")) == current_owned_registration_id()
+
+        return document.get("createdBy") == session.get(
+            "username",
+            "",
+        )
+
+    return False
+
+
+def can_edit_registration(document):
+    if not document:
+        return False
+
+    role = current_role()
+
+    if role in {"admin", "super_admin"}:
+        return True
+
+    if role == "viewer":
+        if is_public_session():
+            return str(document.get("_id")) == current_owned_registration_id()
+
+        return document.get("createdBy") == session.get(
+            "username",
+            "",
+        )
+
+    return False
+
+
+def now_utc():
+    return datetime.now(timezone.utc)
+
+
+def env_flag(name, default=False):
+    value = os.getenv(name)
+
+    if value is None:
+        return default
+
+    return value.strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def as_utc_datetime(value):
+    if not isinstance(value, datetime):
+        return value
+
+    if value.tzinfo is None:
+        return value.replace(
+            tzinfo=timezone.utc
+        )
+
+    return value.astimezone(
+        timezone.utc
+    )
+
+
+OTP_SETTINGS_KEY = "otp_settings"
+OTP_PROVIDER_TEST = "test"
+OTP_PROVIDER_MSG91 = "msg91"
+OTP_PROVIDER_META = "meta_whatsapp"
+OTP_EXPIRY_MINUTES = 5
+OTP_RESEND_SECONDS = 30
+OTP_MAX_ATTEMPTS = 5
+
+
+def default_otp_settings(test_mode=False):
+    active_provider = (
+        OTP_PROVIDER_TEST
+        if test_mode
+        else OTP_PROVIDER_MSG91
+    )
+
+    return {
+        "key": OTP_SETTINGS_KEY,
+        "activeProvider": active_provider,
+        "msg91": {
+            "authKey": "",
+            "widgetId": "",
+            "retryChannel": "text",
+        },
+        "metaWhatsApp": {
+            "accessToken": "",
+            "phoneNumberId": "",
+            "templateName": "",
+            "templateLanguage": "en_US",
+        },
+        "updatedAt": None,
+        "updatedBy": "",
+    }
+
+
+def normalize_otp_settings(payload=None, existing=None, test_mode=False):
+    payload = payload or {}
+    existing = existing or default_otp_settings(test_mode)
+
+    active_provider = (
+        payload.get("activeProvider")
+        or existing.get("activeProvider")
+        or (
+            OTP_PROVIDER_TEST
+            if test_mode
+            else OTP_PROVIDER_MSG91
+        )
+    )
+
+    if active_provider not in {
+        OTP_PROVIDER_TEST,
+        OTP_PROVIDER_MSG91,
+        OTP_PROVIDER_META,
+    }:
+        active_provider = (
+            OTP_PROVIDER_TEST
+            if test_mode
+            else OTP_PROVIDER_MSG91
+        )
+
+    return {
+        "key": OTP_SETTINGS_KEY,
+        "activeProvider": active_provider,
+        "msg91": {
+            "authKey": clean_text(
+                (payload.get("msg91") or {}).get("authKey")
+                or (existing.get("msg91") or {}).get("authKey")
+            ),
+            "widgetId": clean_text(
+                (payload.get("msg91") or {}).get("widgetId")
+                or (existing.get("msg91") or {}).get("widgetId")
+            ),
+            "retryChannel": clean_text(
+                (payload.get("msg91") or {}).get("retryChannel")
+                or (existing.get("msg91") or {}).get("retryChannel")
+                or "text"
+            ),
+        },
+        "metaWhatsApp": {
+            "accessToken": clean_text(
+                (payload.get("metaWhatsApp") or {}).get("accessToken")
+                or (existing.get("metaWhatsApp") or {}).get("accessToken")
+            ),
+            "phoneNumberId": clean_text(
+                (payload.get("metaWhatsApp") or {}).get("phoneNumberId")
+                or (existing.get("metaWhatsApp") or {}).get("phoneNumberId")
+            ),
+            "templateName": clean_text(
+                (payload.get("metaWhatsApp") or {}).get("templateName")
+                or (existing.get("metaWhatsApp") or {}).get("templateName")
+            ),
+            "templateLanguage": clean_text(
+                (payload.get("metaWhatsApp") or {}).get("templateLanguage")
+                or (existing.get("metaWhatsApp") or {}).get("templateLanguage")
+                or "en_US"
+            ),
+        },
+        "updatedAt": existing.get("updatedAt"),
+        "updatedBy": existing.get("updatedBy", ""),
+    }
+
+
+def serialize_public_account(account):
+    serialized = serialize_document(account)
+    return {
+        "id": serialized.get("_id", ""),
+        "mobileNumber": serialized.get("mobileNumber", ""),
+        "status": serialized.get("status", "pending"),
+        "approvedRegistrationId": serialized.get(
+            "approvedRegistrationId",
+            "",
+        ),
+        "latestSubmissionId": serialized.get(
+            "latestSubmissionId",
+            "",
+        ),
+        "latestVersion": serialized.get("latestVersion", 0),
+    }
+
+
+def serialize_self_registration(document):
+    serialized = serialize_registration_document(document)
+    serialized["submissionStatus"] = (
+        serialized.get("submissionStatus")
+        or "pending"
+    )
+    serialized["version"] = serialized.get("version", 1)
+    serialized["auditTrail"] = serialized.get("auditTrail") or []
+    return serialized
+
+
+def clean_text(value=""):
+    return " ".join(str(value or "").strip().split())
+
+
+def ensure_object_id(value):
+    if isinstance(value, ObjectId):
+        return value
+
+    return ObjectId(str(value))
+
+
+def object_id_or_none(value):
+    try:
+        return ensure_object_id(value)
+    except (InvalidId, TypeError, ValueError):
+        return None
+
+
+def generate_otp_code(fixed_code=""):
+    if fixed_code:
+        return str(fixed_code)
+
+    return "".join(
+        secrets.choice("0123456789")
+        for _ in range(6)
+    )
+
+
+def append_audit_event(document, event_type, actor, note="", timestamp=None):
+    timestamp = timestamp or now_utc()
+    trail = list(document.get("auditTrail") or [])
+    trail.append(
+        {
+            "type": event_type,
+            "actor": actor,
+            "note": note,
+            "timestamp": timestamp,
+        }
+    )
+    document["auditTrail"] = trail
+
+
+def create_pending_submission_for_account(
+    public_accounts,
+    submissions,
+    account,
+    normalized_value,
+    mobile_number,
+    now,
+    prior_status="pending",
+):
+    next_version = int(
+        account.get("latestVersion", 0)
+    ) + 1
+    document = {
+        **normalized_value,
+        "accountId": account["_id"],
+        "mobileNumber": mobile_number,
+        "version": next_version,
+        "submissionStatus": "pending",
+        "createdAt": now,
+        "updatedAt": now,
+        "reviewedAt": None,
+        "reviewedBy": "",
+        "reviewNote": "",
+        "approvedRegistrationId": "",
+    }
+    event_type = (
+        "resubmitted"
+        if prior_status == "approved"
+        else "submitted"
+    )
+    append_audit_event(
+        document,
+        event_type,
+        "self",
+        timestamp=now,
+    )
+
+    insert_result = submissions.insert_one(
+        document
+    )
+    document["_id"] = insert_result.inserted_id
+
+    public_accounts.update_one(
+        {
+            "_id": account["_id"]
+        },
+        {
+            "$set": {
+                "status": "pending",
+                "latestSubmissionId": insert_result.inserted_id,
+                "latestVersion": next_version,
+                "updatedAt": now,
+            }
+        }
+    )
+    account["status"] = "pending"
+    account["latestSubmissionId"] = (
+        insert_result.inserted_id
+    )
+    account["latestVersion"] = next_version
+    account["updatedAt"] = now
+
+    return document
+
+
+def build_public_session(account):
+    session.clear()
+    session["auth_type"] = "public"
+    session["public_account_id"] = str(account["_id"])
+    session["public_mobile"] = account["mobileNumber"]
+    session["public_status"] = account.get("status", "pending")
+    session["role"] = (
+        "viewer"
+        if account.get("status") == "approved"
+        else "pending_public"
+    )
+
+
+def send_otp_message(settings, mobile_number, otp_code, app_config):
+    active_provider = (
+        settings.get("activeProvider")
+        or OTP_PROVIDER_TEST
+    )
+
+    if (
+        app_config.get("OTP_TEST_MODE")
+        or active_provider == OTP_PROVIDER_TEST
+    ):
+        return {
+            "provider": OTP_PROVIDER_TEST,
+            "providerRef": "test-ref",
+        }
+
+    if active_provider == OTP_PROVIDER_MSG91:
+        msg91 = settings.get("msg91") or {}
+
+        if not msg91.get("authKey") or not msg91.get("widgetId"):
+            raise ValueError("MSG91 settings are incomplete.")
+
+        response = requests.post(
+            "https://api.msg91.com/api/v5/widget/sendOtp",
+            headers={
+                "authkey": msg91["authKey"],
+                "content-type": "application/json",
+            },
+            json={
+                "widgetId": msg91["widgetId"],
+                "identifier": mobile_number,
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        body = response.json()
+        return {
+            "provider": OTP_PROVIDER_MSG91,
+            "providerRef": (
+                body.get("reqId")
+                or body.get("request_id")
+                or body.get("message")
+                or ""
+            ),
+        }
+
+    if active_provider == OTP_PROVIDER_META:
+        meta = settings.get("metaWhatsApp") or {}
+
+        if (
+            not meta.get("accessToken")
+            or not meta.get("phoneNumberId")
+            or not meta.get("templateName")
+        ):
+            raise ValueError("Meta WhatsApp settings are incomplete.")
+
+        response = requests.post(
+            f"https://graph.facebook.com/v23.0/{meta['phoneNumberId']}/messages",
+            headers={
+                "Authorization": f"Bearer {meta['accessToken']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "messaging_product": "whatsapp",
+                "to": mobile_number.replace("+", ""),
+                "type": "template",
+                "template": {
+                    "name": meta["templateName"],
+                    "language": {
+                        "code": meta.get("templateLanguage") or "en_US"
+                    },
+                    "components": [
+                        {
+                            "type": "body",
+                            "parameters": [
+                                {
+                                    "type": "text",
+                                    "text": otp_code,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        body = response.json()
+        return {
+            "provider": OTP_PROVIDER_META,
+            "providerRef": (
+                ((body.get("messages") or [{}])[0]).get("id")
+                or ""
+            ),
+        }
+
+    raise ValueError("Unsupported OTP provider.")
 
 
 ROLE_ASSIGNMENT_RULES = {

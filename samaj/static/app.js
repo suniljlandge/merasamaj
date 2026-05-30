@@ -243,6 +243,7 @@ if (form) {
   renderFamilyMembers();
   setupLocationDropdowns();
   setupAutoCapitalization();
+  setupPhoneInputSanitization();
   syncWizardMode();
 
   form.addEventListener("submit", handleSubmit);
@@ -260,6 +261,7 @@ if (form) {
       setupLocationDropdowns();
       wireAutoTransliteration();
       setupAutoCapitalization();
+      setupPhoneInputSanitization();
       syncWizardMode();
     });
   });
@@ -350,6 +352,7 @@ function renderApplicantFields() {
 
   wireAutoTransliteration();
   setupAutoCapitalization();
+  setupPhoneInputSanitization();
 }
 
 function renderFamilyMembers(providedMembers = null) {
@@ -749,9 +752,11 @@ function renderMemberCard(index, value = {}, allMembers = []) {
           <input
             data-member-contact="${index}"
             inputmode="tel"
+            maxlength="10"
             value="${escapeAttribute(
               contactNumber
             )}"
+            placeholder="9876543210 (without +91)"
             required
           >
 
@@ -815,10 +820,11 @@ function renderMemberCard(index, value = {}, allMembers = []) {
   <input
     data-member-spouse-contact="${index}"
     inputmode="tel"
+    maxlength="10"
     value="${escapeAttribute(
       value.spouseContactNumber || ""
     )}"
-    placeholder="9876543210"
+    placeholder="9876543210 (without +91)"
   >
 
 </label>
@@ -1400,6 +1406,43 @@ function findMarathiPair(input) {
   return document.getElementById(marathiId);
 }
 
+function setupPhoneInputSanitization() {
+  if (!form) {
+    return;
+  }
+
+  if (form.dataset.phoneSanitizationWired === "true") {
+    return;
+  }
+
+  form.dataset.phoneSanitizationWired = "true";
+
+  form.addEventListener("input", (event) => {
+    const input = event.target;
+
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const isPhoneField =
+      input.id === "mobileNumber"
+      || input.hasAttribute("data-member-contact")
+      || input.hasAttribute("data-member-spouse-contact");
+
+    if (!isPhoneField) {
+      return;
+    }
+
+    const digitsOnly = input.value
+      .replace(/\D/g, "")
+      .slice(0, 10);
+
+    if (input.value !== digitsOnly) {
+      input.value = digitsOnly;
+    }
+  });
+}
+
 async function handleSubmit(event) {
   event.preventDefault();
 
@@ -1463,7 +1506,8 @@ async function handleSubmit(event) {
   }
 
   const successMessage =
-    form?.dataset.successMessage
+    body.message
+    || form?.dataset.successMessage
     || (
       submitMethod === "PUT"
         ? "Member updated successfully."
@@ -1475,6 +1519,20 @@ async function handleSubmit(event) {
     "success"
   );
 
+  document.dispatchEvent(
+    new CustomEvent(
+      "registration:submitted",
+      {
+        detail: {
+          body,
+          payload,
+          submitMethod,
+          submitUrl
+        }
+      }
+    )
+  );
+
   alert(successMessage);
 
 window.scrollTo({
@@ -1484,6 +1542,14 @@ window.scrollTo({
 
 if (recentRecords) {
   loadRecentRecords();
+}
+
+if (body.redirectTo) {
+  window.setTimeout(() => {
+    window.location.href =
+      body.redirectTo;
+  }, 500);
+  return;
 }
 
 if (form?.dataset.resetOnSuccess === "false") {
@@ -1929,7 +1995,7 @@ function getWizardStepForField(fieldName = "") {
 function validateWizardStep(stepNumber) {
   const payload = readRegistration();
   const errors = [];
-  const phonePattern = /^(?:\+91)?[6-9]\d{9}$/;
+  const phonePattern = /^[6-9]\d{9}$/;
 
   if (stepNumber === 1) {
     if (!payload.firstName.en.trim()) {

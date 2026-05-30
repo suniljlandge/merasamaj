@@ -17,6 +17,10 @@
   <script>
   window.CURRENT_ROLE =
     "{{ current_role }}";
+  window.CURRENT_USERNAME =
+    "{{ session.get('username', '') }}";
+  window.CURRENT_OWNED_REGISTRATION_ID =
+    "{{ current_owned_registration_id }}";
   </script>
 
   <script src="https://cdn.tailwindcss.com"></script>
@@ -184,6 +188,60 @@
         "
       >
         Users
+      </a>
+
+      <a
+        href="/self-registration-review"
+        class="
+          h-10 md:h-11
+
+          px-4 md:px-5
+
+          rounded-full
+          border border-slate-300
+
+          bg-white
+
+          flex items-center justify-center
+
+          text-sm md:text-base
+          font-semibold
+
+          hover:bg-slate-50
+          transition
+
+          whitespace-nowrap
+        "
+      >
+        Reviews
+      </a>
+      {% endif %}
+
+      {% if current_role == "super_admin" %}
+      <a
+        href="/otp-settings"
+        class="
+          h-10 md:h-11
+
+          px-4 md:px-5
+
+          rounded-full
+          border border-slate-300
+
+          bg-white
+
+          flex items-center justify-center
+
+          text-sm md:text-base
+          font-semibold
+
+          hover:bg-slate-50
+          transition
+
+          whitespace-nowrap
+        "
+      >
+        OTP
       </a>
       {% endif %}
 

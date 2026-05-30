@@ -202,7 +202,8 @@
         window.CURRENT_ROLE;
 
       const canEdit =
-        currentRole === "admin"
+        currentRole === "viewer"
+        || currentRole === "admin"
         || currentRole === "super_admin";
 
       const editLink =
@@ -220,6 +221,11 @@
           "#admin-permission-copy"
         ).textContent =
           "This account can view records but cannot edit them.";
+      } else if (currentRole === "viewer") {
+        document.querySelector(
+          "#admin-permission-copy"
+        ).textContent =
+          "This account can view and update only its own record.";
       }
 
       async function loadMember() {

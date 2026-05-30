@@ -381,10 +381,39 @@ function renderActionButtons(
 
   const role =
     window.CURRENT_ROLE;
+  const currentUsername =
+    window.CURRENT_USERNAME || "";
+  const currentOwnedRegistrationId =
+    window.CURRENT_OWNED_REGISTRATION_ID || "";
 
   const canEdit =
     role === "admin" ||
-    role === "super_admin";
+    role === "super_admin" ||
+    (
+      role === "viewer" &&
+      (
+        record.createdBy === currentUsername ||
+        record._id === currentOwnedRegistrationId
+      )
+    );
+  const canView =
+    role === "admin" ||
+    role === "super_admin" ||
+    (
+      role === "operator" &&
+      record.createdBy === currentUsername
+    ) ||
+    (
+      role === "viewer" &&
+      (
+        record.createdBy === currentUsername ||
+        record._id === currentOwnedRegistrationId
+      )
+    );
+
+  if (!canView && !canEdit) {
+    return "";
+  }
 
   return `
     <div
@@ -394,12 +423,18 @@ function renderActionButtons(
       "
     >
 
-      <button
-        class="button-secondary"
-        onclick="viewMember('${record._id}')"
-      >
-        View
-      </button>
+      ${
+        canView
+          ? `
+            <button
+              class="button-secondary"
+              onclick="viewMember('${record._id}')"
+            >
+              View
+            </button>
+          `
+          : ""
+      }
 
       ${
         canEdit

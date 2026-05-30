@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>Self Registration Review</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    >
+    <script>
+      window.CURRENT_ROLE = "{{ current_role }}";
+    </script>
+    <script
+      defer
+      src="{{ url_for('static', filename='self-registration-review.js') }}"
+    ></script>
+  </head>
+  <body class="directory-body">
+    <header class="topbar">
+      <a
+        class="brand"
+        href="/"
+        aria-label="SAMAJ home"
+      >
+        <span
+          class="brand-mark"
+          aria-hidden="true"
+        ></span>
+        <span>SAMAJ</span>
+      </a>
+
+      <div
+        style="
+          display:flex;
+          align-items:center;
+          gap:16px;
+        "
+      >
+        {% if current_role == "super_admin" %}
+        <a
+          href="/otp-settings"
+          class="button-secondary"
+        >
+          OTP settings
+        </a>
+        {% endif %}
+        <a
+          href="/logout"
+          class="button-ghost"
+        >
+          Logout
+        </a>
+      </div>
+    </header>
+
+    <main class="directory-layout">
+      <section class="directory-table-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">
+              Pending queue
+            </p>
+            <h2>
+              Self Registration Review
+            </h2>
+            <p>
+              Approve or reject public mobile submissions and inspect their version history.
+            </p>
+          </div>
+        </div>
+
+        <div id="self-registration-review-list">
+          Loading submissions...
+        </div>
+      </section>
+    </main>
+
+    <div
+      id="submission-viewer"
+      class="review-modal"
+      hidden
+    >
+      <div
+        class="review-modal-backdrop"
+        data-close-review-modal
+      ></div>
+
+      <section
+        class="review-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="submission-viewer-title"
+      >
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">
+              Full submission
+            </p>
+            <h2 id="submission-viewer-title">
+              Submission details
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            class="button-ghost"
+            data-close-review-modal
+          >
+            Close
+          </button>
+        </div>
+
+        <div id="submission-viewer-body"></div>
+      </section>
+    </div>
+  </body>
+</html>

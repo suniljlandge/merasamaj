@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>OTP Settings</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    >
+    <script
+      defer
+      src="{{ url_for('static', filename='otp-settings.js') }}"
+    ></script>
+  </head>
+  <body class="directory-body">
+    <header class="topbar">
+      <a
+        class="brand"
+        href="/"
+        aria-label="SAMAJ home"
+      >
+        <span
+          class="brand-mark"
+          aria-hidden="true"
+        ></span>
+        <span>SAMAJ</span>
+      </a>
+
+      <div
+        style="
+          display:flex;
+          align-items:center;
+          gap:16px;
+        "
+      >
+        <a
+          href="/self-registration-review"
+          class="button-secondary"
+        >
+          Review queue
+        </a>
+        <a
+          href="/logout"
+          class="button-ghost"
+        >
+          Logout
+        </a>
+      </div>
+    </header>
+
+    <main class="directory-layout">
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">
+              Super admin
+            </p>
+            <h2>
+              OTP Provider Settings
+            </h2>
+            <p>
+              Store MSG91 and Meta WhatsApp credentials, then select which delivery service should be active.
+            </p>
+          </div>
+        </div>
+
+        <form
+          class="form-surface"
+          id="otp-settings-form"
+          novalidate
+        >
+          <div class="field-grid">
+            <label class="field">
+              <span>Active provider</span>
+              <select id="activeProvider">
+                <option value="msg91">MSG91</option>
+                <option value="meta_whatsapp">Meta WhatsApp</option>
+                <option value="test">Test mode</option>
+              </select>
+            </label>
+          </div>
+
+          <h3 style="margin-top:20px;">MSG91</h3>
+          <div class="field-grid">
+            <label class="field">
+              <span>Auth key</span>
+              <input id="msg91AuthKey">
+            </label>
+            <label class="field">
+              <span>Widget ID</span>
+              <input id="msg91WidgetId">
+            </label>
+            <label class="field">
+              <span>Retry channel</span>
+              <input id="msg91RetryChannel" value="text">
+            </label>
+          </div>
+
+          <h3 style="margin-top:20px;">Meta WhatsApp Cloud API</h3>
+          <div class="field-grid">
+            <label class="field">
+              <span>Access token</span>
+              <input id="metaAccessToken">
+            </label>
+            <label class="field">
+              <span>Phone number ID</span>
+              <input id="metaPhoneNumberId">
+            </label>
+            <label class="field">
+              <span>Template name</span>
+              <input id="metaTemplateName">
+            </label>
+            <label class="field">
+              <span>Template language</span>
+              <input id="metaTemplateLanguage" value="en_US">
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button
+              class="button-primary"
+              type="submit"
+            >
+              Save settings
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

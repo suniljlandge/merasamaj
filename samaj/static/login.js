@@ -1,0 +1,235 @@
+const loginButton = document.querySelector("#loginButton");
+const requestOtpButton = document.querySelector("#requestOtpButton");
+const resendOtpButton = document.querySelector("#resendOtpButton");
+const verifyOtpButton = document.querySelector("#verifyOtpButton");
+const staffModeButton = document.querySelector("#staffModeButton");
+const mobileModeButton = document.querySelector("#mobileModeButton");
+const staffLoginPanel = document.querySelector("#staff-login-panel");
+const mobileLoginPanel = document.querySelector("#mobile-login-panel");
+const mobileInput = document.querySelector("#public-mobile");
+const otpInput = document.querySelector("#public-otp");
+const otpPanel = document.querySelector("#otp-panel");
+const loginModeCopy = document.querySelector("#login-mode-copy");
+const mobileHelpText = document.querySelector("#mobile-help-text");
+const otpStatusNote = document.querySelector("#otp-status-note");
+
+const MOBILE_PATTERN = /^[6-9]\d{9}$/;
+
+if (loginButton) {
+  loginButton.addEventListener("click", loginStaffUser);
+}
+
+if (requestOtpButton) {
+  requestOtpButton.addEventListener("click", requestOtp);
+}
+
+if (resendOtpButton) {
+  resendOtpButton.addEventListener("click", resendOtp);
+}
+
+if (verifyOtpButton) {
+  verifyOtpButton.addEventListener("click", verifyOtp);
+}
+
+if (staffModeButton) {
+  staffModeButton.addEventListener("click", () => {
+    activateMode("staff");
+  });
+}
+
+if (mobileModeButton) {
+  mobileModeButton.addEventListener("click", () => {
+    activateMode("mobile");
+  });
+}
+
+if (mobileInput) {
+  mobileInput.addEventListener("input", handleMobileInput);
+  mobileInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !requestOtpButton.hidden) {
+      requestOtp();
+    }
+  });
+}
+
+if (otpInput) {
+  otpInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      verifyOtp();
+    }
+  });
+}
+
+activateMode("staff");
+
+function activateMode(mode) {
+  const isStaffMode = mode === "staff";
+
+  staffLoginPanel.hidden = !isStaffMode;
+  mobileLoginPanel.hidden = isStaffMode;
+
+  staffModeButton.className = isStaffMode
+    ? "button-primary"
+    : "button-secondary";
+  mobileModeButton.className = isStaffMode
+    ? "button-secondary"
+    : "button-primary";
+
+  loginModeCopy.textContent = isStaffMode
+    ? "Username and password login for super admin, admin, operator, and viewer accounts."
+    : "Verify your 10-digit Indian mobile number with OTP to start or continue your samaj self-registration.";
+
+  if (!isStaffMode) {
+    handleMobileInput();
+    mobileInput.focus();
+  }
+}
+
+function handleMobileInput() {
+  const mobileNumber = getNormalizedMobile();
+  const isValid = MOBILE_PATTERN.test(mobileNumber);
+
+  requestOtpButton.hidden = !isValid;
+
+  if (!isValid) {
+    otpPanel.hidden = true;
+    otpInput.value = "";
+    clearOtpStatus();
+    mobileHelpText.textContent =
+      "Enter a valid Indian mobile number to continue.";
+    return;
+  }
+
+  mobileHelpText.textContent =
+    "Valid mobile number detected. Send OTP to continue.";
+}
+
+function getNormalizedMobile() {
+  return String(mobileInput?.value || "")
+    .replace(/\D/g, "")
+    .slice(0, 10);
+}
+
+async function loginStaffUser() {
+  const response = await fetch("/login", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      username: document.querySelector("#username").value,
+      password: document.querySelector("#password").value
+    })
+  });
+
+  if (response.ok) {
+    window.location = "/";
+    return;
+  }
+
+  window.alert("Invalid credentials");
+}
+
+async function requestOtp() {
+  await postOtpAction(
+    "/api/public/request-otp",
+    "OTP sent successfully."
+  );
+}
+
+async function resendOtp() {
+  await postOtpAction(
+    "/api/public/resend-otp",
+    "OTP resent successfully."
+  );
+}
+
+async function postOtpAction(url, successMessage) {
+  try {
+    const mobileNumber = getNormalizedMobile();
+
+    if (!MOBILE_PATTERN.test(mobileNumber)) {
+      throw new Error("Enter a valid 10-digit Indian mobile number.");
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        mobileNumber
+      })
+    });
+    const body = await response.json();
+
+    if (!response.ok) {
+      throw new Error(body.error || "OTP request failed.");
+    }
+
+    mobileInput.value = mobileNumber;
+    otpPanel.hidden = false;
+    setOtpStatus(
+      `${successMessage.replace(/\.$/, "")} to ${mobileNumber}.`
+    );
+
+    let message = successMessage;
+
+    if (body.otpCode) {
+      message += ` Test OTP: ${body.otpCode}`;
+    }
+
+    window.alert(message);
+    otpInput.focus();
+  } catch (error) {
+    window.alert(error.message || "OTP request failed.");
+  }
+}
+
+async function verifyOtp() {
+  try {
+    const mobileNumber = getNormalizedMobile();
+    const otp = String(otpInput?.value || "").trim();
+
+    if (!MOBILE_PATTERN.test(mobileNumber)) {
+      throw new Error("Enter a valid 10-digit Indian mobile number.");
+    }
+
+    if (!otp) {
+      throw new Error("Enter the OTP to continue.");
+    }
+
+    const response = await fetch("/api/public/verify-otp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        mobileNumber,
+        otp
+      })
+    });
+    const body = await response.json();
+
+    if (!response.ok) {
+      throw new Error(body.error || "OTP verification failed.");
+    }
+
+    window.location = body.redirectTo || "/";
+  } catch (error) {
+    window.alert(error.message || "OTP verification failed.");
+  }
+}
+
+function setOtpStatus(text) {
+  if (!otpStatusNote) {
+    return;
+  }
+
+  otpStatusNote.hidden = !text;
+  otpStatusNote.textContent = text;
+}
+
+function clearOtpStatus() {
+  setOtpStatus("");
+}
