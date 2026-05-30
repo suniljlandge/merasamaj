@@ -5,6 +5,12 @@ import bcrypt
 from bson import ObjectId
 from flask_session import Session
 
+from .migration import (
+    transform_old_record,
+    find_duplicate,
+    regenerate_marathi_fields,
+)
+
 from flask import (
     Flask,
     jsonify,
@@ -85,6 +91,124 @@ def create_app(config=None, collection=None, correction_collection=None):
             current_role=session.get("role")
         )
 
+    @app.post("/api/bulk-import")
+    def bulk_import_endpoint():
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        payload = request.get_json(silent=True)
+
+        if not isinstance(payload, list):
+            return jsonify({
+                "error": "Array payload required"
+            }), 400
+
+        collection = get_collection()
+
+        correction_store = (
+            get_correction_collection()
+        )
+
+        overrides = load_corrections(
+            correction_store
+        )
+
+        imported = []
+        duplicates = []
+        invalid = []
+
+        for index, item in enumerate(payload):
+
+            try:
+
+                transformed = transform_old_record(
+                    item,
+                    overrides,
+                )
+
+                validation = validate_registration(
+                    transformed,
+                    overrides,
+                )
+
+                if not validation["valid"]:
+
+                    invalid.append({
+                        "index": index,
+                        "errors": validation["errors"]
+                    })
+
+                    continue
+
+                normalized = validation["value"]
+
+                duplicate = find_duplicate(
+                    normalized
+                )
+
+                if duplicate:
+
+                    duplicates.append({
+                        "index": index,
+                        "existingId": str(
+                            duplicate["_id"]
+                        ),
+                        "mobileNumber": duplicate.get(
+                            "mobileNumber"
+                        ),
+                    })
+
+                    continue
+
+                result = collection.insert_one(
+                    normalized
+                )
+
+                corrections = (
+                    collect_transliteration_corrections(
+                        normalized,
+                        overrides,
+                    )
+                )
+
+                save_corrections(
+                    correction_store,
+                    corrections,
+                )
+
+                imported.append({
+                    "index": index,
+                    "insertedId": str(
+                        result.inserted_id
+                    )
+                })
+
+            except Exception as error:
+
+                invalid.append({
+                    "index": index,
+                    "error": str(error)
+                })
+
+        return jsonify({
+            "ok": True,
+
+            "summary": {
+                "imported": len(imported),
+                "duplicates": len(duplicates),
+                "invalid": len(invalid),
+            },
+
+            "importedRecords": imported,
+            "duplicates": duplicates,
+            "invalidRecords": invalid,
+        })
 
     @app.route("/edit-member/<id>")
     def edit_member_page(id):

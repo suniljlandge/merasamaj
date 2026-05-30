@@ -1074,7 +1074,7 @@ function hasMemberSpouseDetails(member = {}) {
 function setupLocationDropdowns(
   selectedState = "Maharashtra",
   selectedDistrict = "Washim",
-  selectedTaluka = ""
+  selectedTaluka = "Washim"
 ) {
   const stateSelect =
     document.querySelector("#state");
