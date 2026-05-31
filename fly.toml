@@ -1,0 +1,22 @@
+app = "solarstation"
+primary_region = "iad"
+
+[processes]
+app = "gunicorn --workers=1 --threads=8 --timeout=800 --max-requests=800 --max-requests-jitter=25 -b 0.0.0.0:8080 app:app"
+
+[http_service]
+auto_start_machines = true
+auto_stop_machines = "stop"
+force_https = true
+internal_port = 8080
+min_machines_running = 0
+processes = ["app"]
+
+[http_service.concurrency]
+type = "requests"
+soft_limit = 6
+
+[[vm]]
+cpu_kind = "shared"
+cpus = 1
+memory = "512mb"
