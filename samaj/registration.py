@@ -260,36 +260,35 @@ def validate_registration(
                     "message": "Contact number invalid.",
                 }
             )
+########
+        relation = normalize_relation_key(
+            member.get("relationToApplicant")
+        )
 
-        if has_spouse_details(member):
+        requires_spouse_name = relation in {
+            "daughter",
+            "sister",
+            "granddaughter",
+            "grand-daughter",
+        }
+
+        if member.get("isMarried") and requires_spouse_name:
 
             if not member["spouseName"]["en"]:
                 errors.append(
                     {
-                        "field": f"familyMembers.{index}.spouseName.en",
-                        "message": "Spouse name required when spouse details are entered.",
+                        "field": f"familyMembers.{index}.spouseName",
+                        "message": "Spouse name required.",
                     }
                 )
-
-            if not PHONE_PATTERN.match(
-                member["spouseContactNumber"]
-            ):
-                errors.append(
-                    {
-                        "field": f"familyMembers.{index}.spouseContactNumber",
-                        "message": "Valid spouse contact number required.",
-                    }
-                )
-
 
             if not member["currentCity"]:
                 errors.append(
                     {
                         "field": f"familyMembers.{index}.currentCity",
-                        "message": "Current city required for married member.",
+                        "message": "Current city required.",
                     }
                 )
-
     return {
         "valid": not errors,
         "errors": errors,
@@ -432,9 +431,6 @@ def _normalize_family_member(
             overrides,
         ),
 
-        "spouseContactNumber": normalize_phone(
-            member.get("spouseContactNumber")
-        ),
 
         "currentCity": clean_text(
             member.get("currentCity")
@@ -497,18 +493,6 @@ def calculate_family_members_count(members=None):
 
     return total
 
-
-def has_spouse_details(member=None):
-    member = member or {}
-    spouse_name = member.get("spouseName") or {}
-
-    return bool(
-        spouse_name.get("en")
-        or spouse_name.get("mr")
-        or member.get("spouseContactNumber")
-        or member.get("currentCity")
-        or member.get("spouseMemberId")
-    )
 
 
 def normalize_relationship_links(value=None, member=None):

@@ -501,10 +501,31 @@ memberContainer
           return;
         }
 
-        section.style.display =
-          hasMemberSpouseDetails(readFamilyMembers()[Number(index)])
-            ? "grid"
+      const relation =
+        memberContainer.querySelector(
+          `[data-member-relation="${index}"]`
+        )?.value || "";
+
+      section.style.display =
+        shouldShowMarriageFields(
+          relation,
+          checkbox.checked
+        )
+          ? "grid"
+          : "none";
+      const spouseField =
+        section.querySelector(
+          ".spouse-name-field"
+        );
+
+      if (spouseField) {
+        spouseField.style.display =
+          requiresSpouseName(
+            relation
+          )
+            ? "block"
             : "none";
+      }
       }
     );
 
@@ -571,13 +592,51 @@ memberContainer
           checkbox.checked = false;
 
           section.style.display =
-            "none";
+            shouldShowMarriageFields(
+              select.value,
+              checkbox.checked
+            )
+              ? "grid"
+              : "none";
+
+          const spouseField =
+            section.querySelector(
+              ".spouse-name-field"
+            );
+
+          if (spouseField) {
+            spouseField.style.display =
+              requiresSpouseName(
+                select.value
+              )
+                ? "block"
+                : "none";
+          }
 
           return;
         }
 
-        section.style.display =
-          "none";
+      section.style.display =
+        shouldShowMarriageFields(
+          select.value,
+          checkbox.checked
+        )
+          ? "grid"
+          : "none";
+
+      const spouseField =
+        section.querySelector(
+          ".spouse-name-field"
+        );
+
+      if (spouseField) {
+        spouseField.style.display =
+          requiresSpouseName(
+            select.value
+          )
+            ? "block"
+            : "none";
+      }
       }
     );
 
@@ -619,10 +678,7 @@ function renderMemberCard(index, value = {}, allMembers = []) {
     mr: ""
   };
 
-  const spouseNameValue = value.spouseName ?? {
-    en: "",
-    mr: ""
-  };
+
 
   const relationValue =
     readRelationText(
@@ -640,8 +696,11 @@ function renderMemberCard(index, value = {}, allMembers = []) {
   const isMarried =
     value.isMarried
     ?? OBVIOUS_MARRIED_RELATIONS.includes(relationValue);
-  const hasSpouseDetails =
-    hasMemberSpouseDetails(value);
+  const showMarriageFields =
+    shouldShowMarriageFields(
+      relationValue,
+      isMarried
+    );
 
   const memberId =
     value.personId
@@ -797,48 +856,42 @@ function renderMemberCard(index, value = {}, allMembers = []) {
         class="field-grid married-fields"
         data-married-fields="${index}"
         style="
-          display:${hasSpouseDetails ? "grid" : "none"};
+          display:${showMarriageFields ? "grid" : "none"};
           margin-top:16px;
         "
       >
 
-        ${renderBilingualField(
-          {
-            key: "spouseName",
-            label: "Spouse name",
-            required: false
-          },
-          "spouseName",
-          spouseNameValue,
-          `member-${index}-`
-        )}
+<label
+  class="field spouse-name-field"
+  style="
+    display:${
+      requiresSpouseName(relationValue)
+        ? "block"
+        : "none"
+    };
+  "
+>
+  <span>Spouse Name</span>
 
-<label class="field">
-
-  <span>Spouse contact number</span>
-
-  <input
-    data-member-spouse-contact="${index}"
-    inputmode="tel"
-    maxlength="10"
-    value="${escapeAttribute(
-      value.spouseContactNumber || ""
-    )}"
-    placeholder="9876543210 (without +91)"
-  >
+<input
+  data-member-spouse-name="${index}"
+  value="${escapeAttribute(
+    value.spouseName?.en || ""
+  )}"
+  placeholder="Enter spouse name"
+>
 
 </label>
 
 <label class="field">
-
-  <span>Current city</span>
-
+  <span>Current City</span>
   <input
     data-member-current-city="${index}"
-    value="${escapeAttribute(currentCity)}"
+    value="${escapeAttribute(
+      currentCity
+    )}"
     placeholder="Pune"
   >
-
 </label>
 
       </div>
@@ -1067,15 +1120,22 @@ function readRelationText(value = "") {
   return "";
 }
 
-function hasMemberSpouseDetails(member = {}) {
-  return Boolean(
-    member.spouseName?.en
-    || member.spouseName?.mr
-    || member.spouseContactNumber
-    || member.currentCity
-    || member.spouseMemberId
-  );
+function requiresSpouseName(relation = "") {
+  return [
+    "Daughter",
+    "Sister",
+    "Granddaughter"
+  ].includes(relation);
 }
+
+function shouldShowMarriageFields(
+  relation,
+  isMarried
+) {
+  return isMarried;
+}
+
+
 
 function setupLocationDropdowns(
   selectedState = "Maharashtra",
@@ -1426,8 +1486,7 @@ function setupPhoneInputSanitization() {
 
     const isPhoneField =
       input.id === "mobileNumber"
-      || input.hasAttribute("data-member-contact")
-      || input.hasAttribute("data-member-spouse-contact");
+      || input.hasAttribute("data-member-contact");
 
     if (!isPhoneField) {
       return;
@@ -1810,15 +1869,15 @@ function readFamilyMembers() {
         `[data-member-married="${index}"]`
       )?.checked || false,
 
-    spouseName: readBilingualValue(
-      "spouseName",
-      card
-    ),
+spouseName: {
+  en:
+    card.querySelector(
+      `[data-member-spouse-name="${index}"]`
+    )?.value || "",
+  mr: ""
+},
 
-    spouseContactNumber:
-      card.querySelector(
-        `[data-member-spouse-contact="${index}"]`
-      )?.value || "",
+
 
     currentCity:
       card.querySelector(
@@ -2097,28 +2156,31 @@ function validateWizardStep(stepNumber) {
         });
       }
 
-      if (hasMemberSpouseDetails(member)) {
-        if (!member.spouseName.en.trim()) {
-          errors.push({
-            field: `familyMembers.${index}.spouseName.en`,
-            message: "Spouse name required when spouse details are entered."
-          });
-        }
+if (member.isMarried) {
 
-        if (!phonePattern.test(member.spouseContactNumber.trim())) {
-          errors.push({
-            field: `familyMembers.${index}.spouseContactNumber`,
-            message: "Valid spouse contact number required."
-          });
-        }
+  if (
+    requiresSpouseName(
+      member.relationToApplicant
+    )
+  ) {
 
-        if (!member.currentCity.trim()) {
-          errors.push({
-            field: `familyMembers.${index}.currentCity`,
-            message: "Current city required for married member."
-          });
-        }
-      }
+    if (!member.currentCity.trim()) {
+      errors.push({
+        field: `familyMembers.${index}.currentCity`,
+        message: "Current city required."
+      });
+    }
+
+    if (!member.spouseName?.en?.trim()) {
+      errors.push({
+        field: `familyMembers.${index}.spouseName`,
+        message: "Spouse name required."
+      });
+    }
+
+  }
+
+}
     });
   }
 
@@ -2135,11 +2197,17 @@ function findInputForFieldName(fieldName = "") {
     const index = parts[1];
     const fieldKey = parts[2];
 
-    if (fieldKey === "name" || fieldKey === "spouseName") {
-      return document.querySelector(
-        `#member-${index}-${fieldKey}-en`
-      );
-    }
+if (fieldKey === "name") {
+  return document.querySelector(
+    `#member-${index}-name-en`
+  );
+}
+
+if (fieldKey === "spouseName") {
+  return document.querySelector(
+    `[data-member-spouse-name="${index}"]`
+  );
+}
 
     if (
       fieldKey === "relationToApplicant"
@@ -2156,11 +2224,7 @@ function findInputForFieldName(fieldName = "") {
       );
     }
 
-    if (fieldKey === "spouseContactNumber") {
-      return document.querySelector(
-        `[data-member-spouse-contact="${index}"]`
-      );
-    }
+
 
     if (fieldKey === "currentCity") {
       return document.querySelector(
