@@ -1505,18 +1505,35 @@ function setupPhoneInputSanitization() {
 async function handleSubmit(event) {
   event.preventDefault();
 
+  const submitButtons = form.querySelectorAll(
+    'button[type="submit"]'
+  );
+
+  submitButtons.forEach((button) => {
+    button.disabled = true;
+    button.dataset.originalText = button.textContent;
+    button.textContent = "Saving...";
+  });
+
   clearMessage();
 
   clearFieldErrors();
 
-  if (isMobileWizardEnabled()) {
-    const errors = validateWizardStep(3);
+if (isMobileWizardEnabled()) {
+  const errors = validateWizardStep(3);
 
-    if (errors.length) {
-      highlightValidationErrors(errors);
-      return;
-    }
+  if (errors.length) {
+
+    submitButtons.forEach((button) => {
+      button.disabled = false;
+      button.textContent =
+        button.dataset.originalText || "Save";
+    });
+
+    highlightValidationErrors(errors);
+    return;
   }
+}
 
   const payload = readRegistration();
   const submitUrl =
@@ -1526,19 +1543,39 @@ async function handleSubmit(event) {
     form?.dataset.submitMethod
     || "POST";
 
-  const response = await fetch(
+let response;
+let body;
+
+try {
+
+  response = await fetch(
     submitUrl,
     {
       method: submitMethod,
       headers: {
-        "content-type":
-          "application/json"
+        "content-type": "application/json"
       },
       body: JSON.stringify(payload)
     }
   );
 
-  const body = await response.json();
+  body = await response.json();
+
+} catch (error) {
+
+  submitButtons.forEach((button) => {
+    button.disabled = false;
+    button.textContent =
+      button.dataset.originalText || "Save";
+  });
+
+  showMessage(
+    "Failed to connect to server.",
+    "error"
+  );
+
+  return;
+}
 
   console.log(
   "SAVE RESPONSE:",
@@ -1546,23 +1583,30 @@ async function handleSubmit(event) {
   body
 );
 
-  if (!response.ok) {
-    showMessage(
-      body.error ||
-        "Validation failed.",
-      "error"
+if (!response.ok) {
+
+  submitButtons.forEach((button) => {
+    button.disabled = false;
+    button.textContent =
+      button.dataset.originalText || "Save";
+  });
+
+  showMessage(
+    body.error ||
+      "Validation failed.",
+    "error"
+  );
+
+  if (
+    Array.isArray(body.errors)
+  ) {
+    highlightValidationErrors(
+      body.errors
     );
-
-    if (
-      Array.isArray(body.errors)
-    ) {
-      highlightValidationErrors(
-        body.errors
-      );
-    }
-
-    return;
   }
+
+  return;
+}
 
   const successMessage =
     body.message
@@ -1573,10 +1617,47 @@ async function handleSubmit(event) {
         : "Registration saved successfully."
     );
 
-  showMessage(
-    successMessage,
-    "success"
-  );
+showMessage(
+  successMessage,
+  "success"
+);
+
+submitButtons.forEach((button) => {
+  button.disabled = false;
+  button.textContent =
+    button.dataset.originalText || "Save";
+});
+
+setTimeout(() => {
+
+  form.reset();
+
+  memberCount = 1;
+
+  if (memberCountInput) {
+    memberCountInput.value = "1";
+  }
+
+  renderFamilyMembers();
+
+  setupLocationDropdowns();
+
+  wireAutoTransliteration();
+  setupAutoCapitalization();
+
+  clearFieldErrors();
+  clearMessage();
+
+  currentWizardStep = 1;
+  syncWizardMode();
+
+  submitButtons.forEach((button) => {
+    button.disabled = false;
+    button.textContent =
+      button.dataset.originalText || "Save";
+  });
+
+}, 800);
 
   document.dispatchEvent(
     new CustomEvent(
