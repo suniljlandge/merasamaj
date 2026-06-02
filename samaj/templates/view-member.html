@@ -11,6 +11,11 @@
       rel="stylesheet"
       href="{{ url_for('static', filename='styles.css') }}"
     >
+     <link
+  rel="icon"
+  href="{{ url_for('static', filename='favicon.png') }}"
+  type="image/png"
+>
     <script>
       window.CURRENT_ROLE = "{{ current_role }}";
     </script>
@@ -302,10 +307,8 @@
         ).textContent =
           member.familyType || "nuclear";
 
-document.querySelector(
-  "#member-created-info"
-).textContent =
-  `Added by ${member.createdBy || "-"} · ${
+let auditText =
+  `👤 Added by ${member.createdBy || "-"} · ${
     member.createdAt
       ? new Date(member.createdAt)
           .toLocaleDateString("en-GB", {
@@ -315,6 +318,30 @@ document.querySelector(
           })
       : "-"
   }`;
+
+if (
+  member.updatedBy &&
+  member.updatedAt &&
+  (
+    member.updatedBy !== member.createdBy ||
+    member.updatedAt !== member.createdAt
+  )
+) {
+  auditText +=
+    ` | ✏️ Updated by ${member.updatedBy} · ${
+      new Date(member.updatedAt)
+        .toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric"
+        })
+    }`;
+}
+
+document.querySelector(
+  "#member-created-info"
+).textContent =
+  auditText;
 
         document.querySelector(
           "#member-summary-grid"
