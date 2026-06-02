@@ -10,7 +10,7 @@ from samaj.app import create_app
 
 app = create_app()
 
-app.config["SESSION_TYPE"] = "filesystem"
+
 app.config["SECRET_KEY"] = "change-this-secret"
 
 Session(app)

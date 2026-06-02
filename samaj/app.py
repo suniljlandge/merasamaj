@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 import bcrypt
 import requests
-
+from pymongo import MongoClient
 from bson import ObjectId
 from bson.errors import InvalidId
 from flask_session import Session
@@ -64,11 +64,22 @@ def create_app(config=None, collection=None, correction_collection=None):
     app.config["SESSION_TYPE"] = "mongodb"
     app.config["SESSION_MONGODB"] = session_db.client
     app.config["SESSION_MONGODB_DB"] = session_db.name
-    app.config["SESSION_MONGODB_COLLECTION"] = "sessions"
+    app.config["SESSION_MONGODB_COLLECT"] = "sessions"
 
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+    app.config["SESSION_PERMANENT"] = True
 
     Session(app)
+
+    print("SESSION_TYPE =", app.config["SESSION_TYPE"])
+    print(
+        "SESSION_MONGODB_COLLECT =",
+        app.config.get("SESSION_MONGODB_COLLECT")
+    )
+    print(
+        "SESSION_MONGODB_COLLECTION =",
+        app.config.get("SESSION_MONGODB_COLLECTION")
+    )
 
     app.config.update(
         MONGO_URI=os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017"),
@@ -1036,6 +1047,20 @@ def create_app(config=None, collection=None, correction_collection=None):
             ),
         }), 201
 
+    @app.get("/api/debug-session")
+    def debug_session():
+        return {
+            "session_class": str(type(session)),
+            "session_data": dict(session),
+            "session_type": app.config.get("SESSION_TYPE"),
+            "session_interface": str(type(app.session_interface)),
+            "mongodb_collect": app.config.get(
+                "SESSION_MONGODB_COLLECT"
+            ),
+            "mongodb_collection": app.config.get(
+                "SESSION_MONGODB_COLLECTION"
+            ),
+        }
     @app.delete("/api/users/<username>")
     def delete_user(username):
 
