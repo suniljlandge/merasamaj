@@ -387,15 +387,19 @@ function renderActionButtons(
     window.CURRENT_OWNED_REGISTRATION_ID || "";
 
   const canEdit =
-    role === "admin" ||
-    role === "super_admin" ||
+  role === "admin" ||
+  role === "super_admin" ||
+  (
+    role === "operator" &&
+    record.createdBy === currentUsername
+  ) ||
+  (
+    role === "viewer" &&
     (
-      role === "viewer" &&
-      (
-        record.createdBy === currentUsername ||
-        record._id === currentOwnedRegistrationId
-      )
-    );
+      record.createdBy === currentUsername ||
+      record._id === currentOwnedRegistrationId
+    )
+  );
   const canView =
     role === "admin" ||
     role === "super_admin" ||

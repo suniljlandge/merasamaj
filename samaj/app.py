@@ -396,6 +396,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         return render_template(
             "directory.html",
             current_role=current_role(),
+            current_username=session.get("username", ""),
             current_owned_registration_id=current_owned_registration_id(),
         )
 
