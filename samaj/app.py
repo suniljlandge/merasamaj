@@ -8,6 +8,7 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from flask_session import Session
 
+
 from .migration import (
     transform_old_record,
     find_duplicate,
@@ -28,7 +29,10 @@ from .corrections import (
     load_corrections,
     save_corrections,
 )
-from .db import create_collections
+from .db import (
+    create_collections,
+    get_database,
+)
 from .registration import (
     normalize_relationship_links,
     normalize_phone,
@@ -46,9 +50,23 @@ def create_app(config=None, collection=None, correction_collection=None):
         "samaj-secret-key"
     )
 
-    app.config["SESSION_TYPE"] = (
-        "filesystem"
-    )
+    session_db = get_database({
+        "MONGO_URI": os.getenv(
+            "MONGO_URI",
+            "mongodb://127.0.0.1:27017"
+        ),
+        "MONGO_DB": os.getenv(
+            "MONGO_DB",
+            "samaj"
+        ),
+    })
+
+    app.config["SESSION_TYPE"] = "mongodb"
+    app.config["SESSION_MONGODB"] = session_db.client
+    app.config["SESSION_MONGODB_DB"] = session_db.name
+    app.config["SESSION_MONGODB_COLLECTION"] = "sessions"
+
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 
     Session(app)
 
@@ -451,6 +469,10 @@ def create_app(config=None, collection=None, correction_collection=None):
             }), 401
 
         session.clear()
+
+        # ADD THIS
+        session.permanent = True
+
         session["auth_type"] = "staff"
         session["user_id"] = str(
             user["_id"]
@@ -2507,6 +2529,7 @@ def create_pending_submission_for_account(
 
 def build_public_session(account):
     session.clear()
+    session.permanent = True
     session["auth_type"] = "public"
     session["public_account_id"] = str(account["_id"])
     session["public_mobile"] = account["mobileNumber"]

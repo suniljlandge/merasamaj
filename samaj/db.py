@@ -37,3 +37,8 @@ def create_collections(config):
 def create_collection(config):
     client, collection, _correction_collection = create_collections(config)
     return client, collection
+
+
+def get_database(config):
+    client = MongoClient(config["MONGO_URI"])
+    return client[config["MONGO_DB"]]
