@@ -37,6 +37,8 @@ from .registration import (
 from .transliterate import transliteration_suggestions
 
 
+
+
 def create_app(config=None, collection=None, correction_collection=None):
     app = Flask(__name__)
 
@@ -1325,6 +1327,10 @@ def create_app(config=None, collection=None, correction_collection=None):
             }
         }
         registration_document["updatedAt"] = now
+        registration_document["updatedBy"] = session.get(
+            "username",
+            ""
+        )
 
         if approved_registration_id:
             registration_collection.update_one(
@@ -1340,6 +1346,15 @@ def create_app(config=None, collection=None, correction_collection=None):
             registration_id = approved_registration_id
         else:
             registration_document["createdAt"] = now
+            registration_document["createdBy"] = session.get(
+                "username",
+                ""
+            )
+            registration_document["updatedBy"] = session.get(
+                "username",
+                ""
+            )
+
             insert_result = registration_collection.insert_one(
                 registration_document
             )
@@ -1633,10 +1648,13 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "createdBy",
                 ""
             ),
-            "updatedAt":
-                datetime.now(
-                    timezone.utc
-                )
+            "updatedAt": datetime.now(
+                timezone.utc
+            ),
+            "updatedBy": session.get(
+                "username",
+                ""
+            )
         }
 
         get_collection().update_one(
@@ -1691,6 +1709,10 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "",
             ),
             "updatedAt": now,
+            "updatedBy": session.get(
+                "username",
+                "",
+            ),
         }
 
         insert_result = get_collection().insert_one(document)
@@ -2194,6 +2216,12 @@ def can_edit_registration(document):
 
     if role in {"admin", "super_admin"}:
         return True
+
+    if role == "operator":
+        return document.get("createdBy") == session.get(
+            "username",
+            "",
+        )
 
     if role == "viewer":
         if is_public_session():

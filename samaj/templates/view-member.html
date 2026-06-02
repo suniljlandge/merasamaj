@@ -74,45 +74,48 @@
             ></p>
           </div>
 
-          <div class="directory-top-actions">
-            <div class="directory-stat">
-              <span class="directory-stat-label">
-                Family size
-              </span>
-              <strong id="member-family-count">
-                -
-              </strong>
-            </div>
 
-            <div class="directory-stat">
-              <span class="directory-stat-label">
-                Location
-              </span>
-              <strong
-                id="member-location-short"
-                style="
-                  font-size: 18px;
-                "
-              >
-                -
-              </strong>
-            </div>
+<div class="member-profile-side">
 
-            <div class="directory-stat">
-              <span class="directory-stat-label">
-                Family type
-              </span>
-              <strong
-                id="member-family-type"
-                style="
-                  font-size: 18px;
-                  text-transform: capitalize;
-                "
-              >
-                -
-              </strong>
-            </div>
-          </div>
+  <div class="member-stats-row">
+
+    <div class="directory-stat">
+      <span class="directory-stat-label">
+        Family size
+      </span>
+      <strong id="member-family-count">-</strong>
+    </div>
+
+    <div class="directory-stat">
+      <span class="directory-stat-label">
+        Location
+      </span>
+      <strong id="member-location-short">
+        -
+      </strong>
+    </div>
+
+    <div class="directory-stat">
+      <span class="directory-stat-label">
+        Family type
+      </span>
+      <strong
+        id="member-family-type"
+        style="text-transform:capitalize;"
+      >
+        -
+      </strong>
+    </div>
+
+  </div>
+
+  <div class="member-audit-info">
+    <span id="member-created-info">
+      Added by -
+    </span>
+  </div>
+
+</div>
         </div>
       </section>
 
@@ -277,6 +280,7 @@
         ).textContent =
           marathiName || "Marathi name not available";
 
+
         document.querySelector(
           "#member-family-count"
         ).textContent =
@@ -297,6 +301,20 @@
           "#member-family-type"
         ).textContent =
           member.familyType || "nuclear";
+
+document.querySelector(
+  "#member-created-info"
+).textContent =
+  `Added by ${member.createdBy || "-"} · ${
+    member.createdAt
+      ? new Date(member.createdAt)
+          .toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+            year: "numeric"
+          })
+      : "-"
+  }`;
 
         document.querySelector(
           "#member-summary-grid"
@@ -365,9 +383,11 @@
               ${renderInfo("Relation to applicant", member.relationToApplicant || member.relation)}
               ${renderInfo("Contact", member.contactNumber)}
               ${renderInfo("Married", member.isMarried ? "Yes" : "No")}
-              ${member.isMarried ? renderInfo("Spouse", member.spouseName?.en) : ""}
-              ${member.isMarried ? renderInfo("Spouse contact", member.spouseContactNumber) : ""}
-              ${member.isMarried ? renderInfo("Current city", member.currentCity) : ""}
+              ${
+  member.isMarried && member.currentCity
+    ? renderInfo("Current city", member.currentCity)
+    : ""
+}
             </div>
 
             ${renderRelationshipLinks(member.relationshipLinks, familyMembers)}
@@ -491,6 +511,33 @@ function resolveTargetPersonName(
           return entities[character];
         });
       }
+
+function formatAuditDate(value) {
+
+  if (!value) {
+    return "-";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "-";
+  }
+
+  return date.toLocaleDateString(
+    "en-GB",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    }
+  );
+}
 
       loadMember().catch(() => {
         document.querySelector(

@@ -1565,3 +1565,87 @@ input[readonly][lang="mr"] {
     font-size: 16px;
   }
 }
+/* ==========================================
+   MEMBER PROFILE HEADER
+========================================== */
+
+.member-profile-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.member-stats-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.member-audit-info {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.directory-stat {
+  min-width: 120px;
+  min-height: 90px;
+  padding: 14px 18px;
+}
+
+.directory-stat strong {
+  font-size: 18px;
+}
+
+/* MOBILE */
+
+@media (max-width: 768px) {
+
+  .directory-table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+
+  .member-profile-side {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .member-stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: 100%;
+  }
+
+  .directory-stat {
+    min-width: auto;
+    min-height: auto;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .directory-stat-label {
+    font-size: 11px;
+  }
+
+  .directory-stat strong {
+    font-size: 16px;
+  }
+
+  .member-audit-info {
+    text-align: center;
+    font-size: 13px;
+  }
+
+  #member-name {
+    font-size: 42px;
+    line-height: 1.1;
+  }
+
+  #member-name-mr {
+    font-size: 20px !important;
+  }
+}
