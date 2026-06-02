@@ -209,20 +209,26 @@
       const currentRole =
         window.CURRENT_ROLE;
 
-      const canEdit =
-        currentRole === "viewer"
-        || currentRole === "admin"
-        || currentRole === "super_admin";
+      const currentUsername =
+        "{{ session.get('username', '') }}";
 
       const editLink =
         document.querySelector(
           "#view-edit-link"
         );
 
+      const canEdit =
+        currentRole === "admin" ||
+        currentRole === "super_admin" ||
+        currentRole === "operator" ||
+        currentRole === "viewer";
+
       if (canEdit) {
         editLink.hidden = false;
         editLink.href = `/edit-member/${memberId}`;
       }
+
+
 
       if (!canEdit) {
         document.querySelector(
