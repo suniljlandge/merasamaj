@@ -476,9 +476,12 @@ function calculateFamilyMembersCount(
   const excludedMarriedRelations =
     new Set([
       "daughter",
+      "daughter(beti)",
       "granddaughter",
+      "granddaughter(poti)",
       "grand-daughter",
-      "sister"
+      "sister",
+      "sister(behen)"
     ]);
   const countedSpouseRelations =
     new Set([

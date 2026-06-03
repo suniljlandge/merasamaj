@@ -43,19 +43,22 @@ RELATIONSHIP_TYPES = {
 
 MARRIED_MEMBER_EXCLUDED_RELATIONS = {
     "daughter",
+    "daughter(beti)",
     "granddaughter",
+    "granddaughter(poti)",
     "grand-daughter",
     "sister",
+    "sister(behen)",
 }
 
 SPOUSE_COUNTED_RELATIONS = {
-    "son",
-    "grandson",
-    "grand-son",
-    "brother",
-    "uncle",
-    "cousin",
-    "nephew",
+    "Son(beta)",
+    "Grandson(pota)",
+    "Grand-son(pota)",
+    "Brother(bhai)",
+    "Uncle",
+    "Cousin",
+    "Nephew",
 }
 
 

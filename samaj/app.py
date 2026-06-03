@@ -38,10 +38,53 @@ from .registration import (
     normalize_phone,
     validate_registration,
 )
-from .transliterate import transliteration_suggestions
+from .transliterate import (
+    transliteration_suggestions,
+    transliterate_to_marathi,
+)
 
 
+def build_corrected_phrase(text, corrections):
+    words = text.split()
 
+    result = []
+    i = 0
+
+    while i < len(words):
+
+        matched = False
+
+        # Try 4-word phrase
+        for size in [4, 3, 2]:
+
+            if i + size > len(words):
+                continue
+
+            phrase = " ".join(
+                words[i:i + size]
+            ).lower().strip()
+
+            if phrase in corrections:
+                result.append(
+                    corrections[phrase]
+                )
+                i += size
+                matched = True
+                break
+
+        if matched:
+            continue
+
+        result.append(
+            transliterate_to_marathi(
+                words[i],
+                corrections
+            )
+        )
+
+        i += 1
+
+    return " ".join(result)
 
 def create_app(config=None, collection=None, correction_collection=None):
     app = Flask(__name__)
@@ -1931,28 +1974,45 @@ def create_app(config=None, collection=None, correction_collection=None):
 
     @app.get("/api/transliteration-suggestions")
     def list_transliteration_suggestions():
-        query = request.args.get("q", "").strip()
+        query = request.args.get(
+            "q",
+            ""
+        ).strip()
 
         if not query:
-            return jsonify({"suggestions": []})
+            return jsonify({
+                "suggestions": []
+            })
 
         corrections = load_corrections(
             get_correction_collection()
         )
 
-        normalized = query.lower().strip()
         suggestions = []
 
-        if normalized in corrections:
-            suggestions.append(corrections[normalized])
+        corrected_phrase = build_corrected_phrase(
+            query,
+            corrections
+        )
 
-        google_suggestions = transliteration_suggestions(query)
+        if corrected_phrase:
+            suggestions.append(
+                corrected_phrase
+            )
+
+        google_suggestions = (
+            transliteration_suggestions(
+                query
+            )
+        )
 
         for item in google_suggestions:
             if item not in suggestions:
                 suggestions.append(item)
 
-        return jsonify({"suggestions": suggestions[:8]})
+        return jsonify({
+            "suggestions": suggestions[:8]
+        })
 
     def close_mongo():
         client = app.extensions.get("mongo_client")
