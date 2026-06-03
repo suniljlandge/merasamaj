@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+
+<title>
+Registration Leaderboard
+</title>
+
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='styles.css') }}"
+>
+
+<style>
+
+.page-container{
+    max-width:1100px;
+    margin:auto;
+    padding:30px;
+}
+
+.page-title{
+    font-size:32px;
+    font-weight:700;
+    margin-bottom:20px;
+}
+
+.operator-dashboard{
+    background:white;
+    border-radius:20px;
+    padding:24px;
+    box-shadow:0 10px 30px rgba(0,0,0,.08);
+}
+
+.dashboard-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:24px;
+}
+
+.total-card{
+    text-align:right;
+}
+
+.total-card strong{
+    display:block;
+    font-size:34px;
+}
+
+.champion-card{
+    display:flex;
+    align-items:center;
+    gap:20px;
+    padding:20px;
+    border-radius:16px;
+    background:linear-gradient(
+        135deg,
+        #fef3c7,
+        #fde68a
+    );
+    margin-bottom:25px;
+}
+
+.champion-medal{
+    font-size:60px;
+}
+
+.champion-details{
+    flex:1;
+}
+
+.champion-details h3{
+    margin:0;
+    font-size:28px;
+}
+
+.champion-share{
+    font-size:40px;
+    font-weight:700;
+}
+
+.operator-item{
+    margin-bottom:18px;
+}
+
+.operator-top{
+    display:flex;
+    justify-content:space-between;
+    margin-bottom:6px;
+}
+
+.rank-badge{
+    width:32px;
+    height:32px;
+    border-radius:50%;
+    background:#e2e8f0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:bold;
+}
+
+.operator-name{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-weight:600;
+}
+
+.progress-track{
+    height:16px;
+    background:#e5e7eb;
+    border-radius:999px;
+    overflow:hidden;
+}
+
+.progress-bar{
+    height:100%;
+    background:linear-gradient(
+      90deg,
+      #2563eb,
+      #60a5fa
+    );
+}
+
+.stats-grid{
+    display:grid;
+    grid-template-columns:
+      repeat(auto-fit,minmax(220px,1fr));
+    gap:16px;
+    margin-bottom:24px;
+}
+
+.stat-card{
+    background:#fff;
+    border-radius:14px;
+    padding:18px;
+    box-shadow:0 4px 12px rgba(0,0,0,.06);
+}
+
+.stat-card h3{
+    margin:0;
+    color:#64748b;
+    font-size:14px;
+}
+
+.stat-card strong{
+    display:block;
+    margin-top:8px;
+    font-size:30px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="page-container">
+
+<h1 class="page-title">
+🏆 Registration Leaderboard
+</h1>
+
+<div class="stats-grid">
+
+    <div class="stat-card">
+        <h3>Total Registrations</h3>
+        <strong id="totalRegistrations">
+            0
+        </strong>
+    </div>
+
+<div class="stat-card">
+    <h3>Active Operators</h3>
+
+    <strong id="activeOperators">
+        0/0
+    </strong>
+</div>
+
+    <div class="stat-card">
+        <h3>Top Performer</h3>
+        <strong id="topOperator">
+            -
+        </strong>
+    </div>
+
+</div>
+
+<div class="operator-dashboard">
+
+    <div class="dashboard-header">
+
+        <div>
+            <h2>
+                Operator Performance
+            </h2>
+            <p>
+                Based on total registrations
+            </p>
+        </div>
+
+        <div class="total-card">
+            <span>Total Registrations</span>
+            <strong id="headerTotal">
+                0
+            </strong>
+        </div>
+
+    </div>
+
+    <div id="championCard"></div>
+
+    <div id="operatorRanking"></div>
+
+</div>
+
+</div>
+
+<script>
+
+async function loadLeaderboard() {
+
+    const response =
+        await fetch(
+            "/api/operator-performance"
+        );
+
+    const data =
+        await response.json();
+
+    document.getElementById(
+        "totalRegistrations"
+    ).textContent =
+        data.total;
+
+    document.getElementById(
+        "headerTotal"
+    ).textContent =
+        data.total;
+
+    const activePercent =
+        data.totalOperators
+        ? Math.round(
+            (
+                data.activeOperators
+                / data.totalOperators
+            ) * 100
+          )
+        : 0;
+
+    document.getElementById(
+        "activeOperators"
+    ).textContent =
+        `${data.activeOperators}/${data.totalOperators}`;
+
+    document.getElementById(
+        "topOperator"
+    ).textContent =
+        data.topOperator;
+
+    if (
+        data.items &&
+        data.items.length
+    ) {
+        renderLeaderboard(
+            data.items
+        );
+    }
+}
+
+loadLeaderboard();
+
+function renderLeaderboard(
+    operators
+){
+
+    const champion =
+      operators[0];
+
+    document.getElementById(
+      "championCard"
+    ).innerHTML = `
+      <div class="champion-card">
+
+        <div class="champion-medal">
+            🥇
+        </div>
+
+        <div class="champion-details">
+            <h3>
+              ${champion.name}
+            </h3>
+
+            <div>
+              ${champion.count}
+              Registrations
+            </div>
+        </div>
+
+        <div class="champion-share">
+            ${champion.share}%
+        </div>
+
+      </div>
+    `;
+
+    const max =
+      champion.count;
+
+    document.getElementById(
+      "operatorRanking"
+    ).innerHTML =
+      operators.map(
+        (op,index)=>`
+
+        <div class="operator-item">
+
+          <div class="operator-top">
+
+            <div class="operator-name">
+
+              <div class="rank-badge">
+                ${index+1}
+              </div>
+
+              ${op.name}
+
+            </div>
+
+            <div>
+
+              ${op.count}
+              registrations
+              (${op.share}%)
+
+            </div>
+
+          </div>
+
+          <div class="progress-track">
+
+            <div
+              class="progress-bar"
+              style="
+                width:${
+                  (
+                    op.count/max
+                  )*100
+                }%;
+              "
+            ></div>
+
+          </div>
+
+        </div>
+      `
+      ).join("");
+}
+
+loadLeaderboard();
+
+</script>
+
+</body>
+</html>

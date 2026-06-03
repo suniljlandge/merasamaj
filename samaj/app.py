@@ -443,6 +443,122 @@ def create_app(config=None, collection=None, correction_collection=None):
             current_owned_registration_id=current_owned_registration_id(),
         )
 
+    @app.route("/operator-leaderboard")
+    def operator_leaderboard_page():
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return redirect("/directory")
+
+        return render_template(
+            "operator-leaderboard.html",
+            current_role=current_role()
+        )
+
+    @app.get("/api/operator-performance")
+    def operator_performance():
+
+        if not require_role(
+            "admin",
+            "super_admin"
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        pipeline = [
+            {
+                "$group": {
+                    "_id": "$createdBy",
+                    "count": {
+                        "$sum": 1
+                    }
+                }
+            },
+            {
+                "$sort": {
+                    "count": -1
+                }
+            }
+        ]
+
+        results = list(
+            get_collection().aggregate(
+                pipeline
+            )
+        )
+
+        total_registrations = sum(
+            row["count"]
+            for row in results
+        )
+
+        items = []
+
+        for row in results:
+
+            count = row["count"]
+
+            share = round(
+                (
+                    count
+                    / total_registrations
+                ) * 100,
+                1
+            ) if total_registrations else 0
+
+            items.append({
+                "name":
+                    row["_id"]
+                    or "Legacy Records",
+                "count": count,
+                "share": share
+            })
+
+        users_collection = (
+            get_users_collection()
+        )
+
+        total_operators = (
+            users_collection.count_documents({
+                "role": "operator"
+            })
+        )
+
+        active_operators = len([
+            item
+            for item in items
+            if item["name"]
+            not in [
+                "Legacy Records"
+            ]
+        ])
+
+        top_operator = (
+            items[0]["name"]
+            if items
+            else "-"
+        )
+
+        return jsonify({
+            "total":
+                total_registrations,
+
+            "items":
+                items,
+
+            "activeOperators":
+                active_operators,
+
+            "totalOperators":
+                total_operators,
+
+            "topOperator":
+                top_operator
+        })
+
     @app.get("/api/health")
     def health():
         return jsonify({"ok": True})
