@@ -48,19 +48,19 @@ const MEMBER_TEXT_FIELDS = [
 ];
 
 const MEMBER_RELATIONS = [
-  "Father",
-  "Mother",
-  "Wife",
-  "Husband",
-  "Son",
-  "Daughter",
-  "Daughter-in-law",
-  "Brother",
-  "Sister",
-  "Grandfather",
-  "Grandmother",
-  "Grandson",
-  "Granddaughter",
+  "Father(pita)",
+  "Mother(mata)",
+  "Wife(patni)",
+  "Husband(pati)",
+  "Son(beta)",
+  "Daughter(beti)",
+  "Daughter-in-law(bahu)",
+  "Brother(bhai)",
+  "Sister(behen)",
+  "Grandson(pota)",
+  "Granddaughter(poti)",
+  "Grandfather(dada)",
+  "Grandmother(dadi)",
   "Uncle",
   "Aunt",
   "Cousin",
@@ -72,19 +72,19 @@ const MEMBER_RELATIONS = [
 ];
 
 const MARRIAGE_ALLOWED_RELATIONS = [
-  "Father",
-  "Mother",
-  "Wife",
-  "Husband",
-  "Son",
-  "Daughter",
-  "Daughter-in-law",
-  "Grandfather",
-  "Grandmother",
-  "Grandson",
-  "Granddaughter",
-  "Brother",
-  "Sister",
+  "Father(pita)",
+  "Mother(mata)",
+  "Wife(patni)",
+  "Husband(pati)",
+  "Son(beta)",
+  "Daughter(beti)",
+  "Daughter-in-law(bahu)",
+  "Brother(bhai)",
+  "Sister(behen)",
+  "Grandson(pota)",
+  "Granddaughter(poti)",
+  "Grandfather(dada)",
+  "Grandmother(dadi)",
   "Uncle",
   "Aunt",
   "Cousin",
@@ -95,13 +95,13 @@ const MARRIAGE_ALLOWED_RELATIONS = [
 ];
 
 const OBVIOUS_MARRIED_RELATIONS = [
-  "Father",
-  "Mother",
-  "Wife",
-  "Husband",
-  "Daughter-in-law",
-  "Grandfather",
-  "Grandmother",
+  "Father(pita)",
+  "Mother(mata)",
+  "Wife(patni)",
+  "Husband(pati)",
+  "Daughter-in-law(bahu)",
+  "Grandfather(dada)",
+  "Grandmother(dadi)",
   "Uncle",
   "Aunt",
   "Father-in-law",
@@ -1122,9 +1122,9 @@ function readRelationText(value = "") {
 
 function requiresSpouseName(relation = "") {
   return [
-    "Daughter",
-    "Sister",
-    "Granddaughter"
+    "Daughter(beti)",
+    "Sister(behen)",
+    "Granddaughter(poti)"
   ].includes(relation);
 }
 
