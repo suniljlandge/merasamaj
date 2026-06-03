@@ -15,7 +15,9 @@ google_Transliteration.py
 .omx/
 .omx/
 *.log
-*.csv   
+*.csv
+*.xlsx
+*.pdf   
 .omx/
 tests/
 fly.toml
