@@ -50,38 +50,6 @@ Registration Leaderboard
     font-size:34px;
 }
 
-.champion-card{
-    display:flex;
-    align-items:center;
-    gap:20px;
-    padding:20px;
-    border-radius:16px;
-    background:linear-gradient(
-        135deg,
-        #fef3c7,
-        #fde68a
-    );
-    margin-bottom:25px;
-}
-
-.champion-medal{
-    font-size:60px;
-}
-
-.champion-details{
-    flex:1;
-}
-
-.champion-details h3{
-    margin:0;
-    font-size:28px;
-}
-
-.champion-share{
-    font-size:40px;
-    font-weight:700;
-}
-
 .operator-item{
     margin-bottom:18px;
 }
@@ -270,14 +238,91 @@ Registration Leaderboard
     );
 }
 
+.report-brand{
+    text-align:center;
+    margin-bottom:30px;
+    padding-bottom:20px;
+    border-bottom:2px solid #e5e7eb;
+}
+
+.report-brand h1{
+    margin:0;
+    font-size:42px;
+    font-weight:800;
+    letter-spacing:2px;
+}
+
+.report-subtitle{
+    font-size:18px;
+    color:#64748b;
+    margin-top:8px;
+}
+
+#reportDate{
+    margin-top:8px;
+    font-size:14px;
+    color:#94a3b8;
+}
+
+@media (max-width:768px){
+
+    .dashboard-header{
+        flex-direction:column;
+        text-align:center;
+        gap:15px;
+    }
+
+    .podium{
+        flex-direction:column;
+        align-items:stretch;
+    }
+
+    .podium-card{
+        max-width:none;
+    }
+
+    .operator-top{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:6px;
+    }
+}
+
 </style>
 
 </head>
 
 <body>
 
-<div class="page-container">
+<div
+    class="page-container"
+    id="leaderboardReport"
+>
 
+    <div class="report-brand">
+
+        <h1>SAMAJ</h1>
+
+        <div class="report-subtitle">
+            Registration Leaderboard
+        </div>
+
+        <div id="reportDate"></div>
+
+    </div>
+<div
+    id="exportControls"
+    style="text-align:right;margin-bottom:20px;"
+>
+
+    <button
+        id="exportLeaderboard"
+        class="button-primary"
+    >
+        📷 Export as Image
+    </button>
+
+</div>
 <h1 class="page-title">
 🏆 Registration Leaderboard
 </h1>
@@ -370,10 +415,10 @@ async function loadLeaderboard() {
           )
         : 0;
 
-    document.getElementById(
-        "activeOperators"
-    ).textContent =
-        `${data.activeOperators}/${data.totalOperators}`;
+document.getElementById(
+    "activeOperators"
+).textContent =
+    `${data.activeOperators}/${data.totalOperators} (${activePercent}%)`;
 
     document.getElementById(
         "topOperator"
@@ -390,7 +435,7 @@ async function loadLeaderboard() {
     }
 }
 
-loadLeaderboard();
+
 
 function renderLeaderboard(operators){
 
@@ -559,9 +604,76 @@ function renderPodium(operators){
     `;
 }
 
+document.getElementById(
+    "reportDate"
+).textContent =
+    new Date().toLocaleDateString(
+        "en-IN",
+        {
+            day:"2-digit",
+            month:"long",
+            year:"numeric"
+        }
+    );
+
+
+document
+    .getElementById(
+        "exportLeaderboard"
+    )
+    .addEventListener(
+        "click",
+        async () => {
+
+            const controls =
+                document.getElementById(
+                    "exportControls"
+                );
+
+            controls.style.display =
+                "none";
+
+            const canvas =
+                await html2canvas(
+                    document.getElementById(
+                        "leaderboardReport"
+                    ),
+                    {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor:
+                            "#ffffff"
+                    }
+                );
+
+            controls.style.display =
+                "";
+
+            const link =
+                document.createElement(
+                    "a"
+                );
+
+            const today =
+                new Date()
+                    .toISOString()
+                    .slice(0,10);
+
+            link.download =
+                `registration-leaderboard-${today}.png`;
+
+            link.href =
+                canvas.toDataURL(
+                    "image/png"
+                );
+
+            link.click();
+
+        }
+    );
+
 loadLeaderboard();
-
 </script>
-
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </body>
 </html>
