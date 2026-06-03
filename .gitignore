@@ -17,3 +17,7 @@ google_Transliteration.py
 *.log
 *.csv   
 .omx/
+tests/
+fly.toml
+user_list.csv
+USERLIST.pdf
