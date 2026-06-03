@@ -153,6 +153,123 @@ Registration Leaderboard
     font-size:30px;
 }
 
+.podium {
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    gap:24px;
+    margin:30px 0 40px;
+}
+
+.podium-card{
+    flex:1;
+    max-width:280px;
+    text-align:center;
+}
+
+.podium-rank{
+    font-size:48px;
+    margin-bottom:10px;
+}
+
+.podium-box{
+    border-radius:18px 18px 0 0;
+    padding:20px;
+    color:#001b33;
+    box-shadow:0 8px 25px rgba(0,0,0,.08);
+}
+
+.podium-first .podium-box{
+    height:240px;
+    background:linear-gradient(
+        135deg,
+        #fde68a,
+        #fbbf24
+    );
+}
+
+.podium-second .podium-box{
+    height:190px;
+    background:linear-gradient(
+        135deg,
+        #e5e7eb,
+        #cbd5e1
+    );
+}
+
+.podium-third .podium-box{
+    height:160px;
+    background:linear-gradient(
+        135deg,
+        #fdba74,
+        #fb923c
+    );
+}
+
+.podium-name{
+    font-size:24px;
+    font-weight:700;
+    margin-bottom:10px;
+    word-break:break-word;
+}
+
+.podium-count{
+    font-size:18px;
+    margin-bottom:10px;
+}
+
+.podium-share{
+    font-size:32px;
+    font-weight:700;
+}
+
+.operator-item{
+    margin-bottom:22px;
+}
+
+.operator-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+}
+
+.operator-name{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-weight:600;
+    font-size:18px;
+}
+
+.rank-badge{
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    background:#e2e8f0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:bold;
+    font-size:18px;
+}
+
+.progress-track{
+    height:20px;
+    background:#d1d5db;
+    border-radius:999px;
+    overflow:hidden;
+}
+
+.progress-bar{
+    height:100%;
+    background:linear-gradient(
+        90deg,
+        #2563eb,
+        #60a5fa
+    );
+}
+
 </style>
 
 </head>
@@ -213,7 +330,7 @@ Registration Leaderboard
 
     </div>
 
-    <div id="championCard"></div>
+    <div id="podiumContainer"></div>
 
     <div id="operatorRanking"></div>
 
@@ -275,91 +392,171 @@ async function loadLeaderboard() {
 
 loadLeaderboard();
 
-function renderLeaderboard(
-    operators
-){
+function renderLeaderboard(operators){
 
-    const champion =
-      operators[0];
-
-    document.getElementById(
-      "championCard"
-    ).innerHTML = `
-      <div class="champion-card">
-
-        <div class="champion-medal">
-            🥇
-        </div>
-
-        <div class="champion-details">
-            <h3>
-              ${champion.name}
-            </h3>
-
-            <div>
-              ${champion.count}
-              Registrations
-            </div>
-        </div>
-
-        <div class="champion-share">
-            ${champion.share}%
-        </div>
-
-      </div>
-    `;
+    renderPodium(operators);
 
     const max =
-      champion.count;
+        operators[0].count;
 
     document.getElementById(
-      "operatorRanking"
+        "operatorRanking"
     ).innerHTML =
-      operators.map(
-        (op,index)=>`
+        operators
+            .slice(3)
+            .map(
+                (op,index)=>`
 
-        <div class="operator-item">
+                <div class="operator-item">
 
-          <div class="operator-top">
+                    <div class="operator-top">
 
-            <div class="operator-name">
+                        <div class="operator-name">
 
-              <div class="rank-badge">
-                ${index+1}
-              </div>
+                            <div class="rank-badge">
+                                ${index + 4}
+                            </div>
 
-              ${op.name}
+                            ${op.name}
 
-            </div>
+                        </div>
 
-            <div>
+                        <div>
+                            ${op.count}
+                            registrations
+                            (${op.share}%)
+                        </div>
 
-              ${op.count}
-              registrations
-              (${op.share}%)
+                    </div>
 
-            </div>
+                    <div class="progress-track">
 
-          </div>
+                        <div
+                            class="progress-bar"
+                            style="
+                                width:${
+                                    (
+                                        op.count
+                                        / max
+                                    ) * 100
+                                }%;
+                            "
+                        ></div>
 
-          <div class="progress-track">
+                    </div>
 
-            <div
-              class="progress-bar"
-              style="
-                width:${
-                  (
-                    op.count/max
-                  )*100
-                }%;
-              "
-            ></div>
+                </div>
+            `
+            )
+            .join("");
+}
 
-          </div>
+function renderPodium(operators){
+
+    const first =
+        operators[0];
+
+    const second =
+        operators[1];
+
+    const third =
+        operators[2];
+
+    document.getElementById(
+        "podiumContainer"
+    ).innerHTML = `
+
+        <div class="podium">
+
+            ${
+                second ? `
+                <div class="podium-card podium-second">
+
+                    <div class="podium-rank">
+                        🥈
+                    </div>
+
+                    <div class="podium-box">
+
+                        <div class="podium-name">
+                            ${second.name}
+                        </div>
+
+                        <div class="podium-count">
+                            ${second.count}
+                            Registrations
+                        </div>
+
+                        <div class="podium-share">
+                            ${second.share}%
+                        </div>
+
+                    </div>
+
+                </div>
+                ` : ""
+            }
+
+            ${
+                first ? `
+                <div class="podium-card podium-first">
+
+                    <div class="podium-rank">
+                        🥇
+                    </div>
+
+                    <div class="podium-box">
+
+                        <div class="podium-name">
+                            ${first.name}
+                        </div>
+
+                        <div class="podium-count">
+                            ${first.count}
+                            Registrations
+                        </div>
+
+                        <div class="podium-share">
+                            ${first.share}%
+                        </div>
+
+                    </div>
+
+                </div>
+                ` : ""
+            }
+
+            ${
+                third ? `
+                <div class="podium-card podium-third">
+
+                    <div class="podium-rank">
+                        🥉
+                    </div>
+
+                    <div class="podium-box">
+
+                        <div class="podium-name">
+                            ${third.name}
+                        </div>
+
+                        <div class="podium-count">
+                            ${third.count}
+                            Registrations
+                        </div>
+
+                        <div class="podium-share">
+                            ${third.share}%
+                        </div>
+
+                    </div>
+
+                </div>
+                ` : ""
+            }
 
         </div>
-      `
-      ).join("");
+    `;
 }
 
 loadLeaderboard();
