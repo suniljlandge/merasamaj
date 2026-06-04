@@ -131,6 +131,104 @@ class RegistrationPermissionsTests(unittest.TestCase):
         self.assertEqual(own_response.status_code, 200)
         self.assertEqual(other_response.status_code, 403)
 
+    def test_admin_can_view_any_family_tree(self):
+        registration_id = ObjectId()
+        self.registrations.insert_one(
+            {
+                "_id": registration_id,
+                **valid_registration_payload(),
+                "createdBy": "operator-one",
+                "createdAt": datetime.now(timezone.utc),
+                "updatedAt": datetime.now(timezone.utc),
+            }
+        )
+        self.login_as("admin", "admin-one")
+
+        response = self.client.get(
+            f"/family-tree/{registration_id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_super_admin_can_view_any_family_tree(self):
+        registration_id = ObjectId()
+        self.registrations.insert_one(
+            {
+                "_id": registration_id,
+                **valid_registration_payload(),
+                "createdBy": "operator-one",
+                "createdAt": datetime.now(timezone.utc),
+                "updatedAt": datetime.now(timezone.utc),
+            }
+        )
+        self.login_as("super_admin", "root-user")
+
+        response = self.client.get(
+            f"/family-tree/{registration_id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_operator_can_view_own_family_tree(self):
+        registration_id = ObjectId()
+        self.registrations.insert_one(
+            {
+                "_id": registration_id,
+                **valid_registration_payload(),
+                "createdBy": "operator-one",
+                "createdAt": datetime.now(timezone.utc),
+                "updatedAt": datetime.now(timezone.utc),
+            }
+        )
+        self.login_as("operator", "operator-one")
+
+        response = self.client.get(
+            f"/family-tree/{registration_id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_operator_can_view_other_operator_family_tree(self):
+        registration_id = ObjectId()
+        self.registrations.insert_one(
+            {
+                "_id": registration_id,
+                **valid_registration_payload(),
+                "createdBy": "operator-one",
+                "createdAt": datetime.now(timezone.utc),
+                "updatedAt": datetime.now(timezone.utc),
+            }
+        )
+        self.login_as("operator", "operator-two")
+
+        response = self.client.get(
+            f"/family-tree/{registration_id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_viewer_cannot_view_any_family_tree(self):
+        registration_id = ObjectId()
+        self.registrations.insert_one(
+            {
+                "_id": registration_id,
+                **valid_registration_payload(),
+                "createdBy": "viewer-one",
+                "createdAt": datetime.now(timezone.utc),
+                "updatedAt": datetime.now(timezone.utc),
+            }
+        )
+        self.login_as("viewer", "viewer-one")
+
+        response = self.client.get(
+            f"/family-tree/{registration_id}"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            response.headers["Location"].endswith("/directory")
+        )
+
     def test_staff_viewer_can_edit_own_registration_only(self):
         own_id = ObjectId()
         other_id = ObjectId()

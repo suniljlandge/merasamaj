@@ -1,0 +1,730 @@
+
+      import React from "https://esm.sh/react@18.3.1?dev";
+      import { createRoot } from "https://esm.sh/react-dom@18.3.1/client?dev";
+      import {
+        Background,
+        Controls,
+        Handle,
+        MiniMap,
+        Panel,
+        Position,
+        ReactFlow,
+      } from "https://esm.sh/@xyflow/react@12.10.2?dev&bundle&deps=react@18.3.1,react-dom@18.3.1";
+
+      const memberId =
+        window.location.pathname
+          .split("/")
+          .pop();
+
+      const titleElement =
+        document.querySelector(
+          "#family-tree-title"
+        );
+      const countElement =
+        document.querySelector(
+          "#family-tree-count"
+        );
+      const flowElement =
+        document.querySelector(
+          "#family-tree-flow"
+        );
+
+      function escapeHtml(value = "") {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function renderError(message) {
+        flowElement.innerHTML = `
+          <div class="tree-error">
+            ${escapeHtml(message)}
+          </div>
+        `;
+      }
+
+      window.addEventListener(
+        "error",
+        (event) => {
+          renderError(
+            event.error?.message
+            || event.message
+            || "Tree rendering failed."
+          );
+        }
+      );
+
+      window.addEventListener(
+        "unhandledrejection",
+        (event) => {
+          const reason =
+            event.reason?.message
+            || String(event.reason || "");
+
+          if (reason) {
+            renderError(reason);
+          }
+        }
+      );
+
+      function createStyledNodes(nodes = []) {
+        return nodes.map((node) => {
+          return {
+            ...node,
+            type: "familyUnit",
+            style: {
+              background: "transparent",
+              border: "none",
+              boxShadow: "none",
+              padding: 0,
+            },
+            data: {
+              ...node.data,
+              label: node.data?.fullName || "Unnamed member",
+            },
+          };
+        });
+      }
+
+      function normalizeRelation(value = "") {
+        return String(value || "")
+          .toLowerCase()
+          .split("(")[0]
+          .trim();
+      }
+
+      function isSpouseRelation(value = "") {
+        return [
+          "wife",
+          "husband",
+          "spouse",
+          "daughter-in-law",
+          "son-in-law",
+        ].includes(
+          normalizeRelation(value)
+        );
+      }
+
+      function memberPriority(member) {
+        if (member.data?.isApplicant) {
+          return 0;
+        }
+
+        return isSpouseRelation(
+          member.data?.relationToApplicant
+        ) ? 2 : 1;
+      }
+
+      function createDisplayGraph(
+        rawNodes = [],
+        rawEdges = []
+      ) {
+        const rawNodesById =
+          Object.fromEntries(
+            rawNodes.map((node) => [
+              node.id,
+              node,
+            ])
+          );
+        const spouseLinks =
+          new Map();
+
+        rawEdges
+          .filter(
+            (edge) =>
+              edge.data?.relationType === "spouse_of"
+          )
+          .forEach((edge) => {
+            spouseLinks.set(
+              edge.source,
+              edge.target
+            );
+            spouseLinks.set(
+              edge.target,
+              edge.source
+            );
+          });
+
+        const displayNodes = [];
+        const rawToDisplay = new Map();
+
+        rawNodes
+          .slice()
+          .sort(
+            (left, right) =>
+              left.position.y - right.position.y
+              || left.position.x - right.position.x
+          )
+          .forEach((node) => {
+            if (rawToDisplay.has(node.id)) {
+              return;
+            }
+
+            const partnerId =
+              spouseLinks.get(node.id);
+            const partner =
+              partnerId
+              ? rawNodesById[partnerId]
+              : null;
+
+            if (
+              partner
+              && !rawToDisplay.has(partner.id)
+            ) {
+              const members =
+                [node, partner]
+                  .sort(
+                    (left, right) =>
+                      memberPriority(left)
+                      - memberPriority(right)
+                  );
+              const primary =
+                members[0];
+              const secondary =
+                members[1];
+              const displayId =
+                [primary.id, secondary.id]
+                  .sort()
+                  .join("__");
+
+              rawToDisplay.set(
+                primary.id,
+                displayId
+              );
+              rawToDisplay.set(
+                secondary.id,
+                displayId
+              );
+
+              displayNodes.push({
+                id: displayId,
+                position: {
+                  x: (
+                    primary.position.x
+                    + secondary.position.x
+                  ) / 2,
+                  y: (
+                    primary.position.y
+                    + secondary.position.y
+                  ) / 2,
+                },
+                data: {
+                  ...primary.data,
+                  isCouple: true,
+                  primaryName:
+                    primary.data?.fullName || "",
+                  partnerName:
+                    secondary.data?.fullName || "",
+                  partnerRelation:
+                    secondary.data?.relationToApplicant
+                    || "",
+                  currentCity:
+                    primary.data?.currentCity
+                    || secondary.data?.currentCity
+                    || "",
+                  isMarried: true,
+                },
+                draggable: false,
+                selectable: true,
+              });
+
+              return;
+            }
+
+            rawToDisplay.set(
+              node.id,
+              node.id
+            );
+            displayNodes.push({
+              ...node,
+              data: {
+                ...node.data,
+                isCouple: false,
+                primaryName:
+                  node.data?.fullName || "",
+                partnerName: "",
+              },
+            });
+          });
+
+        const seenEdges =
+          new Set();
+        const displayEdges = [];
+
+        rawEdges
+          .filter(
+            (edge) =>
+              edge.data?.relationType !== "spouse_of"
+          )
+          .forEach((edge) => {
+            const source =
+              rawToDisplay.get(edge.source);
+            const target =
+              rawToDisplay.get(edge.target);
+
+            if (
+              !source
+              || !target
+              || source === target
+            ) {
+              return;
+            }
+
+            const key =
+              `${source}::${target}::${edge.data?.relationType || "edge"}`;
+
+            if (seenEdges.has(key)) {
+              return;
+            }
+
+            seenEdges.add(key);
+            displayEdges.push({
+              ...edge,
+              id: key,
+              source,
+              target,
+            });
+          });
+
+        return {
+          nodes: displayNodes,
+          edges: displayEdges,
+        };
+      }
+
+      function createStyledEdges(edges = []) {
+        return edges.map((edge) => {
+          return {
+            ...edge,
+            type: "smoothstep",
+            sourceHandle: "child-source",
+            targetHandle: "child-target",
+            style: {
+              stroke: "#94a3b8",
+              strokeWidth: 2.2,
+            },
+            animated: false,
+          };
+        });
+      }
+
+      function FamilyMemberNode({
+        data,
+      }) {
+        const isApplicant =
+          data?.isApplicant;
+        const generation =
+          Number(data?.generationOffset || 0);
+        const relation =
+          normalizeRelation(
+            data?.relationToApplicant
+          );
+        const married =
+          data?.isMarried === true;
+        const palette = isApplicant
+          ? {
+              border: "#0f766e",
+              background: "linear-gradient(135deg, #ccfbf1, #ecfeff)",
+              shadow: "0 18px 32px rgba(13, 148, 136, 0.2)",
+            }
+          : ["son", "grandson", "brother"].includes(relation)
+            ? {
+                border: "#7499E7",
+                background: "linear-gradient(135deg, #e7f0ff, #f8fbff)",
+                shadow: "0 12px 24px rgba(116, 153, 231, 0.18)",
+              }
+            : ["daughter", "sister"].includes(relation) && married
+              ? {
+                  border: "#f59e0b",
+                  background: "linear-gradient(135deg, #fff0db, #fff7ed)",
+                  shadow: "0 12px 24px rgba(245, 158, 11, 0.18)",
+                }
+              : ["daughter", "sister"].includes(relation)
+                ? {
+                    border: "#FFA5DB",
+                    background: "linear-gradient(135deg, #ffe6f4, #fff6fb)",
+                    shadow: "0 12px 24px rgba(255, 165, 219, 0.2)",
+                  }
+                : generation < 0
+              ? {
+                  border: "#7c3aed",
+                  background: "linear-gradient(135deg, #ede9fe, #f5f3ff)",
+                  shadow: "0 12px 24px rgba(124, 58, 237, 0.14)",
+                }
+              : generation > 1
+                ? {
+                    border: "#2563eb",
+                    background: "linear-gradient(135deg, #dbeafe, #eff6ff)",
+                    shadow: "0 12px 24px rgba(37, 99, 235, 0.14)",
+                  }
+                : {
+                    border: "#14b8a6",
+                    background: "linear-gradient(135deg, #ffffff, #f8fafc)",
+                    shadow: "0 12px 24px rgba(20, 184, 166, 0.1)",
+                  };
+
+        const nodeStyle = {
+          minWidth: data?.isCouple ? 240 : isApplicant ? 210 : 160,
+          maxWidth: data?.isCouple ? 320 : isApplicant ? 260 : 220,
+          borderRadius: 22,
+          padding: isApplicant
+            ? "14px 18px"
+            : "12px 16px",
+          fontSize: isApplicant ? 15 : 13,
+          fontWeight: 700,
+          color: "#0f172a",
+          textAlign: "center",
+          border: `2px solid ${palette.border}`,
+          boxShadow: palette.shadow,
+          background: palette.background,
+          position: "relative",
+          whiteSpace: "normal",
+          lineHeight: 1.25,
+        };
+
+        const subtitleStyle = {
+          marginTop: 6,
+          fontSize: 11,
+          fontWeight: 600,
+          color: "#475569",
+        };
+
+        const handleBaseStyle = {
+          width: 8,
+          height: 8,
+          borderRadius: 999,
+          background: "#1e293b",
+          border: "2px solid #fff",
+        };
+
+        return React.createElement(
+          "div",
+          {
+            style: nodeStyle,
+          },
+          React.createElement(Handle, {
+            type: "target",
+            position: Position.Top,
+            id: "child-target",
+            style: handleBaseStyle,
+          }),
+          React.createElement(Handle, {
+            type: "source",
+            position: Position.Bottom,
+            id: "child-source",
+            style: handleBaseStyle,
+          }),
+          React.createElement(Handle, {
+            type: "source",
+            position: Position.Right,
+            id: "spouse-right-out",
+            style: handleBaseStyle,
+          }),
+          React.createElement(Handle, {
+            type: "target",
+            position: Position.Right,
+            id: "spouse-right-in",
+            style: {
+              ...handleBaseStyle,
+              opacity: 0,
+            },
+          }),
+          React.createElement(Handle, {
+            type: "source",
+            position: Position.Left,
+            id: "spouse-left-out",
+            style: handleBaseStyle,
+          }),
+          React.createElement(Handle, {
+            type: "target",
+            position: Position.Left,
+            id: "spouse-left-in",
+            style: {
+              ...handleBaseStyle,
+              opacity: 0,
+            },
+          }),
+          React.createElement(
+            "div",
+            null,
+            data?.isCouple
+              ? React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement(
+                    "div",
+                    {
+                      style: {
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      },
+                    },
+                    React.createElement(
+                      "span",
+                      null,
+                      data?.primaryName || "Unnamed"
+                    ),
+                    React.createElement(
+                      "span",
+                      {
+                        style: {
+                          color: "#e11d48",
+                          fontSize: 16,
+                        },
+                      },
+                      "❤"
+                    ),
+                    React.createElement(
+                      "span",
+                      {
+                        style: {
+                          fontWeight: 600,
+                        },
+                      },
+                      data?.partnerName || "Partner"
+                    )
+                  ),
+                  (
+                    ["daughter", "sister"].includes(relation)
+                    && married
+                    && data?.currentCity
+                  )
+                    ? React.createElement(
+                        "div",
+                        {
+                          style: subtitleStyle,
+                        },
+                        data.currentCity
+                      )
+                    : null
+                )
+              : React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement(
+                    "div",
+                    null,
+                    data?.label || "Unnamed member"
+                  ),
+                  (
+                    ["daughter", "sister"].includes(relation)
+                    && married
+                    && (
+                      data?.spouseName
+                      || data?.currentCity
+                    )
+                  )
+                    ? React.createElement(
+                        "div",
+                        {
+                          style: subtitleStyle,
+                        },
+                        [
+                          data?.spouseName
+                            ? `Spouse: ${data.spouseName}`
+                            : "",
+                          data?.currentCity || "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      )
+                    : null
+                )
+          )
+        );
+      }
+
+      function FlowToolbar({
+        onFitView,
+      }) {
+        const panelStyle = {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 12px",
+          borderRadius: 18,
+          background: "rgba(255,255,255,0.9)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid rgba(148,163,184,0.2)",
+          boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
+          color: "#334155",
+          fontSize: 13,
+          fontWeight: 600,
+        };
+
+        const buttonStyle = {
+          border: "none",
+          borderRadius: 999,
+          background: "linear-gradient(135deg, #14b8a6, #38bdf8)",
+          color: "#fff",
+          padding: "8px 12px",
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: "pointer",
+        };
+
+        return React.createElement(
+          Panel,
+          {
+            position: "top-right",
+          },
+          React.createElement(
+            "div",
+            {
+              style: panelStyle,
+            },
+            React.createElement(
+              "span",
+              null,
+              "Drag to explore"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: buttonStyle,
+                onClick: onFitView,
+              },
+              "Fit view"
+            )
+          )
+        );
+      }
+
+      function FlowApp({
+        nodes,
+        edges,
+      }) {
+        const [flowInstance, setFlowInstance] =
+          React.useState(null);
+        const displayGraph =
+          createDisplayGraph(
+            nodes,
+            edges
+          );
+        const styledNodes =
+          createStyledNodes(displayGraph.nodes);
+        const nodesById =
+          Object.fromEntries(
+            styledNodes.map((node) => [
+              node.id,
+              node,
+            ])
+          );
+        const styledEdges =
+          createStyledEdges(
+            displayGraph.edges.map((edge) => ({
+              ...edge,
+              __sourceNode: nodesById[edge.source],
+              __targetNode: nodesById[edge.target],
+            }))
+          );
+
+        return React.createElement(
+          ReactFlow,
+          {
+            nodes: styledNodes,
+            edges: styledEdges,
+            fitView: true,
+            minZoom: 0.2,
+            maxZoom: 1.4,
+            nodesDraggable: false,
+            nodesConnectable: false,
+            elementsSelectable: true,
+            nodeTypes: {
+              familyUnit: FamilyMemberNode,
+            },
+            proOptions: {
+              hideAttribution: true,
+            },
+            onInit: setFlowInstance,
+            defaultViewport: {
+              x: 0,
+              y: 0,
+              zoom: 0.9,
+            },
+          },
+          React.createElement(Background, {
+            gap: 22,
+            size: 1.2,
+            color: "#dbeafe",
+          }),
+          React.createElement(MiniMap, {
+            pannable: true,
+            zoomable: true,
+            nodeColor: (node) =>
+              node.data?.isApplicant
+                ? "#14b8a6"
+                : node.data?.isSpouseOnly
+                  ? "#f59e0b"
+                  : "#38bdf8",
+            maskColor: "rgba(255,255,255,0.78)",
+          }),
+          React.createElement(Controls),
+          React.createElement(FlowToolbar, {
+            onFitView: () =>
+              flowInstance?.fitView({
+                padding: 0.2,
+                duration: 500,
+              }),
+          })
+        );
+      }
+
+      async function loadTree() {
+        try {
+          const response =
+            await fetch(
+              `/api/family-tree/${memberId}`
+            );
+
+          if (!response.ok) {
+            throw new Error(
+              "Unable to load family tree."
+            );
+          }
+
+          const payload =
+            await response.json();
+          const graph =
+            payload.graph || {};
+          const nodes =
+            graph.nodes || [];
+          const edges =
+            graph.edges || [];
+
+          titleElement.textContent =
+            payload.member?.fullName
+            || "Unnamed applicant";
+          countElement.textContent =
+            `${payload.member?.familyCount || nodes.length} visible family members`;
+
+          flowElement.innerHTML = "";
+          const root =
+            createRoot(flowElement);
+
+          root.render(
+            React.createElement(
+              FlowApp,
+              {
+                nodes,
+                edges,
+              }
+            )
+          );
+        } catch (error) {
+          renderError(
+            error.message ||
+            "Unable to load family tree."
+          );
+        }
+      }
+
+      loadTree();
+    

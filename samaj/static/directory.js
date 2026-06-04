@@ -414,8 +414,12 @@ function renderActionButtons(
         record._id === currentOwnedRegistrationId
       )
     );
+  const canViewTree =
+    role === "admin" ||
+    role === "super_admin" ||
+    role === "operator";
 
-  if (!canView && !canEdit) {
+  if (!canView && !canEdit && !canViewTree) {
     return "";
   }
 
@@ -435,6 +439,19 @@ function renderActionButtons(
               onclick="viewMember('${record._id}')"
             >
               View
+            </button>
+          `
+          : ""
+      }
+
+      ${
+        canViewTree
+          ? `
+            <button
+              class="button-secondary"
+              onclick="viewFamilyTree('${record._id}')"
+            >
+              Tree
             </button>
           `
           : ""
@@ -468,6 +485,12 @@ function editMember(id) {
 
   window.location.href =
     `/edit-member/${id}`;
+}
+
+function viewFamilyTree(id) {
+
+  window.location.href =
+    `/family-tree/${id}`;
 }
 
 function calculateFamilyMembersCount(

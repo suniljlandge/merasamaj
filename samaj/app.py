@@ -34,6 +34,7 @@ from .db import (
     get_database,
 )
 from .registration import (
+    clean_text,
     normalize_relationship_links,
     normalize_phone,
     validate_registration,
@@ -189,6 +190,32 @@ def create_app(config=None, collection=None, correction_collection=None):
         return render_template(
             "view-member.html",
             current_role=session.get("role")
+        )
+
+    @app.route("/family-tree/<id>")
+    def family_tree_page(id):
+
+        if not can_access_directory():
+            return redirect("/login")
+
+        document_id = object_id_or_none(id)
+
+        if not document_id:
+            return redirect("/directory")
+
+        document = (
+            get_collection()
+            .find_one({
+                "_id": document_id
+            })
+        )
+
+        if not can_view_family_tree(document):
+            return redirect("/directory")
+
+        return render_template(
+            "family-tree.html",
+            current_role=current_role(),
         )
 
     @app.route("/self-register")
@@ -1749,6 +1776,59 @@ def create_app(config=None, collection=None, correction_collection=None):
             )
         )
 
+    @app.get("/api/family-tree/<id>")
+    def get_family_tree(id):
+        document_id = object_id_or_none(id)
+
+        if not document_id:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        if not can_access_directory():
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        document = (
+            get_collection()
+            .find_one({
+                "_id": document_id
+            })
+        )
+
+        if not document:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        if not can_view_family_tree(document):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        serialized = (
+            serialize_registration_document(
+                document
+            )
+        )
+
+        return jsonify({
+            "member": {
+                "id": str(serialized.get("_id", "")),
+                "fullName": build_registration_full_name(
+                    serialized
+                ),
+                "familyCount": (
+                    len(serialized.get("familyMembers") or [])
+                    + 1
+                ),
+            },
+            "graph": build_family_tree_graph_data(
+                serialized
+            ),
+        })
+
     @app.put("/api/registrations/<id>")
     def update_registration(id):
         document_id = object_id_or_none(id)
@@ -2432,6 +2512,22 @@ def can_view_registration(document):
     return False
 
 
+def can_view_family_tree(document):
+    if not document:
+        return False
+
+    role = current_role()
+
+    if role in {
+        "admin",
+        "super_admin",
+        "operator",
+    }:
+        return True
+
+    return False
+
+
 def can_edit_registration(document):
     if not document:
         return False
@@ -2457,6 +2553,1148 @@ def can_edit_registration(document):
         )
 
     return False
+
+
+def build_bilingual_name(value):
+    if isinstance(value, dict):
+        return clean_text(
+            value.get("en")
+            or value.get("mr")
+            or ""
+        )
+
+    return clean_text(value)
+
+
+def build_registration_full_name(document):
+    return " ".join(
+        part
+        for part in [
+            clean_text(
+                (document.get("firstName") or {}).get("en")
+            ),
+            clean_text(
+                (document.get("middleName") or {}).get("en")
+            ),
+            clean_text(
+                (document.get("lastName") or {}).get("en")
+            ),
+        ]
+        if part
+    ) or "Unnamed applicant"
+
+
+def canonical_tree_person_id(value):
+    person_id = clean_text(value)
+
+    if person_id in {
+        "",
+        "applicant",
+        "applicant-primary",
+    }:
+        return "applicant"
+
+    return person_id
+
+
+def infer_generation_offset_from_relation(relation):
+    normalized = clean_text(relation).lower()
+    normalized = normalized.split("(", 1)[0].strip()
+
+    if normalized in {
+        "father",
+        "mother",
+        "uncle",
+        "aunt",
+        "wife",
+        "husband",
+        "father-in-law",
+        "mother-in-law",
+    }:
+        if normalized in {"wife", "husband"}:
+            return 0
+        return -1
+
+    if normalized in {
+        "grandfather",
+        "grandmother",
+        "great grandfather",
+        "great grandmother",
+    }:
+        return -2
+
+    if normalized in {
+        "brother",
+        "sister",
+        "cousin",
+        "self",
+    }:
+        return 0
+
+    if normalized in {
+        "son",
+        "daughter",
+        "nephew",
+        "niece",
+    }:
+        return 1
+
+    if normalized in {
+        "grandson",
+        "granddaughter",
+        "grand-son",
+        "grand-daughter",
+    }:
+        return 2
+
+    if normalized in {
+        "husband",
+        "wife",
+        "spouse",
+    }:
+        return 0
+
+    return None
+
+
+def normalize_relation_label(relation):
+    return clean_text(relation).lower().split("(", 1)[0].strip()
+
+
+def is_spouse_or_inlaw_relation(relation):
+    return normalize_relation_label(relation) in {
+        "wife",
+        "husband",
+        "spouse",
+        "daughter-in-law",
+        "son-in-law",
+    }
+
+
+def relation_name_tokens(full_name):
+    return [
+        token.lower()
+        for token in clean_text(full_name).split()
+        if token
+    ]
+
+
+def add_family_tree_edge(
+    edges,
+    seen_edges,
+    source,
+    target,
+    relation_type,
+):
+    source_id = canonical_tree_person_id(source)
+    target_id = canonical_tree_person_id(target)
+
+    if (
+        not source_id
+        or not target_id
+        or source_id == target_id
+    ):
+        return
+
+    edge_key = (
+        source_id,
+        target_id,
+        relation_type,
+    )
+
+    if edge_key in seen_edges:
+        return
+
+    seen_edges.add(edge_key)
+    edges.append({
+        "id": f"{relation_type}:{source_id}:{target_id}",
+        "source": source_id,
+        "target": target_id,
+        "type": (
+            "smoothstep"
+            if relation_type == "spouse_of"
+            else "straight"
+        ),
+        "animated": relation_type == "spouse_of",
+        "data": {
+            "relationType": relation_type
+        },
+    })
+
+
+def build_family_tree_graph_data(document):
+    serialized = (
+        serialize_registration_document(document)
+        if document.get("familyMembers") is not None
+        else document
+    )
+    family_members = serialized.get("familyMembers") or []
+
+    nodes = {
+        "applicant": {
+            "id": "applicant",
+            "data": {
+                "fullName": build_registration_full_name(
+                    serialized
+                ),
+                "generationOffset": 0,
+                "isApplicant": True,
+                "isSpouseOnly": False,
+            },
+        }
+    }
+    generation_offsets = {
+        "applicant": 0
+    }
+    relation_edges = []
+    seen_edges = set()
+    member_index = 0
+    member_order = {
+        "applicant": 0
+    }
+    normalized_name_to_ids = {}
+
+    for member in family_members:
+        if not isinstance(member, dict):
+            continue
+
+        member_index += 1
+        person_id = canonical_tree_person_id(
+            member.get("personId")
+            or member.get("memberId")
+            or f"member-{member_index}"
+        )
+        full_name = build_bilingual_name(
+            member.get("name")
+        ) or f"Family member {member_index}"
+
+        nodes[person_id] = {
+            "id": person_id,
+            "data": {
+                "fullName": full_name,
+                "generationOffset": 0,
+                "isApplicant": False,
+                "isSpouseOnly": False,
+                "relationToApplicant": clean_text(
+                    member.get("relationToApplicant")
+                    or member.get("relation")
+                    or ""
+                ),
+                "isMarried": bool(
+                    member.get("isMarried")
+                ),
+                "currentCity": clean_text(
+                    member.get("currentCity")
+                    or ""
+                ),
+                "spouseName": build_bilingual_name(
+                    member.get("spouseName")
+                ),
+            },
+        }
+        member_order[person_id] = member_index
+
+        inferred_offset = (
+            infer_generation_offset_from_relation(
+                member.get("relationToApplicant")
+                or member.get("relation")
+                or ""
+            )
+        )
+
+        if inferred_offset is not None:
+            generation_offsets[person_id] = inferred_offset
+
+    for node_id, node in nodes.items():
+        normalized_name = clean_text(
+            node["data"].get("fullName")
+        ).lower()
+
+        if not normalized_name:
+            continue
+
+        normalized_name_to_ids.setdefault(
+            normalized_name,
+            []
+        ).append(node_id)
+
+    explicit_constraints = []
+    spouse_pairs = set()
+    constrained_nodes = set()
+    direct_relation_constraints = []
+
+    for member in family_members:
+        if not isinstance(member, dict):
+            continue
+
+        source_id = canonical_tree_person_id(
+            member.get("personId")
+            or member.get("memberId")
+        )
+
+        if source_id not in nodes:
+            continue
+
+        for link in normalize_relationship_links(
+            member.get("relationshipLinks"),
+            member,
+        ):
+            relation_type = clean_text(
+                link.get("type")
+            ).lower()
+            target_id = canonical_tree_person_id(
+                link.get("targetPersonId")
+            )
+
+            if target_id != "applicant" and target_id not in nodes:
+                continue
+
+            explicit_constraints.append({
+                "type": relation_type,
+                "source": source_id,
+                "target": target_id,
+            })
+            if relation_type == "spouse_of":
+                spouse_pairs.add(
+                    tuple(
+                        sorted(
+                            [source_id, target_id]
+                        )
+                    )
+                )
+            constrained_nodes.add(source_id)
+            constrained_nodes.add(target_id)
+
+        spouse_name = build_bilingual_name(
+            member.get("spouseName")
+        )
+        spouse_member_id = canonical_tree_person_id(
+            member.get("spouseMemberId")
+        )
+        inferred_existing_spouse_id = ""
+        source_relation = normalize_relation_label(
+            member.get("relationToApplicant")
+            or member.get("relation")
+            or ""
+        )
+        source_full_name = build_bilingual_name(
+            member.get("name")
+        )
+
+        if spouse_name and not spouse_member_id:
+            candidate_ids = (
+                normalized_name_to_ids.get(
+                    clean_text(
+                        spouse_name
+                    ).lower(),
+                    [],
+                )
+            )
+
+            inferred_existing_spouse_id = next(
+                (
+                    candidate_id
+                    for candidate_id in candidate_ids
+                    if candidate_id != source_id
+                ),
+                "",
+            )
+
+        if not inferred_existing_spouse_id:
+            if source_relation == "son":
+                inlaw_candidates = [
+                    candidate_id
+                    for candidate_id, candidate_node in nodes.items()
+                    if candidate_id != source_id
+                    and normalize_relation_label(
+                        candidate_node["data"].get(
+                            "relationToApplicant",
+                            ""
+                        )
+                    ) == "daughter-in-law"
+                ]
+                source_tokens = set(
+                    relation_name_tokens(
+                        source_full_name
+                    )
+                )
+                matched_candidates = [
+                    candidate_id
+                    for candidate_id in inlaw_candidates
+                    if source_tokens.intersection(
+                        relation_name_tokens(
+                            nodes[candidate_id]["data"].get(
+                                "fullName",
+                                ""
+                            )
+                        )
+                    )
+                ]
+
+                if len(matched_candidates) == 1:
+                    inferred_existing_spouse_id = (
+                        matched_candidates[0]
+                    )
+                elif (
+                    len(inlaw_candidates) == 1
+                ):
+                    inferred_existing_spouse_id = (
+                        inlaw_candidates[0]
+                    )
+
+            if source_relation == "daughter":
+                inlaw_candidates = [
+                    candidate_id
+                    for candidate_id, candidate_node in nodes.items()
+                    if candidate_id != source_id
+                    and normalize_relation_label(
+                        candidate_node["data"].get(
+                            "relationToApplicant",
+                            ""
+                        )
+                    ) == "son-in-law"
+                ]
+                source_tokens = set(
+                    relation_name_tokens(
+                        source_full_name
+                    )
+                )
+                matched_candidates = [
+                    candidate_id
+                    for candidate_id in inlaw_candidates
+                    if source_tokens.intersection(
+                        relation_name_tokens(
+                            nodes[candidate_id]["data"].get(
+                                "fullName",
+                                ""
+                            )
+                        )
+                    )
+                ]
+
+                if len(matched_candidates) == 1:
+                    inferred_existing_spouse_id = (
+                        matched_candidates[0]
+                    )
+                elif (
+                    len(inlaw_candidates) == 1
+                ):
+                    inferred_existing_spouse_id = (
+                        inlaw_candidates[0]
+                    )
+
+        if (
+            inferred_existing_spouse_id
+            and inferred_existing_spouse_id != "applicant"
+        ):
+            explicit_constraints.append({
+                "type": "spouse_of",
+                "source": source_id,
+                "target": inferred_existing_spouse_id,
+            })
+            spouse_pairs.add(
+                tuple(
+                    sorted(
+                        [
+                            source_id,
+                            inferred_existing_spouse_id,
+                        ]
+                    )
+                )
+            )
+            constrained_nodes.add(source_id)
+            constrained_nodes.add(
+                inferred_existing_spouse_id
+            )
+        elif (
+            spouse_member_id
+            and spouse_member_id != "applicant"
+            and spouse_member_id in nodes
+        ):
+            explicit_constraints.append({
+                "type": "spouse_of",
+                "source": source_id,
+                "target": spouse_member_id,
+            })
+            spouse_pairs.add(
+                tuple(
+                    sorted(
+                        [source_id, spouse_member_id]
+                    )
+                )
+            )
+            constrained_nodes.add(source_id)
+            constrained_nodes.add(spouse_member_id)
+        elif spouse_name:
+            spouse_node_id = f"{source_id}__spouse"
+            nodes[spouse_node_id] = {
+                "id": spouse_node_id,
+                "data": {
+                    "fullName": spouse_name,
+                    "generationOffset": generation_offsets.get(
+                        source_id,
+                        0,
+                    ),
+                    "isApplicant": False,
+                    "isSpouseOnly": True,
+                    "relationToApplicant": "",
+                    "isMarried": True,
+                    "currentCity": clean_text(
+                        member.get("currentCity")
+                        or ""
+                    ),
+                    "spouseName": "",
+                },
+            }
+            generation_offsets[spouse_node_id] = generation_offsets.get(
+                source_id,
+                0,
+            )
+            member_order[spouse_node_id] = (
+                member_order.get(source_id, member_index)
+                + 0.1
+            )
+            explicit_constraints.append({
+                "type": "spouse_of",
+                "source": source_id,
+                "target": spouse_node_id,
+            })
+            spouse_pairs.add(
+                tuple(
+                    sorted(
+                        [source_id, spouse_node_id]
+                    )
+                )
+            )
+            constrained_nodes.add(source_id)
+            constrained_nodes.add(spouse_node_id)
+
+    nodes_with_direct_constraints = set()
+    source_nodes_with_direct_constraints = set()
+
+    for constraint in explicit_constraints:
+        if constraint["type"] in {
+            "child_of",
+            "parent_of",
+        }:
+            nodes_with_direct_constraints.add(
+                constraint["source"]
+            )
+            nodes_with_direct_constraints.add(
+                constraint["target"]
+            )
+            source_nodes_with_direct_constraints.add(
+                constraint["source"]
+            )
+
+    inferred_parent_ids = []
+
+    for node_id, node in nodes.items():
+        if node_id == "applicant":
+            continue
+
+        relation = normalize_relation_label(
+            node["data"].get(
+                "relationToApplicant",
+                ""
+            )
+        )
+
+        if (
+            relation in {"mother", "father"}
+            and node_id not in source_nodes_with_direct_constraints
+        ):
+            direct_relation_constraints.append({
+                "type": "parent_of",
+                "source": node_id,
+                "target": "applicant",
+            })
+            constrained_nodes.add(node_id)
+            constrained_nodes.add("applicant")
+            inferred_parent_ids.append(node_id)
+
+    sibling_parent_id = (
+        inferred_parent_ids[0]
+        if inferred_parent_ids
+        else None
+    )
+
+    if sibling_parent_id:
+        for node_id, node in nodes.items():
+            if node_id == "applicant":
+                continue
+
+            relation = normalize_relation_label(
+                node["data"].get(
+                    "relationToApplicant",
+                    ""
+                )
+            )
+
+            if (
+                relation in {"brother", "sister"}
+                and node_id not in source_nodes_with_direct_constraints
+            ):
+                direct_relation_constraints.append({
+                    "type": "child_of",
+                    "source": node_id,
+                    "target": sibling_parent_id,
+                })
+                constrained_nodes.add(node_id)
+                constrained_nodes.add(sibling_parent_id)
+
+    for node_id, node in nodes.items():
+        if node_id == "applicant":
+            continue
+
+        if node_id in source_nodes_with_direct_constraints:
+            continue
+
+        relation = normalize_relation_label(
+            node["data"].get(
+                "relationToApplicant",
+                ""
+            )
+        )
+
+        if relation in {
+            "wife",
+            "husband",
+            "spouse",
+        }:
+            direct_relation_constraints.append({
+                "type": "spouse_of",
+                "source": node_id,
+                "target": "applicant",
+            })
+            spouse_pairs.add(
+                tuple(
+                    sorted(
+                        [node_id, "applicant"]
+                    )
+                )
+            )
+            constrained_nodes.add(node_id)
+            constrained_nodes.add("applicant")
+            continue
+
+        if relation in {
+            "son",
+            "daughter",
+        }:
+            direct_relation_constraints.append({
+                "type": "child_of",
+                "source": node_id,
+                "target": "applicant",
+            })
+            constrained_nodes.add(node_id)
+            constrained_nodes.add("applicant")
+            continue
+
+        if relation in {
+            "grandson",
+            "granddaughter",
+        }:
+            candidate_parent = next(
+                (
+                    candidate_id
+                    for candidate_id, candidate_node in nodes.items()
+                    if candidate_id != node_id
+                    and normalize_relation_label(
+                        candidate_node["data"].get(
+                            "relationToApplicant",
+                            ""
+                        )
+                    ) in {"son", "daughter"}
+                ),
+                None,
+            )
+
+            if candidate_parent:
+                direct_relation_constraints.append({
+                    "type": "child_of",
+                    "source": node_id,
+                    "target": candidate_parent,
+                })
+                constrained_nodes.add(node_id)
+                constrained_nodes.add(candidate_parent)
+
+    explicit_constraints.extend(
+        direct_relation_constraints
+    )
+
+    for _ in range(len(nodes) + 2):
+        changed = False
+
+        for constraint in explicit_constraints:
+            relation_type = constraint["type"]
+            source_id = constraint["source"]
+            target_id = constraint["target"]
+            source_offset = generation_offsets.get(source_id)
+            target_offset = generation_offsets.get(target_id)
+
+            if relation_type == "child_of":
+                if (
+                    target_offset is not None
+                    and source_offset is None
+                ):
+                    generation_offsets[source_id] = (
+                        target_offset + 1
+                    )
+                    changed = True
+                elif (
+                    source_offset is not None
+                    and target_offset is None
+                ):
+                    generation_offsets[target_id] = (
+                        source_offset - 1
+                    )
+                    changed = True
+
+            if relation_type == "parent_of":
+                if (
+                    source_offset is not None
+                    and target_offset is None
+                ):
+                    generation_offsets[target_id] = (
+                        source_offset + 1
+                    )
+                    changed = True
+                elif (
+                    target_offset is not None
+                    and source_offset is None
+                ):
+                    generation_offsets[source_id] = (
+                        target_offset - 1
+                    )
+                    changed = True
+
+            if relation_type == "spouse_of":
+                if (
+                    source_offset is not None
+                    and target_offset is None
+                ):
+                    generation_offsets[target_id] = source_offset
+                    changed = True
+                elif (
+                    target_offset is not None
+                    and source_offset is None
+                ):
+                    generation_offsets[source_id] = target_offset
+                    changed = True
+
+        if not changed:
+            break
+
+    for node_id, node in nodes.items():
+        if node_id not in generation_offsets:
+            generation_offsets[node_id] = 0
+
+        node["data"]["generationOffset"] = (
+            generation_offsets[node_id]
+        )
+
+    genealogical_nodes = set()
+
+    for constraint in explicit_constraints:
+        relation_type = constraint["type"]
+        source_id = constraint["source"]
+        target_id = constraint["target"]
+
+        if relation_type == "child_of":
+            add_family_tree_edge(
+                relation_edges,
+                seen_edges,
+                target_id,
+                source_id,
+                relation_type,
+            )
+            genealogical_nodes.add(source_id)
+            genealogical_nodes.add(target_id)
+
+        if relation_type == "parent_of":
+            add_family_tree_edge(
+                relation_edges,
+                seen_edges,
+                source_id,
+                target_id,
+                relation_type,
+            )
+            genealogical_nodes.add(source_id)
+            genealogical_nodes.add(target_id)
+
+        if relation_type == "spouse_of":
+            add_family_tree_edge(
+                relation_edges,
+                seen_edges,
+                source_id,
+                target_id,
+                relation_type,
+            )
+            genealogical_nodes.add(source_id)
+            genealogical_nodes.add(target_id)
+
+    for node_id in nodes:
+        if node_id == "applicant":
+            continue
+
+        if (
+            node_id in genealogical_nodes
+            or node_id in constrained_nodes
+        ):
+            continue
+
+        offset = generation_offsets.get(node_id, 0)
+
+        if offset <= 0:
+            add_family_tree_edge(
+                relation_edges,
+                seen_edges,
+                node_id,
+                "applicant",
+                "inferred",
+            )
+        else:
+            add_family_tree_edge(
+                relation_edges,
+                seen_edges,
+                "applicant",
+                node_id,
+                "inferred",
+            )
+
+    spouse_partner = {}
+
+    for left_id, right_id in spouse_pairs:
+        spouse_partner[left_id] = right_id
+        spouse_partner[right_id] = left_id
+
+    parent_to_children = {}
+    child_to_parents = {}
+
+    for constraint in explicit_constraints:
+        relation_type = constraint["type"]
+
+        if relation_type == "child_of":
+            parent_id = constraint["target"]
+            child_id = constraint["source"]
+        elif relation_type == "parent_of":
+            parent_id = constraint["source"]
+            child_id = constraint["target"]
+        else:
+            continue
+
+        parent_to_children.setdefault(
+            parent_id,
+            []
+        ).append(child_id)
+        child_to_parents.setdefault(
+            child_id,
+            []
+        ).append(parent_id)
+
+    def canonical_unit(node_id):
+        partner_id = spouse_partner.get(node_id)
+
+        if not partner_id:
+            return (node_id,)
+
+        return tuple(
+            sorted([node_id, partner_id])
+        )
+
+    def order_unit_members(unit):
+        members = list(unit)
+
+        if len(members) == 1:
+            return members
+
+        if "applicant" in members:
+            return sorted(
+                members,
+                key=lambda value: (
+                    0 if value == "applicant" else 1,
+                    member_order.get(value, 9999),
+                ),
+            )
+
+        return sorted(
+            members,
+            key=lambda value: (
+                1 if is_spouse_or_inlaw_relation(
+                    nodes[value]["data"].get(
+                        "relationToApplicant",
+                        "",
+                    )
+                ) else 0,
+                member_order.get(value, 9999),
+            ),
+        )
+
+    def unique_units(node_ids):
+        seen = set()
+        ordered = []
+
+        for node_id in sorted(
+            node_ids,
+            key=lambda value: member_order.get(
+                value,
+                9999,
+            ),
+        ):
+            unit = canonical_unit(node_id)
+
+            if unit in seen:
+                continue
+
+            seen.add(unit)
+            ordered.append(unit)
+
+        return ordered
+
+    def unit_children(unit):
+        children = []
+
+        for member_id in unit:
+            children.extend(
+                parent_to_children.get(member_id, [])
+            )
+
+        return unique_units(children)
+
+    def unit_parents(unit):
+        parents = []
+
+        for member_id in unit:
+            parents.extend(
+                child_to_parents.get(member_id, [])
+            )
+
+        return unique_units(
+            [
+                parent_id
+                for parent_id in parents
+                if canonical_unit(parent_id) != unit
+            ]
+        )
+
+    partner_gap = 130
+    unit_gap = 72
+    vertical_gap = 190
+    single_span = 190
+    pair_span = 330
+    descendant_width_cache = {}
+    placed_units = set()
+    member_positions = {}
+
+    def base_unit_span(unit):
+        return (
+            pair_span
+            if len(unit) > 1
+            else single_span
+        )
+
+    def descendant_width(unit, trail=None):
+        trail = trail or set()
+
+        if unit in descendant_width_cache:
+            return descendant_width_cache[unit]
+
+        if unit in trail:
+            return base_unit_span(unit)
+
+        next_trail = set(trail)
+        next_trail.add(unit)
+        child_units = unit_children(unit)
+
+        if not child_units:
+            width = base_unit_span(unit)
+        else:
+            width = max(
+                base_unit_span(unit),
+                sum(
+                    descendant_width(
+                        child_unit,
+                        next_trail,
+                    )
+                    for child_unit in child_units
+                )
+                + unit_gap
+                * (len(child_units) - 1),
+            )
+
+        descendant_width_cache[unit] = width
+        return width
+
+    def place_unit(unit, center_x, depth):
+        ordered_members = order_unit_members(unit)
+        y = depth * vertical_gap
+
+        if len(ordered_members) == 1:
+            member_positions[ordered_members[0]] = {
+                "x": center_x,
+                "y": y,
+            }
+            return
+
+        left_member, right_member = ordered_members
+        member_positions[left_member] = {
+            "x": center_x - (partner_gap / 2),
+            "y": y,
+        }
+        member_positions[right_member] = {
+            "x": center_x + (partner_gap / 2),
+            "y": y,
+        }
+
+    def place_descendants(unit, center_x, depth, trail=None):
+        trail = trail or set()
+
+        if unit in trail:
+            return
+
+        next_trail = set(trail)
+        next_trail.add(unit)
+        placed_units.add(unit)
+        place_unit(
+            unit,
+            center_x,
+            depth,
+        )
+        child_units = unit_children(unit)
+
+        if not child_units:
+            return
+
+        total_width = (
+            sum(
+                descendant_width(
+                    child_unit,
+                    next_trail,
+                )
+                for child_unit in child_units
+            )
+            + unit_gap
+            * (len(child_units) - 1)
+        )
+        cursor = center_x - (total_width / 2)
+
+        for child_unit in child_units:
+            width = descendant_width(
+                child_unit,
+                next_trail,
+            )
+            child_center = cursor + (width / 2)
+            place_descendants(
+                child_unit,
+                child_center,
+                depth + 1,
+                next_trail,
+            )
+            cursor += width + unit_gap
+
+    def collect_top_ancestor_units(unit, trail=None):
+        trail = trail or set()
+
+        if unit in trail:
+            return [unit]
+
+        next_trail = set(trail)
+        next_trail.add(unit)
+        parent_units = unit_parents(unit)
+
+        if not parent_units:
+            return [unit]
+
+        roots = []
+
+        for parent_unit in parent_units:
+            roots.extend(
+                collect_top_ancestor_units(
+                    parent_unit,
+                    next_trail,
+                )
+            )
+
+        deduped = []
+        seen = set()
+
+        for root in roots:
+            if root in seen:
+                continue
+
+            seen.add(root)
+            deduped.append(root)
+
+        return deduped
+
+    root_unit = canonical_unit("applicant")
+    root_units = collect_top_ancestor_units(
+        root_unit
+    )
+    total_root_width = (
+        sum(
+            descendant_width(root)
+            for root in root_units
+        )
+        + unit_gap
+        * max(0, len(root_units) - 1)
+    )
+    root_cursor = -(total_root_width / 2)
+
+    for root in root_units:
+        width = descendant_width(root)
+        center_x = root_cursor + (width / 2)
+        place_descendants(
+            root,
+            center_x,
+            0,
+        )
+        root_cursor += width + unit_gap
+
+    fallback_units = unique_units(
+        list(nodes.keys())
+    )
+    fallback_depth = max(
+        generation_offsets.values(),
+        default=0,
+    ) + 2
+    fallback_cursor = 0
+
+    for unit in fallback_units:
+        if unit in placed_units:
+            continue
+
+        width = base_unit_span(unit)
+        center_x = fallback_cursor + (width / 2)
+        place_unit(
+            unit,
+            center_x,
+            fallback_depth,
+        )
+        fallback_cursor += width + unit_gap
+
+    positioned_nodes = [
+        {
+            "id": node_id,
+            "position": member_positions.get(
+                node_id,
+                {
+                    "x": 0,
+                    "y": 0,
+                },
+            ),
+            "data": node["data"],
+            "draggable": False,
+            "selectable": True,
+        }
+        for node_id, node in nodes.items()
+    ]
+
+    return {
+        "nodes": positioned_nodes,
+        "edges": relation_edges,
+    }
 
 
 def now_utc():
