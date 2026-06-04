@@ -1,4 +1,5 @@
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 import bcrypt
@@ -2095,38 +2096,49 @@ def create_app(config=None, collection=None, correction_collection=None):
         mongo_query = {}
 
         if query:
-            mongo_query["$or"] = [
-                {
-                    "firstName.en": {
-                        "$regex": query,
-                        "$options": "i",
-                    }
-                },
-                {
-                    "lastName.en": {
-                        "$regex": query,
-                        "$options": "i",
-                    }
-                },
-                {
-                    "firstName.mr": {
-                        "$regex": query,
-                        "$options": "i",
-                    }
-                },
-                {
-                    "lastName.mr": {
-                        "$regex": query,
-                        "$options": "i",
-                    }
-                },
-                {
-                    "mobileNumber": {
-                        "$regex": query,
-                        "$options": "i",
-                    }
-                },
+            query_tokens = [
+                token.strip()
+                for token in re.split(r"\s+", query)
+                if token.strip()
             ]
+
+            if query_tokens:
+                default_search_fields = [
+                    "firstName.en",
+                    "lastName.en",
+                    "firstName.mr",
+                    "lastName.mr",
+                    "familyMembers.name.en",
+                    "familyMembers.name.mr",
+                    "familyMembers.spouseName.en",
+                    "familyMembers.spouseName.mr",
+                    "mobileNumber",
+                ]
+
+                mongo_query["$and"] = []
+
+                for token in query_tokens:
+                    if token.startswith("#"):
+                        username = token[1:]
+                        if username:
+                            mongo_query["$and"].append({
+                                "createdBy": {
+                                    "$regex": f"^{re.escape(username)}$",
+                                    "$options": "i",
+                                }
+                            })
+                    else:
+                        mongo_query["$and"].append({
+                            "$or": [
+                                {
+                                    field: {
+                                        "$regex": token,
+                                        "$options": "i",
+                                    }
+                                }
+                                for field in default_search_fields
+                            ]
+                        })
 
         if state:
             mongo_query["state"] = state
