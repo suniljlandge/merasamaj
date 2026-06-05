@@ -61,6 +61,7 @@
         display: flex;
         align-items: center;
         gap: 12px;
+        flex: 1 1 auto;
         min-width: 0;
       }
 
@@ -99,6 +100,7 @@
         gap: 10px;
         flex-wrap: wrap;
         align-items: center;
+        justify-content: flex-end;
       }
 
       .family-tree-chip {
@@ -200,7 +202,8 @@
             Loading family tree...
           </h1>
         </div>
-          <div class="family-tree-actions" id="family-tree-actions">
+        <div class="family-tree-meta">
+          <div class="family-tree-actions" id="family-tree-actions" style="order:0">
             <button
               id="family-tree-view-button"
               class="button-secondary"
@@ -217,7 +220,6 @@
               <span id="family-tree-creator-name"></span>
             </span>
           </div>
-        <div class="family-tree-meta">
           <span
             class="family-tree-chip"
             id="family-tree-count"
@@ -938,15 +940,9 @@
             `${payload.member?.familyCount || nodes.length} visible family members`;
 
           // wire up View button and creator chip
-          const viewButton = document.querySelector(
-            "#family-tree-view-button"
-          );
-          const creatorChip = document.querySelector(
-            "#family-tree-creator"
-          );
-          const creatorNameEl = document.querySelector(
-            "#family-tree-creator-name"
-          );
+          const viewButton = document.querySelector("#family-tree-view-button");
+          const creatorChip = document.querySelector("#family-tree-creator");
+          const creatorNameEl = document.querySelector("#family-tree-creator-name");
 
           if (viewButton) {
             viewButton.style.display = "none";
@@ -959,29 +955,22 @@
             creatorChip.style.display = "none";
           }
 
-          // Fetch the full registration to obtain createdBy (and permission)
-          try {
-            const regResp = await fetch(`/api/registrations/${memberId}`);
+          // Use createdBy supplied in /api/family-tree payload (authorized for operator)
+          const createdByFromPayload = payload.member?.createdBy || "";
+          const role = window.CURRENT_ROLE || "";
+          const isViewer = role === "viewer";
 
-            if (regResp.ok) {
-              const regDoc = await regResp.json();
-              const createdBy = regDoc?.createdBy || "";
-
-              if (createdBy) {
-                if (creatorNameEl) {
-                  creatorNameEl.textContent = `Added By ${createdBy}`;
-                }
-                if (creatorChip) {
-                  creatorChip.style.display = "inline-flex";
-                }
-              }
-
-              if (viewButton) {
-                viewButton.style.display = "inline-flex";
-              }
+          if (createdByFromPayload && !isViewer) {
+            if (creatorNameEl) {
+              creatorNameEl.textContent = `Added By ${createdByFromPayload}`;
             }
-          } catch (err) {
-            console.error("Failed to fetch registration:", err);
+            if (creatorChip) creatorChip.style.display = "inline-flex";
+          } else if (creatorChip) {
+            creatorChip.style.display = "none";
+          }
+
+          if (viewButton) {
+            viewButton.style.display = "inline-flex";
           }
 
           flowElement.innerHTML = "";

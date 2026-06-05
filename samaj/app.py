@@ -1810,6 +1810,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                     len(serialized.get("familyMembers") or [])
                     + 1
                 ),
+                "createdBy": serialized.get("createdBy", ""),
             },
             "graph": build_family_tree_graph_data(
                 serialized
