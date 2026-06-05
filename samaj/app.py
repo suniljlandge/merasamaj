@@ -17,7 +17,9 @@ from flask import (
     current_app,
 )
 from flask_session import Session
+
 from .registration import (
+    clean_text,
     normalize_relationship_links,
     normalize_phone,
     validate_registration,
@@ -30,6 +32,18 @@ from .db import (
     create_collections,
     get_database,
 )
+
+from .migration import (
+    transform_old_record,
+    find_duplicate,
+    regenerate_marathi_fields,
+)
+
+from .corrections import (
+    collect_transliteration_corrections,
+    load_corrections,
+    save_corrections,
+    )
 
 
 def build_corrected_phrase(text, corrections):
