@@ -2222,21 +2222,47 @@ def create_app(config=None, collection=None, correction_collection=None):
                 surname.lower()
             )
 
+        # Pagination support: page (1-based) and per_page
+        try:
+            page = int(request.args.get("page", "1") or "1")
+        except Exception:
+            page = 1
+
+        try:
+            per_page = int(request.args.get("per_page", "15") or "15")
+        except Exception:
+            per_page = 15
+
+        if per_page < 1:
+            per_page = 1
+
+        # Cap per_page to avoid very large responses
+        if per_page > 200:
+            per_page = 200
+
+        total_count = get_collection().count_documents(mongo_query)
+
+        skip = (page - 1) * per_page
+
         cursor = (
             get_collection()
             .find(mongo_query)
             .sort("createdAt", -1)
-            .limit(200)
+            .skip(skip)
+            .limit(per_page)
         )
 
-        return jsonify(
-            {
-                "items": [
-                    serialize_registration_document(doc)
-                    for doc in cursor
-                ]
-            }
-        )
+        items = [
+            serialize_registration_document(doc)
+            for doc in cursor
+        ]
+
+        return jsonify({
+            "items": items,
+            "total_count": total_count,
+            "page": page,
+            "per_page": per_page,
+        })
 
 
         @app.delete("/api/members/<id>")

@@ -70,13 +70,19 @@ const totalMembersCount =
     "#totalMembersCount"
   );
 
+let currentPage = 1;
+const PER_PAGE = 15;
+
 setupSearchFilters();
 
-loadMemberDirectory();
+loadMemberDirectory(currentPage);
 
 searchButton.addEventListener(
   "click",
-  loadMemberDirectory
+  () => {
+    currentPage = 1;
+    loadMemberDirectory(currentPage);
+  }
 );
 
 searchInput.addEventListener(
@@ -84,7 +90,8 @@ searchInput.addEventListener(
   (event) => {
 
     if (event.key === "Enter") {
-      loadMemberDirectory();
+      currentPage = 1;
+      loadMemberDirectory(currentPage);
     }
 
   }
@@ -138,17 +145,23 @@ function setupSearchFilters() {
           )
           .join("");
 
-      loadMemberDirectory();
+      currentPage = 1;
+      loadMemberDirectory(currentPage);
     }
   );
 
   filterTaluka.addEventListener(
     "change",
-    loadMemberDirectory
+    () => {
+      currentPage = 1;
+      loadMemberDirectory(currentPage);
+    }
   );
 }
 
-async function loadMemberDirectory() {
+async function loadMemberDirectory(page = 1) {
+
+  currentPage = Number(page) || 1;
 
   directoryTableBody.innerHTML =
     `
@@ -173,6 +186,10 @@ async function loadMemberDirectory() {
 
     });
 
+  // pagination params
+  params.set("page", String(currentPage));
+  params.set("per_page", String(PER_PAGE));
+
   try {
 
     const response =
@@ -186,7 +203,7 @@ async function loadMemberDirectory() {
     if (totalMembersCount) {
 
       totalMembersCount.textContent =
-        body.items.length;
+        body.total_count || 0;
     }
 
     if (!body.items?.length) {
@@ -207,22 +224,21 @@ async function loadMemberDirectory() {
           </tr>
         `;
 
+      renderPagination(body.total_count || 0, body.page || currentPage, body.per_page || PER_PAGE);
+
       return;
     }
 
+    const pageNum = body.page || currentPage;
+    const pageSize = body.per_page || PER_PAGE;
+    const startIndex = ((pageNum - 1) * pageSize) || 0;
+
     directoryTableBody.innerHTML =
       body.items
-        .map(
-          (
-            item,
-            index
-          ) =>
-            renderMemberRow(
-              item,
-              index
-            )
-        )
+        .map((item, index) => renderMemberRow(item, startIndex + index))
         .join("");
+
+    renderPagination(body.total_count || 0, pageNum, pageSize);
 
   }
 
@@ -245,6 +261,49 @@ async function loadMemberDirectory() {
           </td>
         </tr>
       `;
+  }
+}
+
+function renderPagination(totalCount, page, perPage) {
+  const el = document.querySelector("#paginationControls");
+  if (!el) return;
+
+  if (!totalCount) {
+    el.innerHTML = "";
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+  const prevDisabled = page <= 1;
+  const nextDisabled = page >= totalPages;
+
+  el.innerHTML = `
+    <div class="flex items-center gap-3">
+      <button id="paginationPrev" class="px-3 py-1 rounded border ${prevDisabled ? 'opacity-50 pointer-events-none' : ''}">Prev</button>
+      <div class="text-sm text-slate-600">Page ${page} of ${totalPages}</div>
+      <button id="paginationNext" class="px-3 py-1 rounded border ${nextDisabled ? 'opacity-50 pointer-events-none' : ''}">Next</button>
+    </div>
+  `;
+
+  const prevBtn = document.getElementById("paginationPrev");
+  const nextBtn = document.getElementById("paginationNext");
+
+  if (prevBtn) {
+    prevBtn.addEventListener("click", () => {
+      if (page > 1) {
+        currentPage = page - 1;
+        loadMemberDirectory(currentPage);
+      }
+    });
+  }
+
+  if (nextBtn) {
+    nextBtn.addEventListener("click", () => {
+      if (page < totalPages) {
+        currentPage = page + 1;
+        loadMemberDirectory(currentPage);
+      }
+    });
   }
 }
 
