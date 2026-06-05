@@ -419,6 +419,10 @@ function renderActionButtons(
     role === "super_admin" ||
     role === "operator";
 
+  const canDelete =
+    role === "admin" ||
+    role === "super_admin";
+
   if (!canView && !canEdit && !canViewTree) {
     return "";
   }
@@ -470,6 +474,20 @@ function renderActionButtons(
           : ""
       }
 
+      ${
+        canDelete
+          ? `
+            <button
+              class="button-secondary"
+              style="color:#b91c1c;border-color:#fecaca"
+              onclick="deleteMember('${record._id}')"
+            >
+              Delete
+            </button>
+          `
+          : ""
+      }
+
     </div>
   `;
 }
@@ -491,6 +509,60 @@ function viewFamilyTree(id) {
 
   window.location.href =
     `/family-tree/${id}`;
+}
+
+async function deleteMember(id) {
+
+  if (!confirm("Delete this member? This cannot be undone.")) {
+    return;
+  }
+  const selector = `[onclick="deleteMember('${id}')"]`;
+  let btn = document.querySelector(selector);
+  const originalText = btn ? btn.textContent : null;
+
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Deleting...";
+    }
+
+    const res = await fetch(`/api/registrations/${id}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (res.ok) {
+      alert("Member deleted");
+
+      if (btn) {
+        const row = btn.closest("tr");
+        if (row) row.remove();
+      }
+
+      if (totalMembersCount) {
+        const n = Number(totalMembersCount.textContent || 0) - 1;
+        totalMembersCount.textContent = String(n >= 0 ? n : 0);
+      }
+
+      return;
+    }
+
+    const body = await res.json().catch(() => ({}));
+    alert(body.error || "Failed to delete member");
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to delete member");
+  } finally {
+    btn = document.querySelector(selector);
+    if (btn) {
+      btn.disabled = false;
+      if (originalText) btn.textContent = originalText;
+    }
+  }
+
 }
 
 function calculateFamilyMembersCount(

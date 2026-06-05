@@ -6,36 +6,18 @@ import bcrypt
 import requests
 from pymongo import MongoClient
 from bson import ObjectId
-from bson.errors import InvalidId
-from flask_session import Session
-
-
-from .migration import (
-    transform_old_record,
-    find_duplicate,
-    regenerate_marathi_fields,
-)
-
 from flask import (
     Flask,
-    jsonify,
     render_template,
     request,
+    jsonify,
     session,
     redirect,
+    url_for,
+    current_app,
 )
-
-from .corrections import (
-    collect_transliteration_corrections,
-    load_corrections,
-    save_corrections,
-)
-from .db import (
-    create_collections,
-    get_database,
-)
+from flask_session import Session
 from .registration import (
-    clean_text,
     normalize_relationship_links,
     normalize_phone,
     validate_registration,
@@ -43,6 +25,10 @@ from .registration import (
 from .transliterate import (
     transliteration_suggestions,
     transliterate_to_marathi,
+)
+from .db import (
+    create_collections,
+    get_database,
 )
 
 
@@ -1857,7 +1843,6 @@ def create_app(config=None, collection=None, correction_collection=None):
             return jsonify({
                 "error": "Forbidden"
             }), 403
-
         payload = (
             request.get_json(
                 silent=True
@@ -1957,6 +1942,74 @@ def create_app(config=None, collection=None, correction_collection=None):
         return jsonify({
             "ok": True
         })
+
+    @app.delete("/api/registrations/<id>")
+    def delete_registration(id):
+
+        if not require_role(
+            "admin",
+            "super_admin",
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        document_id = object_id_or_none(id)
+
+        if not document_id:
+            app.logger.info("delete_registration: invalid ObjectId %s", id)
+            return jsonify({"error": "Invalid id"}), 400
+
+        result = get_collection().delete_one({"_id": document_id})
+
+        if result.deleted_count:
+            app.logger.info("delete_registration: deleted by ObjectId %s", id)
+            return jsonify({"ok": True})
+
+        try:
+            result2 = get_collection().delete_one({"_id": str(id)})
+            if result2.deleted_count:
+                app.logger.info("delete_registration: deleted by string _id %s", id)
+                return jsonify({"ok": True})
+        except Exception:
+            app.logger.exception("delete_registration: fallback delete by string failed for %s", id)
+
+        app.logger.info("delete_registration: not found %s", id)
+        return jsonify({"error": "Not found"}), 404
+
+    @app.delete("/api/members/<id>")
+    def delete_member(id):
+
+        if not require_role(
+            "admin",
+            "super_admin",
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        document_id = object_id_or_none(id)
+
+        if not document_id:
+            app.logger.info("delete_member: invalid ObjectId %s", id)
+            return jsonify({"error": "Invalid id"}), 400
+
+        result = get_collection().delete_one({"_id": document_id})
+
+        if result.deleted_count:
+            app.logger.info("delete_member: deleted by ObjectId %s", id)
+            return jsonify({"ok": True})
+
+        try:
+            result2 = get_collection().delete_one({"_id": str(id)})
+            if result2.deleted_count:
+                app.logger.info("delete_member: deleted by string _id %s", id)
+                return jsonify({"ok": True})
+        except Exception:
+            app.logger.exception("delete_member: fallback delete by string failed for %s", id)
+
+        app.logger.info("delete_member: not found %s", id)
+        return jsonify({"error": "Not found"}), 404
 
     @app.post("/api/registrations")
 
@@ -2169,6 +2222,49 @@ def create_app(config=None, collection=None, correction_collection=None):
                 ]
             }
         )
+
+
+        @app.delete("/api/members/<id>")
+        def delete_member(id):
+
+            if not require_role(
+                "admin",
+                "super_admin",
+            ):
+                return jsonify({
+                    "error": "Forbidden"
+                }), 403
+
+            document_id = object_id_or_none(id)
+
+            if not document_id:
+                app.logger.info("delete_member: invalid ObjectId %s", id)
+                return jsonify({
+                    "error": "Invalid id"
+                }), 400
+
+            # Try deleting by ObjectId first
+            result = get_collection().delete_one({
+                "_id": document_id
+            })
+
+            if result.deleted_count:
+                app.logger.info("delete_member: deleted by ObjectId %s", id)
+                return jsonify({"ok": True})
+
+            # Fallback: some records may have string _id values; try deleting by string
+            try:
+                result2 = get_collection().delete_one({"_id": str(id)})
+                if result2.deleted_count:
+                    app.logger.info("delete_member: deleted by string _id %s", id)
+                    return jsonify({"ok": True})
+            except Exception:
+                app.logger.exception("delete_member: fallback delete by string failed for %s", id)
+
+            app.logger.info("delete_member: not found %s", id)
+            return jsonify({
+                "error": "Not found"
+            }), 404
 
     @app.get("/api/transliteration-corrections")
     def list_transliteration_corrections():
