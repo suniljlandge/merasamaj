@@ -64,6 +64,13 @@
         min-width: 0;
       }
 
+      .family-tree-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
       .family-tree-eyebrow {
         margin: 0;
         text-transform: uppercase;
@@ -140,6 +147,12 @@
           flex-wrap: wrap;
         }
 
+        .family-tree-actions {
+          width: 100%;
+          justify-content: flex-start;
+          margin-top: 8px;
+        }
+
         .family-tree-title {
           white-space: normal;
         }
@@ -187,6 +200,23 @@
             Loading family tree...
           </h1>
         </div>
+          <div class="family-tree-actions" id="family-tree-actions">
+            <button
+              id="family-tree-view-button"
+              class="button-secondary"
+              style="display:none"
+            >
+              View
+            </button>
+
+            <span
+              id="family-tree-creator"
+              class="family-tree-chip"
+              style="display:none"
+            >
+              <span id="family-tree-creator-name"></span>
+            </span>
+          </div>
         <div class="family-tree-meta">
           <span
             class="family-tree-chip"
@@ -906,6 +936,53 @@
             || "Unnamed applicant";
           countElement.textContent =
             `${payload.member?.familyCount || nodes.length} visible family members`;
+
+          // wire up View button and creator chip
+          const viewButton = document.querySelector(
+            "#family-tree-view-button"
+          );
+          const creatorChip = document.querySelector(
+            "#family-tree-creator"
+          );
+          const creatorNameEl = document.querySelector(
+            "#family-tree-creator-name"
+          );
+
+          if (viewButton) {
+            viewButton.style.display = "none";
+            viewButton.addEventListener("click", () => {
+              window.location.href = `/view-member/${memberId}`;
+            });
+          }
+
+          if (creatorChip) {
+            creatorChip.style.display = "none";
+          }
+
+          // Fetch the full registration to obtain createdBy (and permission)
+          try {
+            const regResp = await fetch(`/api/registrations/${memberId}`);
+
+            if (regResp.ok) {
+              const regDoc = await regResp.json();
+              const createdBy = regDoc?.createdBy || "";
+
+              if (createdBy) {
+                if (creatorNameEl) {
+                  creatorNameEl.textContent = `Added By ${createdBy}`;
+                }
+                if (creatorChip) {
+                  creatorChip.style.display = "inline-flex";
+                }
+              }
+
+              if (viewButton) {
+                viewButton.style.display = "inline-flex";
+              }
+            }
+          } catch (err) {
+            console.error("Failed to fetch registration:", err);
+          }
 
           flowElement.innerHTML = "";
           const root =
