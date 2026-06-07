@@ -2901,6 +2901,7 @@ def build_family_tree_graph_data(document):
     member_order = {
         "applicant": 0
     }
+    members_with_links = set()
     normalized_name_to_ids = {}
 
     for member in family_members:
@@ -2939,20 +2940,28 @@ def build_family_tree_graph_data(document):
                 "spouseName": build_bilingual_name(
                     member.get("spouseName")
                 ),
+                "householdId": clean_text(
+                    member.get("householdId") or ""
+                ),
             },
         }
+        if member.get("relationshipLinks"):
+            members_with_links.add(person_id)
         member_order[person_id] = member_index
 
-        inferred_offset = (
-            infer_generation_offset_from_relation(
-                member.get("relationToApplicant")
-                or member.get("relation")
-                or ""
+        # Only infer generation offset from the free-text "relationToApplicant"
+        # when explicit `relationshipLinks` are not provided for this member.
+        if person_id not in members_with_links:
+            inferred_offset = (
+                infer_generation_offset_from_relation(
+                    member.get("relationToApplicant")
+                    or member.get("relation")
+                    or ""
+                )
             )
-        )
 
-        if inferred_offset is not None:
-            generation_offsets[person_id] = inferred_offset
+            if inferred_offset is not None:
+                generation_offsets[person_id] = inferred_offset
 
     for node_id, node in nodes.items():
         normalized_name = clean_text(
@@ -3049,7 +3058,7 @@ def build_family_tree_graph_data(document):
                 "",
             )
 
-        if not inferred_existing_spouse_id:
+        if not inferred_existing_spouse_id and source_id not in members_with_links:
             if source_relation == "son":
                 inlaw_candidates = [
                     candidate_id
@@ -3083,12 +3092,6 @@ def build_family_tree_graph_data(document):
                 if len(matched_candidates) == 1:
                     inferred_existing_spouse_id = (
                         matched_candidates[0]
-                    )
-                elif (
-                    len(inlaw_candidates) == 1
-                ):
-                    inferred_existing_spouse_id = (
-                        inlaw_candidates[0]
                     )
 
             if source_relation == "daughter":
@@ -3124,12 +3127,6 @@ def build_family_tree_graph_data(document):
                 if len(matched_candidates) == 1:
                     inferred_existing_spouse_id = (
                         matched_candidates[0]
-                    )
-                elif (
-                    len(inlaw_candidates) == 1
-                ):
-                    inferred_existing_spouse_id = (
-                        inlaw_candidates[0]
                     )
 
         if (
@@ -3192,7 +3189,8 @@ def build_family_tree_graph_data(document):
                         member.get("currentCity")
                         or ""
                     ),
-                    "spouseName": "",
+                        "spouseName": "",
+                        "householdId": nodes.get(source_id, {}).get("data", {}).get("householdId", ""),
                 },
             }
             generation_offsets[spouse_node_id] = generation_offsets.get(
@@ -3252,6 +3250,7 @@ def build_family_tree_graph_data(document):
         if (
             relation in {"mother", "father"}
             and node_id not in source_nodes_with_direct_constraints
+            and node_id not in members_with_links
         ):
             direct_relation_constraints.append({
                 "type": "parent_of",
@@ -3283,6 +3282,7 @@ def build_family_tree_graph_data(document):
             if (
                 relation in {"brother", "sister"}
                 and node_id not in source_nodes_with_direct_constraints
+                and node_id not in members_with_links
             ):
                 direct_relation_constraints.append({
                     "type": "child_of",
@@ -3296,7 +3296,7 @@ def build_family_tree_graph_data(document):
         if node_id == "applicant":
             continue
 
-        if node_id in source_nodes_with_direct_constraints:
+        if node_id in source_nodes_with_direct_constraints or node_id in members_with_links:
             continue
 
         relation = normalize_relation_label(
@@ -3542,6 +3542,13 @@ def build_family_tree_graph_data(document):
             []
         ).append(parent_id)
 
+    # Group nodes by household to help place members living together
+    household_groups = {}
+    for nid, n in nodes.items():
+        hid = n.get("data", {}).get("householdId") or ""
+        if hid:
+            household_groups.setdefault(hid, []).append(nid)
+
     def canonical_unit(node_id):
         partner_id = spouse_partner.get(node_id)
 
@@ -3571,10 +3578,7 @@ def build_family_tree_graph_data(document):
             members,
             key=lambda value: (
                 1 if is_spouse_or_inlaw_relation(
-                    nodes[value]["data"].get(
-                        "relationToApplicant",
-                        "",
-                    )
+                    ("" if value in members_with_links else nodes[value]["data"].get("relationToApplicant", ""))
                 ) else 0,
                 member_order.get(value, 9999),
             ),
@@ -3637,11 +3641,12 @@ def build_family_tree_graph_data(document):
     member_positions = {}
 
     def base_unit_span(unit):
-        return (
-            pair_span
-            if len(unit) > 1
-            else single_span
-        )
+        if len(unit) == 1:
+            return single_span
+        if len(unit) == 2:
+            return pair_span
+        # For larger household units, allocate more horizontal span
+        return max(pair_span, single_span * len(unit))
 
     def descendant_width(unit, trail=None):
         trail = trail or set()
@@ -3679,22 +3684,17 @@ def build_family_tree_graph_data(document):
         ordered_members = order_unit_members(unit)
         y = depth * vertical_gap
 
-        if len(ordered_members) == 1:
-            member_positions[ordered_members[0]] = {
-                "x": center_x,
-                "y": y,
-            }
+        n = len(ordered_members)
+        if n == 1:
+            member_positions[ordered_members[0]] = {"x": center_x, "y": y}
             return
 
-        left_member, right_member = ordered_members
-        member_positions[left_member] = {
-            "x": center_x - (partner_gap / 2),
-            "y": y,
-        }
-        member_positions[right_member] = {
-            "x": center_x + (partner_gap / 2),
-            "y": y,
-        }
+        width = base_unit_span(unit)
+
+        # Place N members evenly across the unit width
+        for i, member_id in enumerate(ordered_members):
+            x = center_x - (width / 2) + (i + 0.5) * (width / n)
+            member_positions[member_id] = {"x": x, "y": y}
 
     def place_descendants(unit, center_x, depth, trail=None):
         trail = trail or set()
