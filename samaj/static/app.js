@@ -268,7 +268,7 @@ if (form) {
 
   if (memberCountInput) {
     memberCountInput.addEventListener("input", () => {
-      memberCount = clamp(Number(memberCountInput.value || 0), 0, 25);
+      memberCount = clamp(Number(memberCountInput.value || 0), 0, 50);
       memberCountInput.value = String(memberCount);
       renderFamilyMembers();
     });
@@ -276,7 +276,7 @@ if (form) {
 
   if (addMemberButton) {
     addMemberButton.addEventListener("click", () => {
-      memberCount = clamp(memberCount + 1, 0, 25);
+      memberCount = clamp(memberCount + 1, 0, 50);
 
       if (memberCountInput) {
         memberCountInput.value = String(memberCount);
@@ -1800,7 +1800,7 @@ function populateRegistrationForm(record = {}) {
   memberCount = clamp(
     familyMembers.length,
     0,
-    25
+    50
   );
 
   if (memberCountInput) {

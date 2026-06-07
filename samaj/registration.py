@@ -61,6 +61,9 @@ SPOUSE_COUNTED_RELATIONS = {
     "Nephew",
 }
 
+# Maximum allowed family members per registration (excluding applicant)
+MAX_FAMILY_MEMBERS = 50
+
 
 def normalize_registration(
     payload=None,
@@ -148,6 +151,12 @@ def validate_registration(
     )
 
     errors = []
+
+    if len(value.get("familyMembers") or []) > MAX_FAMILY_MEMBERS:
+        errors.append({
+            "field": "familyMembers",
+            "message": f"At most {MAX_FAMILY_MEMBERS} family members are allowed."
+        })
 
     for field in TEXT_FIELDS:
         if (
