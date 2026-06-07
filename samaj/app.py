@@ -1196,29 +1196,6 @@ def create_app(config=None, collection=None, correction_collection=None):
             get_users_collection()
         )
 
-        if users_collection.find_one({
-            "username": username
-        }):
-            return jsonify({
-                "error": "Username already exists"
-            }), 409
-
-        now = datetime.now(timezone.utc)
-        password_hash = bcrypt.hashpw(
-            password.encode(),
-            bcrypt.gensalt()
-        ).decode()
-
-        document = {
-            "username": username,
-            "passwordHash": password_hash,
-            "role": role,
-            "isActive": True,
-            "createdAt": now,
-            "createdBy": session.get("username"),
-            "lastLoginAt": None,
-        }
-
         result = users_collection.insert_one(
             document
         )
@@ -2945,7 +2922,25 @@ def build_family_tree_graph_data(document):
                 ),
             },
         }
-        if member.get("relationshipLinks"):
+        # Only treat a member as having explicit relationship links when
+        # those links contain authoritative relation types we rely on for
+        # graph construction. Ignore generic 'other' links for this
+        # purpose so we can still use `relationToApplicant` heuristics.
+        links_for_member = normalize_relationship_links(
+            member.get("relationshipLinks"),
+            member,
+        )
+
+        authoritative_link_types = {
+            "child_of",
+            "parent_of",
+            "spouse_of",
+            "sibling_of",
+            "belongs_to_household",
+            "guardian_of",
+        }
+
+        if any((link.get("type") in authoritative_link_types) for link in links_for_member):
             members_with_links.add(person_id)
         member_order[person_id] = member_index
 
@@ -3549,6 +3544,26 @@ def build_family_tree_graph_data(document):
         if hid:
             household_groups.setdefault(hid, []).append(nid)
 
+    # applicant's primary household id (if present on the document)
+    primary_household_id = serialized.get("primaryHouseholdId") or ""
+
+    def should_stack_children_vertically(unit):
+        """Return True when this unit is a sibling (brother/sister)
+        living in the applicant's primary household — in that case
+        stack their children vertically beneath them instead of
+        arranging children horizontally."""
+        for member_id in unit:
+            node = nodes.get(member_id)
+            if not node:
+                continue
+            relation = normalize_relation_label(
+                node["data"].get("relationToApplicant", "")
+            )
+            if relation in {"brother", "sister"}:
+                if node["data"].get("householdId", "") == primary_household_id:
+                    return True
+        return False
+
     def canonical_unit(node_id):
         partner_id = spouse_partner.get(node_id)
 
@@ -3664,18 +3679,31 @@ def build_family_tree_graph_data(document):
         if not child_units:
             width = base_unit_span(unit)
         else:
-            width = max(
-                base_unit_span(unit),
-                sum(
-                    descendant_width(
-                        child_unit,
-                        next_trail,
-                    )
-                    for child_unit in child_units
+            # If this unit represents a sibling's household living with the
+            # applicant, stack children vertically — width should be the max
+            # of the base span and the widest child subtree rather than the
+            # sum of child widths.
+            if should_stack_children_vertically(unit):
+                width = max(
+                    base_unit_span(unit),
+                    max(
+                        (descendant_width(child_unit, next_trail) for child_unit in child_units),
+                        default=base_unit_span(unit),
+                    ),
                 )
-                + unit_gap
-                * (len(child_units) - 1),
-            )
+            else:
+                width = max(
+                    base_unit_span(unit),
+                    sum(
+                        descendant_width(
+                            child_unit,
+                            next_trail,
+                        )
+                        for child_unit in child_units
+                    )
+                    + unit_gap
+                    * (len(child_units) - 1),
+                )
 
         descendant_width_cache[unit] = width
         return width
@@ -3713,6 +3741,20 @@ def build_family_tree_graph_data(document):
         child_units = unit_children(unit)
 
         if not child_units:
+            return
+
+        # If stacking vertically (for sibling households living with
+        # applicant), place each child unit directly beneath the parent
+        # at the same center x (stacked rows). Otherwise, distribute
+        # children horizontally as before.
+        if should_stack_children_vertically(unit):
+            for idx, child_unit in enumerate(child_units):
+                place_descendants(
+                    child_unit,
+                    center_x,
+                    depth + 1 + idx,
+                    next_trail,
+                )
             return
 
         total_width = (
@@ -3778,28 +3820,63 @@ def build_family_tree_graph_data(document):
         return deduped
 
     root_unit = canonical_unit("applicant")
-    root_units = collect_top_ancestor_units(
-        root_unit
-    )
-    total_root_width = (
-        sum(
-            descendant_width(root)
-            for root in root_units
-        )
-        + unit_gap
-        * max(0, len(root_units) - 1)
-    )
-    root_cursor = -(total_root_width / 2)
+    root_units = collect_top_ancestor_units(root_unit)
 
-    for root in root_units:
-        width = descendant_width(root)
-        center_x = root_cursor + (width / 2)
-        place_descendants(
-            root,
-            center_x,
-            0,
-        )
-        root_cursor += width + unit_gap
+    # Include sibling household units (brother/sister) that live in the
+    # applicant's primary household so their families appear alongside
+    # the applicant rather than in the fallback area.
+    primary_household_nodes = household_groups.get(primary_household_id, [])
+    for unit in unique_units(primary_household_nodes):
+        # Skip if already included
+        if unit in root_units:
+            continue
+
+        # If the unit contains a sibling relation, promote it to a root unit
+        if any(
+            normalize_relation_label(
+                nodes.get(member_id, {}).get("data", {}).get("relationToApplicant", "")
+            ) in {"brother", "sister"}
+            for member_id in unit
+        ):
+            root_units.append(unit)
+
+    # Ensure applicant unit is present and center it at x=0. Place other
+    # root units to the left and right of the applicant to avoid
+    # overlapping connectors and improve visual clarity.
+    if root_unit not in root_units:
+        root_units.insert(0, root_unit)
+
+    applicant_unit = root_unit
+    applicant_width = descendant_width(applicant_unit)
+
+    # Place applicant (center)
+    place_descendants(applicant_unit, 0, 0)
+
+    # Distribute remaining root units around the applicant: half to the
+    # left (closest first), half to the right.
+    other_roots = [r for r in root_units if r != applicant_unit]
+    half = len(other_roots) // 2
+    left_roots = other_roots[:half]
+    right_roots = other_roots[half:]
+
+    # Place left-side roots (reverse order so closest is first)
+    # Add extra margin around the applicant so nearby root units don't
+    # sit too close and cause connector overlap.
+    root_margin = max(unit_gap * 2, 160)
+    cursor_left = - (applicant_width / 2) - root_margin
+    for unit in reversed(left_roots):
+        width = descendant_width(unit)
+        center_x = cursor_left - (width / 2)
+        place_descendants(unit, center_x, 0)
+        cursor_left = center_x - (width / 2) - unit_gap
+
+    # Place right-side roots
+    cursor_right = (applicant_width / 2) + root_margin
+    for unit in right_roots:
+        width = descendant_width(unit)
+        center_x = cursor_right + (width / 2)
+        place_descendants(unit, center_x, 0)
+        cursor_right = center_x + (width / 2) + unit_gap
 
     fallback_units = unique_units(
         list(nodes.keys())
