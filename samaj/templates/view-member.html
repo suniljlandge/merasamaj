@@ -42,6 +42,14 @@
         </a>
 
         <a
+          href="#"
+          class="button-secondary"
+          id="view-tree-link"
+        >
+          Tree
+        </a>
+
+        <a
           class="button-primary"
           href="#"
           id="view-edit-link"
@@ -226,6 +234,15 @@
       if (canEdit) {
         editLink.hidden = false;
         editLink.href = `/edit-member/${memberId}`;
+      }
+
+      const treeLink =
+        document.querySelector(
+          "#view-tree-link"
+        );
+
+      if (treeLink) {
+        treeLink.href = `/family-tree/${memberId}`;
       }
 
 
