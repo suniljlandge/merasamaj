@@ -3561,7 +3561,16 @@ def build_family_tree_graph_data(document):
             )
             if relation in {"brother", "sister"}:
                 if node["data"].get("householdId", "") == primary_household_id:
-                    return True
+                    # Only stack vertically when this sibling household has
+                    # multiple child-units such that horizontal layout would
+                    # become very wide. For small sibling families (1-2
+                    # child units) prefer the horizontal layout.
+                    try:
+                        child_units = unit_children(unit)
+                        return len(child_units) > 2
+                    except Exception:
+                        return False
+
         return False
 
     def canonical_unit(node_id):
@@ -3646,11 +3655,13 @@ def build_family_tree_graph_data(document):
             ]
         )
 
-    partner_gap = 130
-    unit_gap = 72
-    vertical_gap = 190
-    single_span = 190
-    pair_span = 330
+    # Spacing constants for family-tree layout. Increased to improve
+    # visual separation and reduce overlapping connectors/nodes.
+    partner_gap = 150
+    unit_gap = 80
+    vertical_gap = 240
+    single_span = 220
+    pair_span = 420
     descendant_width_cache = {}
     placed_units = set()
     member_positions = {}
@@ -3748,10 +3759,18 @@ def build_family_tree_graph_data(document):
         # at the same center x (stacked rows). Otherwise, distribute
         # children horizontally as before.
         if should_stack_children_vertically(unit):
+            # When stacking children vertically for sibling households,
+            # apply a small horizontal offset per child so their connectors
+            # don't overlap exactly on the same x coordinate.
+            n = len(child_units)
             for idx, child_unit in enumerate(child_units):
+                offset = 0
+                if n > 1:
+                    offset = (idx - (n - 1) / 2) * 40
+
                 place_descendants(
                     child_unit,
-                    center_x,
+                    center_x + offset,
                     depth + 1 + idx,
                     next_trail,
                 )
@@ -3864,9 +3883,39 @@ def build_family_tree_graph_data(document):
     # sit too close and cause connector overlap.
     root_margin = max(unit_gap * 2, 160)
     cursor_left = - (applicant_width / 2) - root_margin
+    def unit_is_linear_chain(unit, max_depth=6):
+        """Return True when the subtree under `unit` is essentially a
+        single-child chain (each node has at most one child) up to
+        `max_depth`. These chains can be nudged horizontally to avoid
+        crossing other connectors."""
+        seen = set()
+        depth = 0
+        current = unit
+
+        while depth < max_depth:
+            if current in seen:
+                return True
+            seen.add(current)
+            children = unit_children(current)
+            if not children:
+                return True
+            if len(children) > 1:
+                return False
+            current = children[0]
+            depth += 1
+
+        return True
+
     for unit in reversed(left_roots):
         width = descendant_width(unit)
         center_x = cursor_left - (width / 2)
+
+        # If this root is effectively a deep single-child chain, push it
+        # a bit further away from the applicant so its vertical connectors
+        # don't collide with nearby branches.
+        if unit_is_linear_chain(unit):
+            center_x -= 120
+
         place_descendants(unit, center_x, 0)
         cursor_left = center_x - (width / 2) - unit_gap
 
@@ -3875,6 +3924,11 @@ def build_family_tree_graph_data(document):
     for unit in right_roots:
         width = descendant_width(unit)
         center_x = cursor_right + (width / 2)
+
+        # Mirror the same chain heuristic for right-side roots.
+        if unit_is_linear_chain(unit):
+            center_x += 120
+
         place_descendants(unit, center_x, 0)
         cursor_right = center_x + (width / 2) + unit_gap
 
