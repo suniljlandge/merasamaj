@@ -3871,9 +3871,24 @@ def build_family_tree_graph_data(document):
     # Place applicant (center)
     place_descendants(applicant_unit, 0, 0)
 
-    # Distribute remaining root units around the applicant: half to the
-    # left (closest first), half to the right.
+    # Distribute remaining root units around the applicant.
+    # Prefer sibling household units (brother/sister living in the
+    # applicant's primary household) so they appear adjacent to the
+    # applicant rather than pushed far to the edges.
+    def unit_is_sibling(unit):
+        for member_id in unit:
+            node = nodes.get(member_id)
+            if not node:
+                continue
+            if normalize_relation_label(node.get("data", {}).get("relationToApplicant", "")) in {"brother", "sister"}:
+                if node.get("data", {}).get("householdId", "") == primary_household_id:
+                    return True
+        return False
+
     other_roots = [r for r in root_units if r != applicant_unit]
+    # Sort so sibling units (from primary household) come first and are
+    # therefore placed closest to the applicant when we split left/right.
+    other_roots.sort(key=lambda unit: (0 if unit_is_sibling(unit) else 1, member_order.get(unit[0], 9999)))
     half = len(other_roots) // 2
     left_roots = other_roots[:half]
     right_roots = other_roots[half:]
