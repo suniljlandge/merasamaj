@@ -1196,13 +1196,36 @@ def create_app(config=None, collection=None, correction_collection=None):
             get_users_collection()
         )
 
-        result = users_collection.insert_one(
-            document
+        # Check for existing username
+        existing = users_collection.find_one({
+            "username": username
+        })
+
+        if existing:
+            return jsonify({
+                "error": "Username already exists"
+            }), 400
+
+        # Hash the password
+        password_hash = (
+            bcrypt.hashpw(
+                password.encode(),
+                bcrypt.gensalt(),
+            )
+            .decode()
         )
 
-        document["_id"] = (
-            result.inserted_id
-        )
+        document = {
+            "username": username,
+            "passwordHash": password_hash,
+            "role": role,
+            "createdAt": datetime.utcnow(),
+            "createdBy": session.get("username", ""),
+        }
+
+        result = users_collection.insert_one(document)
+
+        document["_id"] = result.inserted_id
         document.pop("passwordHash", None)
 
         return jsonify({
