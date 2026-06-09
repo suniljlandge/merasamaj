@@ -4347,44 +4347,78 @@ def send_otp_message(settings, mobile_number, otp_code, app_config):
     if active_provider == OTP_PROVIDER_META:
         meta = settings.get("metaWhatsApp") or {}
 
+        access_token = (
+            meta.get("accessToken")
+            or os.environ.get("WA_TOKEN", "")
+        )
+        phone_number_id = (
+            meta.get("phoneNumberId")
+            or os.environ.get("WA_PHONE_ID", "")
+        )
+        template_name = meta.get("templateName") or ""
+        template_language = (
+            meta.get("templateLanguage") or "en_US"
+        )
+
         if (
-            not meta.get("accessToken")
-            or not meta.get("phoneNumberId")
-            or not meta.get("templateName")
+            not access_token
+            or not phone_number_id
+            or not template_name
         ):
             raise ValueError("Meta WhatsApp settings are incomplete.")
 
+        components = []
+        if otp_code:
+            components.append({
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": otp_code}
+                ],
+            })
+            components.append({
+                "type": "button",
+                "sub_type": "url",
+                "index": "0",
+                "parameters": [
+                    {"type": "text", "text": otp_code}
+                ],
+            })
+
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": mobile_number.replace("+", ""),
+            "type": "template",
+            "template": {
+                "name": template_name,
+                "language": {"code": template_language},
+                "components": components,
+            },
+        }
+
         response = requests.post(
-            f"https://graph.facebook.com/v23.0/{meta['phoneNumberId']}/messages",
+            f"https://graph.facebook.com/v24.0/{phone_number_id}/messages",
             headers={
-                "Authorization": f"Bearer {meta['accessToken']}",
+                "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
             },
-            json={
-                "messaging_product": "whatsapp",
-                "to": mobile_number.replace("+", ""),
-                "type": "template",
-                "template": {
-                    "name": meta["templateName"],
-                    "language": {
-                        "code": meta.get("templateLanguage") or "en_US"
-                    },
-                    "components": [
-                        {
-                            "type": "body",
-                            "parameters": [
-                                {
-                                    "type": "text",
-                                    "text": otp_code,
-                                }
-                            ],
-                        }
-                    ],
-                },
-            },
+            json=payload,
             timeout=15,
         )
-        response.raise_for_status()
+
+        if not response.ok:
+            try:
+                error_body = response.json()
+                error_detail = (
+                    error_body.get("error", {}).get("message")
+                    or error_body.get("error", {}).get("error_user_msg")
+                    or str(error_body)
+                )
+            except Exception:
+                error_detail = response.text or response.reason
+            raise ValueError(
+                f"WhatsApp API error ({response.status_code}): {error_detail}"
+            )
+
         body = response.json()
         return {
             "provider": OTP_PROVIDER_META,

@@ -383,11 +383,26 @@ def normalize_phone(value=""):
         text,
     )
 
+    if not normalized:
+        return normalized
+
+    # Already has + prefix with country code
+    if normalized.startswith("+"):
+        return normalized
+
+    # Indian number without + (e.g. 919876543210)
     if (
         normalized.startswith("91")
         and len(normalized) == 12
     ):
         return f"+{normalized}"
+
+    # 10-digit Indian mobile number without country code
+    if (
+        len(normalized) == 10
+        and normalized[0] in "6789"
+    ):
+        return f"+91{normalized}"
 
     return normalized
 
