@@ -1,11 +1,14 @@
 import os
 import re
+import csv
+import io
 import secrets
 from datetime import datetime, timedelta, timezone
 import bcrypt
 import requests
 from pymongo import MongoClient
 from bson import ObjectId
+from bson.errors import InvalidId
 from flask import (
     Flask,
     render_template,
@@ -15,6 +18,7 @@ from flask import (
     redirect,
     url_for,
     current_app,
+    Response,
 )
 from flask_session import Session
 
@@ -268,9 +272,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.route("/otp-settings")
     def otp_settings_page():
 
-        if not require_role(
-            "super_admin"
-        ):
+        if not role_can("manage_otp_settings"):
             return redirect("/directory")
 
         return render_template(
@@ -281,10 +283,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.route("/self-registration-review")
     def self_registration_review_page():
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("review_self_registrations"):
             return redirect("/directory")
 
         return render_template(
@@ -295,10 +294,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.route("/user-management")
     def user_management_page():
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("manage_users"):
             return redirect("/directory")
 
         return render_template(
@@ -309,13 +305,80 @@ def create_app(config=None, collection=None, correction_collection=None):
             )
         )
 
+    @app.route("/superadmin")
+    def superadmin_dashboard_page():
+
+        if not role_can("manage_role_config"):
+            return redirect("/directory")
+
+        return render_template(
+            "superadmin.html",
+            current_role=current_role(),
+        )
+
+    @app.get("/api/role-config")
+    def get_role_config():
+
+        if not role_can("manage_role_config"):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        return jsonify({
+            "config": serialize_document(effective_role_config()),
+            "roles": [
+                {
+                    "key": role,
+                    "label": ROLE_LABELS.get(role, role),
+                }
+                for role in MANAGED_ROLES
+            ],
+            "capabilities": ROLE_CAPABILITIES,
+            "limits": ROLE_LIMITS,
+            "lockedCapabilities": {
+                "super_admin": sorted(SUPER_ADMIN_LOCKED_CAPABILITIES),
+            },
+        })
+
+    @app.put("/api/role-config")
+    def update_role_config():
+
+        if not role_can("manage_role_config"):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        payload = request.get_json(silent=True) or {}
+
+        settings_collection = get_settings_collection()
+        existing = settings_collection.find_one({
+            "key": ROLE_CONFIG_KEY
+        })
+
+        config = normalize_role_config(
+            payload,
+            existing=existing,
+        )
+        config["updatedAt"] = now_utc()
+        config["updatedBy"] = session.get("username", "")
+
+        if existing:
+            settings_collection.update_one(
+                {"key": ROLE_CONFIG_KEY},
+                {"$set": config},
+            )
+        else:
+            settings_collection.insert_one(config)
+
+        return jsonify({
+            "ok": True,
+            "config": serialize_document(config),
+        })
+
     @app.post("/api/bulk-import")
     def bulk_import_endpoint():
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("bulk_import"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -474,10 +537,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.route("/operator-leaderboard")
     def operator_leaderboard_page():
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("view_leaderboard"):
             return redirect("/directory")
 
         return render_template(
@@ -488,10 +548,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.get("/api/operator-performance")
     def operator_performance():
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("view_leaderboard"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -602,16 +659,162 @@ def create_app(config=None, collection=None, correction_collection=None):
         return redirect("/login")
 
 
-    @app.get("/api/export")
-    def export():
+    @app.get("/api/export/filters")
+    def export_filters():
 
-        if not require_role(
-            "super_admin",
-            "admin"
-        ):
+        if not role_can("export_directory"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
+
+        collection = get_collection()
+
+        def distinct_values(field):
+            try:
+                values = collection.distinct(field)
+            except Exception:
+                values = []
+            return sorted(
+                str(value)
+                for value in values
+                if value not in (None, "")
+            )
+
+        return jsonify({
+            "states": distinct_values("state"),
+            "districts": distinct_values("district"),
+            "talukas": distinct_values("taluka"),
+            "surnameGroups": distinct_values("surnameGroup"),
+            "createdBy": distinct_values("createdBy"),
+        })
+
+    @app.get("/api/export")
+    def export():
+
+        if not role_can("export_directory"):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        mode = (
+            request.args.get("mode", "detailed")
+            .strip()
+            .lower()
+        )
+        if mode not in {"detailed", "summary"}:
+            mode = "detailed"
+
+        query = request.args.get("q", "").strip()
+        state = request.args.get("state", "").strip()
+        district = request.args.get("district", "").strip()
+        taluka = request.args.get("taluka", "").strip()
+        surname = request.args.get("surname", "").strip()
+        created_by = request.args.get("createdBy", "").strip()
+
+        mongo_query = {}
+        conditions = []
+
+        if query:
+            query_tokens = [
+                token.strip()
+                for token in re.split(r"\s+", query)
+                if token.strip()
+            ]
+            search_fields = [
+                "firstName.en",
+                "lastName.en",
+                "firstName.mr",
+                "lastName.mr",
+                "familyMembers.name.en",
+                "familyMembers.name.mr",
+                "familyMembers.spouseName.en",
+                "familyMembers.spouseName.mr",
+                "mobileNumber",
+            ]
+            for token in query_tokens:
+                if token.startswith("#"):
+                    username = token[1:]
+                    if username:
+                        conditions.append({
+                            "createdBy": {
+                                "$regex": f"^{re.escape(username)}$",
+                                "$options": "i",
+                            }
+                        })
+                else:
+                    conditions.append({
+                        "$or": [
+                            {
+                                field: {
+                                    "$regex": re.escape(token),
+                                    "$options": "i",
+                                }
+                            }
+                            for field in search_fields
+                        ]
+                    })
+
+        if state:
+            mongo_query["state"] = state
+        if district:
+            mongo_query["district"] = district
+        if taluka:
+            mongo_query["taluka"] = taluka
+        if surname:
+            mongo_query["surnameGroup"] = surname.lower()
+        if created_by:
+            mongo_query["createdBy"] = created_by
+
+        if conditions:
+            mongo_query["$and"] = conditions
+
+        # Operators / viewers may only export records they created.
+        if not role_can("view_all_registrations"):
+            mongo_query["createdBy"] = session.get("username", "")
+
+        max_records = get_role_limit("exportMaxRecords")
+
+        cursor = (
+            get_collection()
+            .find(mongo_query)
+            .sort("createdAt", -1)
+            .limit(max_records)
+        )
+
+        headers = (
+            DIRECTORY_EXPORT_SUMMARY_HEADERS
+            if mode == "summary"
+            else DIRECTORY_EXPORT_DETAILED_HEADERS
+        )
+
+        def generate_csv():
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+
+            # UTF-8 BOM so Excel reads Marathi/Unicode correctly.
+            buffer.write("\ufeff")
+            writer.writerow(headers)
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+            for document in cursor:
+                for row in build_directory_export_rows(document, mode):
+                    writer.writerow(row)
+                yield buffer.getvalue()
+                buffer.seek(0)
+                buffer.truncate(0)
+
+        timestamp = now_utc().strftime("%Y%m%d-%H%M%S")
+        filename = f"samaj-directory-{mode}-{timestamp}.csv"
+
+        return Response(
+            generate_csv(),
+            mimetype="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+        )
 
     @app.route(
         "/login",
@@ -1029,9 +1232,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.get("/api/otp-settings")
     def get_otp_settings():
 
-        if not require_role(
-            "super_admin"
-        ):
+        if not role_can("manage_otp_settings"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -1053,9 +1254,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.put("/api/otp-settings")
     def save_otp_settings():
 
-        if not require_role(
-            "super_admin"
-        ):
+        if not role_can("manage_otp_settings"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -1108,10 +1307,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.get("/api/users")
     def list_users():
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("manage_users"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -1148,10 +1344,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.post("/api/users")
     def create_user():
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("manage_users"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -1252,10 +1445,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.delete("/api/users/<username>")
     def delete_user(username):
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("manage_users"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -1368,6 +1558,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         result = validate_registration(
             payload,
             corrections,
+            max_family_members=get_role_limit("maxFamilyMembers"),
         )
 
         if not result["valid"]:
@@ -1434,10 +1625,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.get("/api/self-registrations/review")
     def list_self_registrations_for_review():
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("review_self_registrations"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -1488,10 +1676,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.post("/api/self-registrations/<account_id>/approve")
     def approve_self_registration(account_id):
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("review_self_registrations"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -1653,10 +1838,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.post("/api/self-registrations/<account_id>/reject")
     def reject_self_registration(account_id):
 
-        if not require_role(
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("review_self_registrations"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -1872,6 +2054,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         result = validate_registration(
                 payload,
                 corrections,
+                max_family_members=get_role_limit("maxFamilyMembers"),
             )
 
         if not result["valid"]:
@@ -1967,10 +2150,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
     @app.put("/api/registrations/<id>/invitation-name")
     def update_invitation_name(id):
-        if not require_role(
-            "admin",
-            "super_admin",
-        ):
+        if not role_can("update_invitation_name"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -2031,10 +2211,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.delete("/api/registrations/<id>")
     def delete_registration(id):
 
-        if not require_role(
-            "admin",
-            "super_admin",
-        ):
+        if not role_can("delete_registrations"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -2065,10 +2242,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.delete("/api/members/<id>")
     def delete_member(id):
 
-        if not require_role(
-            "admin",
-            "super_admin",
-        ):
+        if not role_can("delete_registrations"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -2099,11 +2273,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.post("/api/registrations")
 
     def create_registration():
-        if not require_role(
-            "operator",
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("create_registrations"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -2112,7 +2282,11 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         correction_store = get_correction_collection()
         corrections = load_corrections(correction_store)
-        result = validate_registration(payload, corrections)
+        result = validate_registration(
+            payload,
+            corrections,
+            max_family_members=get_role_limit("maxFamilyMembers"),
+        )
 
         if not result["valid"]:
             return (
@@ -2168,11 +2342,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
     @app.get("/api/registrations")
     def list_registrations():
-        if not require_role(
-            "operator",
-            "admin",
-            "super_admin"
-        ):
+        if not role_can("create_registrations"):
             return jsonify({
                 "error": "Forbidden"
             }), 403
@@ -2338,10 +2508,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         @app.delete("/api/members/<id>")
         def delete_member(id):
 
-            if not require_role(
-                "admin",
-                "super_admin",
-            ):
+            if not role_can("delete_registrations"):
                 return jsonify({
                     "error": "Forbidden"
                 }), 403
@@ -2608,6 +2775,240 @@ def clamp(value, minimum, maximum):
     return min(max(value, minimum), maximum)
 
 
+def _bilingual_en(value):
+    if isinstance(value, dict):
+        return value.get("en", "") or ""
+    return str(value or "")
+
+
+def _bilingual_mr(value):
+    if isinstance(value, dict):
+        return value.get("mr", "") or ""
+    return ""
+
+
+def _applicant_full_name(document, language="en"):
+    parts = [
+        _bilingual_en(document.get(field)) if language == "en"
+        else _bilingual_mr(document.get(field))
+        for field in ("firstName", "middleName", "lastName")
+    ]
+    return " ".join(part for part in parts if part).strip()
+
+
+def _format_relationship_type(rel_type):
+    return str(rel_type or "").replace("_", " ").strip()
+
+
+def _build_person_name_map(document):
+    """Map personId -> display name for resolving relationship links."""
+    name_map = {}
+
+    applicant_name = _applicant_full_name(document, "en")
+    for applicant_key in ("applicant", document.get("primaryHouseholdId")):
+        if applicant_key:
+            name_map[str(applicant_key)] = applicant_name or "Applicant"
+
+    for member in document.get("familyMembers") or []:
+        if not isinstance(member, dict):
+            continue
+        person_id = member.get("personId") or member.get("memberId")
+        if person_id:
+            name_map[str(person_id)] = (
+                _bilingual_en(member.get("name"))
+                or _bilingual_mr(member.get("name"))
+                or str(person_id)
+            )
+
+    return name_map
+
+
+def _resolve_relationship_links(member, name_map):
+    links = member.get("relationshipLinks") or []
+    resolved = []
+
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        rel_type = _format_relationship_type(link.get("type"))
+        target_id = str(link.get("targetPersonId") or "")
+        target_name = name_map.get(target_id, target_id)
+        if rel_type and target_name:
+            resolved.append(f"{rel_type}: {target_name}")
+        elif target_name:
+            resolved.append(target_name)
+
+    return "; ".join(resolved)
+
+
+DIRECTORY_EXPORT_DETAILED_HEADERS = [
+    "Record ID",
+    "Family ID",
+    "Family Type",
+    "Person Type",
+    "Person Name (EN)",
+    "Person Name (MR)",
+    "Relation to Applicant",
+    "Mobile / Contact",
+    "Married",
+    "Spouse Name (EN)",
+    "Current City",
+    "Related Members",
+    "Applicant Name (EN)",
+    "Applicant Mobile",
+    "Address 1",
+    "Address 2",
+    "State",
+    "District",
+    "Taluka",
+    "Surname Group",
+    "Members Count",
+    "Created By",
+    "Created At",
+]
+
+DIRECTORY_EXPORT_SUMMARY_HEADERS = [
+    "Record ID",
+    "Family ID",
+    "Family Type",
+    "Applicant Name (EN)",
+    "Applicant Name (MR)",
+    "Applicant Mobile",
+    "Address 1",
+    "Address 2",
+    "State",
+    "District",
+    "Taluka",
+    "Surname Group",
+    "Members Count",
+    "Family Member Names",
+    "Family Member Mobiles",
+    "Created By",
+    "Created At",
+]
+
+
+def _format_created_at(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value or "")
+
+
+def build_directory_export_rows(document, mode="detailed"):
+    """Return a list of CSV rows for one registration document."""
+    record_id = str(document.get("_id", ""))
+    family_id = document.get("familyId", "") or ""
+    family_type = document.get("familyType", "") or ""
+    applicant_name_en = _applicant_full_name(document, "en")
+    applicant_name_mr = _applicant_full_name(document, "mr")
+    applicant_mobile = document.get("mobileNumber", "") or ""
+    address1 = _bilingual_en(document.get("address1"))
+    address2 = _bilingual_en(document.get("address2"))
+    state = document.get("state", "") or ""
+    district = document.get("district", "") or ""
+    taluka = document.get("taluka", "") or ""
+    surname_group = document.get("surnameGroup", "") or ""
+    members_count = document.get("membersCount", "")
+    created_by = document.get("createdBy", "") or ""
+    created_at = _format_created_at(document.get("createdAt"))
+
+    family_members = [
+        member
+        for member in (document.get("familyMembers") or [])
+        if isinstance(member, dict)
+    ]
+
+    if mode == "summary":
+        member_names = "; ".join(
+            _bilingual_en(member.get("name")) or _bilingual_mr(member.get("name"))
+            for member in family_members
+            if _bilingual_en(member.get("name")) or _bilingual_mr(member.get("name"))
+        )
+        member_mobiles = "; ".join(
+            member.get("contactNumber", "")
+            for member in family_members
+            if member.get("contactNumber")
+        )
+        return [[
+            record_id,
+            family_id,
+            family_type,
+            applicant_name_en,
+            applicant_name_mr,
+            applicant_mobile,
+            address1,
+            address2,
+            state,
+            district,
+            taluka,
+            surname_group,
+            members_count,
+            member_names,
+            member_mobiles,
+            created_by,
+            created_at,
+        ]]
+
+    name_map = _build_person_name_map(document)
+    rows = []
+
+    # Applicant row
+    rows.append([
+        record_id,
+        family_id,
+        family_type,
+        "Applicant",
+        applicant_name_en,
+        applicant_name_mr,
+        "Self",
+        applicant_mobile,
+        "",
+        "",
+        "",
+        "",
+        applicant_name_en,
+        applicant_mobile,
+        address1,
+        address2,
+        state,
+        district,
+        taluka,
+        surname_group,
+        members_count,
+        created_by,
+        created_at,
+    ])
+
+    for member in family_members:
+        rows.append([
+            record_id,
+            family_id,
+            family_type,
+            "Family Member",
+            _bilingual_en(member.get("name")),
+            _bilingual_mr(member.get("name")),
+            member.get("relationToApplicant", "") or member.get("relation", ""),
+            member.get("contactNumber", "") or "",
+            "Yes" if member.get("isMarried") else "No",
+            _bilingual_en(member.get("spouseName")),
+            member.get("currentCity", "") or "",
+            _resolve_relationship_links(member, name_map),
+            applicant_name_en,
+            applicant_mobile,
+            address1,
+            address2,
+            state,
+            district,
+            taluka,
+            surname_group,
+            members_count,
+            created_by,
+            created_at,
+        ])
+
+    return rows
+
+
 def require_auth():
     return is_staff_session() or is_public_session()
 
@@ -2655,7 +3056,7 @@ def can_access_directory():
     if is_pending_public_session():
         return False
 
-    return True
+    return role_can("access_directory")
 
 
 def current_owned_registration_id():
@@ -2714,19 +3115,13 @@ def can_view_registration(document):
 
     role = current_role()
 
-    if role in {"admin", "super_admin"}:
+    if role_can("view_all_registrations", role):
         return True
 
-    if role == "operator":
-        return document.get("createdBy") == session.get(
-            "username",
-            "",
-        )
+    if is_public_session():
+        return str(document.get("_id")) == current_owned_registration_id()
 
-    if role == "viewer":
-        if is_public_session():
-            return str(document.get("_id")) == current_owned_registration_id()
-
+    if is_staff_session():
         return document.get("createdBy") == session.get(
             "username",
             "",
@@ -2739,16 +3134,7 @@ def can_view_family_tree(document):
     if not document:
         return False
 
-    role = current_role()
-
-    if role in {
-        "admin",
-        "super_admin",
-        "operator",
-    }:
-        return True
-
-    return False
+    return role_can("access_family_tree")
 
 
 def can_edit_registration(document):
@@ -2757,19 +3143,13 @@ def can_edit_registration(document):
 
     role = current_role()
 
-    if role in {"admin", "super_admin"}:
+    if role_can("edit_all_registrations", role):
         return True
 
-    if role == "operator":
-        return document.get("createdBy") == session.get(
-            "username",
-            "",
-        )
+    if is_public_session():
+        return str(document.get("_id")) == current_owned_registration_id()
 
-    if role == "viewer":
-        if is_public_session():
-            return str(document.get("_id")) == current_owned_registration_id()
-
+    if is_staff_session():
         return document.get("createdBy") == session.get(
             "username",
             "",
@@ -4559,3 +4939,308 @@ def get_deletable_roles(role):
         role,
         [],
     )
+
+
+# ---------------------------------------------------------------------------
+# Super admin configurable role permissions & limits
+# ---------------------------------------------------------------------------
+
+ROLE_CONFIG_KEY = "role_config"
+
+MANAGED_ROLES = [
+    "super_admin",
+    "admin",
+    "operator",
+    "viewer",
+]
+
+ROLE_LABELS = {
+    "super_admin": "Super Admin",
+    "admin": "Admin",
+    "operator": "Operator",
+    "viewer": "Viewer",
+}
+
+# Capabilities that can be toggled per role from the super admin dashboard.
+ROLE_CAPABILITIES = [
+    {
+        "key": "access_directory",
+        "label": "Access member directory",
+        "description": "View and search the member directory.",
+    },
+    {
+        "key": "create_registrations",
+        "label": "Create / edit member records",
+        "description": "Register new members and manage records they created.",
+    },
+    {
+        "key": "view_all_registrations",
+        "label": "View all member records",
+        "description": "See every record, not just records they created.",
+    },
+    {
+        "key": "edit_all_registrations",
+        "label": "Edit all member records",
+        "description": "Edit any record regardless of who created it.",
+    },
+    {
+        "key": "delete_registrations",
+        "label": "Delete member records",
+        "description": "Delete member records and family members.",
+    },
+    {
+        "key": "update_invitation_name",
+        "label": "Update invitation name",
+        "description": "Edit the invitation name shown for a member record.",
+    },
+    {
+        "key": "access_family_tree",
+        "label": "Access family tree",
+        "description": "Open the family tree visualisation.",
+    },
+    {
+        "key": "manage_users",
+        "label": "Manage staff users",
+        "description": "Create and remove staff accounts.",
+    },
+    {
+        "key": "review_self_registrations",
+        "label": "Review self registrations",
+        "description": "Approve or reject public self registrations.",
+    },
+    {
+        "key": "view_leaderboard",
+        "label": "View operator leaderboard",
+        "description": "Access operator performance reports.",
+    },
+    {
+        "key": "bulk_import",
+        "label": "Bulk import records",
+        "description": "Import member records in bulk.",
+    },
+    {
+        "key": "export_directory",
+        "label": "Export member directory",
+        "description": "Export member and family data to CSV.",
+    },
+    {
+        "key": "manage_otp_settings",
+        "label": "Manage OTP settings",
+        "description": "Configure OTP / WhatsApp delivery providers.",
+    },
+    {
+        "key": "manage_role_config",
+        "label": "Manage roles & permissions",
+        "description": "Access this super admin dashboard.",
+    },
+]
+
+ROLE_LIMITS = [
+    {
+        "key": "maxFamilyMembers",
+        "label": "Max family members per registration",
+        "default": 50,
+        "min": 1,
+        "max": 200,
+    },
+    {
+        "key": "directorySearchPageSize",
+        "label": "Default directory results per page",
+        "default": 15,
+        "min": 1,
+        "max": 200,
+    },
+    {
+        "key": "exportMaxRecords",
+        "label": "Max records per export",
+        "default": 100000,
+        "min": 1,
+        "max": 1000000,
+    },
+]
+
+# Default permission matrix - mirrors the behaviour hardcoded throughout the
+# app so that an empty configuration keeps the app working exactly as before.
+DEFAULT_ROLE_PERMISSIONS = {
+    "super_admin": {
+        capability["key"]: True
+        for capability in ROLE_CAPABILITIES
+    },
+    "admin": {
+        "access_directory": True,
+        "create_registrations": True,
+        "view_all_registrations": True,
+        "edit_all_registrations": True,
+        "delete_registrations": True,
+        "update_invitation_name": True,
+        "access_family_tree": True,
+        "manage_users": True,
+        "review_self_registrations": True,
+        "view_leaderboard": True,
+        "bulk_import": True,
+        "export_directory": True,
+        "manage_otp_settings": False,
+        "manage_role_config": False,
+    },
+    "operator": {
+        "access_directory": True,
+        "create_registrations": True,
+        "view_all_registrations": False,
+        "edit_all_registrations": False,
+        "delete_registrations": False,
+        "update_invitation_name": False,
+        "access_family_tree": True,
+        "manage_users": False,
+        "review_self_registrations": False,
+        "view_leaderboard": False,
+        "bulk_import": False,
+        "export_directory": False,
+        "manage_otp_settings": False,
+        "manage_role_config": False,
+    },
+    "viewer": {
+        "access_directory": True,
+        "create_registrations": False,
+        "view_all_registrations": False,
+        "edit_all_registrations": False,
+        "delete_registrations": False,
+        "update_invitation_name": False,
+        "access_family_tree": False,
+        "manage_users": False,
+        "review_self_registrations": False,
+        "view_leaderboard": False,
+        "bulk_import": False,
+        "export_directory": False,
+        "manage_otp_settings": False,
+        "manage_role_config": False,
+    },
+}
+
+# Capabilities that super_admin must always retain so the dashboard cannot
+# lock everyone out of administration.
+SUPER_ADMIN_LOCKED_CAPABILITIES = {
+    "access_directory",
+    "manage_role_config",
+    "manage_users",
+}
+
+
+def default_role_config():
+    permissions = {
+        role: dict(DEFAULT_ROLE_PERMISSIONS.get(role, {}))
+        for role in MANAGED_ROLES
+    }
+
+    limits = {
+        limit["key"]: limit["default"]
+        for limit in ROLE_LIMITS
+    }
+
+    return {
+        "key": ROLE_CONFIG_KEY,
+        "permissions": permissions,
+        "limits": limits,
+        "updatedAt": None,
+        "updatedBy": "",
+    }
+
+
+def normalize_role_config(payload=None, existing=None):
+    payload = payload or {}
+    base = default_role_config()
+    existing = existing or {}
+
+    stored_permissions = existing.get("permissions") or {}
+    incoming_permissions = payload.get("permissions") or {}
+
+    permissions = {}
+    for role in MANAGED_ROLES:
+        role_defaults = base["permissions"][role]
+        role_stored = stored_permissions.get(role) or {}
+        role_incoming = incoming_permissions.get(role) or {}
+
+        merged = {}
+        for capability in ROLE_CAPABILITIES:
+            cap_key = capability["key"]
+            if cap_key in role_incoming:
+                merged[cap_key] = bool(role_incoming[cap_key])
+            elif cap_key in role_stored:
+                merged[cap_key] = bool(role_stored[cap_key])
+            else:
+                merged[cap_key] = bool(role_defaults.get(cap_key, False))
+
+        permissions[role] = merged
+
+    # Super admin can never be locked out of core administration.
+    for cap_key in SUPER_ADMIN_LOCKED_CAPABILITIES:
+        permissions["super_admin"][cap_key] = True
+
+    stored_limits = existing.get("limits") or {}
+    incoming_limits = payload.get("limits") or {}
+
+    limits = {}
+    for limit in ROLE_LIMITS:
+        key = limit["key"]
+        raw = incoming_limits.get(
+            key,
+            stored_limits.get(key, limit["default"]),
+        )
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            value = limit["default"]
+
+        value = max(limit["min"], min(limit["max"], value))
+        limits[key] = value
+
+    return {
+        "key": ROLE_CONFIG_KEY,
+        "permissions": permissions,
+        "limits": limits,
+        "updatedAt": existing.get("updatedAt"),
+        "updatedBy": existing.get("updatedBy", ""),
+    }
+
+
+def effective_role_config():
+    """Return the stored role config merged over defaults."""
+    try:
+        stored = (
+            current_app.get_settings_collection()
+            .find_one({"key": ROLE_CONFIG_KEY})
+        )
+    except Exception:
+        stored = None
+
+    return normalize_role_config(existing=stored)
+
+
+def role_can(capability, role=None):
+    """Check whether a role has a capability per the configurable matrix."""
+    if role is None:
+        role = current_role()
+
+    # Super admin always retains locked core capabilities as a failsafe.
+    if role == "super_admin" and capability in SUPER_ADMIN_LOCKED_CAPABILITIES:
+        return True
+
+    config = effective_role_config()
+    role_permissions = config["permissions"].get(role)
+
+    if role_permissions is None:
+        return False
+
+    return bool(role_permissions.get(capability, False))
+
+
+def get_role_limit(key):
+    config = effective_role_config()
+    default = next(
+        (
+            limit["default"]
+            for limit in ROLE_LIMITS
+            if limit["key"] == key
+        ),
+        0,
+    )
+    return config["limits"].get(key, default)

@@ -72,6 +72,13 @@
 
         {% if session.get("role") == "super_admin" %}
         <a
+          href="/superadmin"
+          class="button-secondary"
+        >
+          Super Admin
+        </a>
+
+        <a
           href="/otp-settings"
           class="button-secondary"
         >

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>Super Admin Dashboard</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    >
+    <script
+      defer
+      src="{{ url_for('static', filename='superadmin.js') }}"
+    ></script>
+  </head>
+  <body class="directory-body">
+    <header class="topbar">
+      <a
+        class="brand"
+        href="/"
+        aria-label="SAMAJ home"
+      >
+        <span
+          class="brand-mark"
+          aria-hidden="true"
+        ></span>
+        <span>SAMAJ</span>
+      </a>
+
+      <div
+        style="
+          display:flex;
+          align-items:center;
+          gap:16px;
+        "
+      >
+        <a href="/user-management" class="button-secondary">User Management</a>
+        <a href="/otp-settings" class="button-secondary">OTP Settings</a>
+        <a href="/directory" class="button-secondary">Member Directory</a>
+        <a href="/logout" class="button-ghost">Logout</a>
+      </div>
+    </header>
+
+    <main class="directory-layout">
+
+      <!-- Role permissions -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Super admin</p>
+            <h2>Roles &amp; Permissions</h2>
+            <p>
+              Toggle what each role is allowed to do. Super admin keeps core
+              administration access at all times so the dashboard can never be
+              locked out.
+            </p>
+          </div>
+        </div>
+
+        <div class="directory-table-wrapper">
+          <table class="directory-table" id="permissions-table">
+            <thead>
+              <tr id="permissions-header-row">
+                <th>Capability</th>
+              </tr>
+            </thead>
+            <tbody id="permissions-table-body">
+              <tr><td colspan="5">Loading permissions...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Limits -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Configuration</p>
+            <h2>Limits</h2>
+            <p>Adjust system-wide limits applied across all roles.</p>
+          </div>
+        </div>
+
+        <div class="form-surface">
+          <div class="field-grid" id="limits-grid"></div>
+          <div class="form-actions">
+            <button class="button-primary" type="button" id="save-config-btn">
+              Save configuration
+            </button>
+            <span id="config-status" style="margin-left:12px;"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Directory export -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Reports</p>
+            <h2>Export Member Directory</h2>
+            <p>
+              Download member records as CSV. The detailed export lists each
+              applicant followed by their family members, with mobile numbers
+              and how members are related to each other.
+            </p>
+          </div>
+        </div>
+
+        <div class="form-surface">
+          <div class="field-grid">
+            <label class="field">
+              <span>Export format</span>
+              <select id="export-mode">
+                <option value="detailed">Detailed (one row per family member)</option>
+                <option value="summary">Summary (one row per applicant)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Search text</span>
+              <input id="export-q" placeholder="Name or mobile (optional)">
+            </label>
+            <label class="field">
+              <span>State</span>
+              <select id="export-state"><option value="">All states</option></select>
+            </label>
+            <label class="field">
+              <span>District</span>
+              <select id="export-district"><option value="">All districts</option></select>
+            </label>
+            <label class="field">
+              <span>Taluka</span>
+              <select id="export-taluka"><option value="">All talukas</option></select>
+            </label>
+            <label class="field">
+              <span>Surname group</span>
+              <select id="export-surname"><option value="">All surnames</option></select>
+            </label>
+            <label class="field">
+              <span>Created by</span>
+              <select id="export-created-by"><option value="">All operators</option></select>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button class="button-primary" type="button" id="export-btn">
+              Download CSV
+            </button>
+            <span id="export-status" style="margin-left:12px;"></span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

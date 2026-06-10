@@ -149,6 +149,7 @@ def normalize_registration(
 def validate_registration(
     payload=None,
     overrides=None,
+    max_family_members=None,
 ):
     value = normalize_registration(
         payload,
@@ -157,10 +158,16 @@ def validate_registration(
 
     errors = []
 
-    if len(value.get("familyMembers") or []) > MAX_FAMILY_MEMBERS:
+    member_limit = (
+        max_family_members
+        if isinstance(max_family_members, int) and max_family_members > 0
+        else MAX_FAMILY_MEMBERS
+    )
+
+    if len(value.get("familyMembers") or []) > member_limit:
         errors.append({
             "field": "familyMembers",
-            "message": f"At most {MAX_FAMILY_MEMBERS} family members are allowed."
+            "message": f"At most {member_limit} family members are allowed."
         })
 
     for field in TEXT_FIELDS:
