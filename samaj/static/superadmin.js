@@ -200,9 +200,83 @@ async function loadExportFilters() {
     fillSelect("#export-taluka", payload.talukas, "All talukas");
     fillSelect("#export-surname", payload.surnameGroups, "All surnames");
     fillSelect("#export-created-by", payload.createdBy, "All operators");
+    fillSortOptions(payload.sortOptions);
+    renderRelationCheckboxes(payload.relations);
   } catch (error) {
     /* filters are optional; ignore */
   }
+}
+
+function fillSortOptions(options) {
+  const select = document.querySelector("#export-sort");
+  if (!select) {
+    return;
+  }
+  const list = Array.isArray(options) ? options : [];
+  select.innerHTML = list
+    .map(
+      (option) =>
+        `<option value="${escapeHtmlAttribute(option.key)}">${escapeHtml(option.label)}</option>`
+    )
+    .join("");
+}
+
+function renderRelationCheckboxes(relations) {
+  const grid = document.querySelector("#relations-grid");
+  if (!grid) {
+    return;
+  }
+  const list = Array.isArray(relations) ? relations : [];
+
+  grid.innerHTML = list
+    .map(
+      (relation) => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
+          <input
+            type="checkbox"
+            class="relation-checkbox"
+            value="${escapeHtmlAttribute(relation.key)}"
+            checked
+          >
+          <span>${escapeHtml(relation.label)}</span>
+        </label>
+      `
+    )
+    .join("");
+
+  const selectAll = document.querySelector("#relations-select-all");
+  const clearAll = document.querySelector("#relations-clear");
+
+  if (selectAll) {
+    selectAll.addEventListener("click", () => toggleAllRelations(true));
+  }
+  if (clearAll) {
+    clearAll.addEventListener("click", () => toggleAllRelations(false));
+  }
+}
+
+function toggleAllRelations(checked) {
+  document
+    .querySelectorAll(".relation-checkbox")
+    .forEach((input) => {
+      input.checked = checked;
+    });
+}
+
+function selectedRelationKeys() {
+  const checkboxes = Array.from(
+    document.querySelectorAll(".relation-checkbox")
+  );
+  if (!checkboxes.length) {
+    return { keys: [], allSelected: true };
+  }
+  const keys = checkboxes
+    .filter((input) => input.checked)
+    .map((input) => input.value);
+  return {
+    keys,
+    allSelected: keys.length === checkboxes.length,
+  };
 }
 
 function fillSelect(selector, values, allLabel) {
@@ -225,6 +299,11 @@ function downloadExport() {
   const params = new URLSearchParams();
   params.set("mode", valueOf("#export-mode"));
 
+  const sort = valueOf("#export-sort");
+  if (sort) {
+    params.set("sort", sort);
+  }
+
   const q = valueOf("#export-q").trim();
   if (q) params.set("q", q);
 
@@ -242,6 +321,17 @@ function downloadExport() {
       params.set(key, value);
     }
   });
+
+  const relations = selectedRelationKeys();
+  if (!relations.keys.length) {
+    exportStatus.textContent = "Tick at least one relation to export.";
+    return;
+  }
+  // Only send the relations param when it is a real subset; sending all is
+  // equivalent to no filter but keeps the URL shorter when everything is on.
+  if (!relations.allSelected) {
+    params.set("relations", relations.keys.join(","));
+  }
 
   exportStatus.textContent = "Preparing download...";
   window.location.href = `/api/export?${params.toString()}`;

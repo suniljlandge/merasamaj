@@ -686,6 +686,14 @@ def create_app(config=None, collection=None, correction_collection=None):
             "talukas": distinct_values("taluka"),
             "surnameGroups": distinct_values("surnameGroup"),
             "createdBy": distinct_values("createdBy"),
+            "relations": export_relation_options(),
+            "sortOptions": [
+                {"key": "recent", "label": "Newest first"},
+                {"key": "address", "label": "Address (A-Z)"},
+                {"key": "location", "label": "District / Taluka"},
+                {"key": "surname", "label": "Surname group"},
+                {"key": "name", "label": "Applicant name"},
+            ],
         })
 
     @app.get("/api/export")
@@ -710,6 +718,27 @@ def create_app(config=None, collection=None, correction_collection=None):
         taluka = request.args.get("taluka", "").strip()
         surname = request.args.get("surname", "").strip()
         created_by = request.args.get("createdBy", "").strip()
+        sort_key = request.args.get("sort", "recent").strip().lower()
+
+        # Relation filter: comma-separated relation keys. Empty -> include all.
+        relations_raw = request.args.get("relations", "").strip()
+        selected_relation_keys = None
+        if relations_raw:
+            valid_keys = {
+                option["key"]
+                for option in export_relation_options()
+            }
+            requested = {
+                _relation_filter_key(token) if "(" in token else token.strip().lower()
+                for token in relations_raw.split(",")
+                if token.strip()
+            }
+            selected_relation_keys = {
+                key for key in requested if key in valid_keys
+            }
+            # If nothing valid was selected, fall back to including everything.
+            if not selected_relation_keys:
+                selected_relation_keys = None
 
         mongo_query = {}
         conditions = []
@@ -774,10 +803,19 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         max_records = get_role_limit("exportMaxRecords")
 
+        sort_specs = {
+            "recent": [("createdAt", -1)],
+            "address": [("address1.en", 1), ("createdAt", -1)],
+            "location": [("district", 1), ("taluka", 1), ("address1.en", 1)],
+            "surname": [("surnameGroup", 1), ("lastName.en", 1)],
+            "name": [("firstName.en", 1), ("lastName.en", 1)],
+        }
+        sort_spec = sort_specs.get(sort_key, sort_specs["recent"])
+
         cursor = (
             get_collection()
             .find(mongo_query)
-            .sort("createdAt", -1)
+            .sort(sort_spec)
             .limit(max_records)
         )
 
@@ -799,7 +837,11 @@ def create_app(config=None, collection=None, correction_collection=None):
             buffer.truncate(0)
 
             for document in cursor:
-                for row in build_directory_export_rows(document, mode):
+                for row in build_directory_export_rows(
+                    document,
+                    mode,
+                    selected_relation_keys=selected_relation_keys,
+                ):
                     writer.writerow(row)
                 yield buffer.getvalue()
                 buffer.seek(0)
@@ -2841,6 +2883,55 @@ def _resolve_relationship_links(member, name_map):
     return "; ".join(resolved)
 
 
+# Relation labels available as export filters. The applicant is treated as a
+# pseudo-relation so it can be ticked/unticked like family members.
+APPLICANT_RELATION_KEY = "applicant"
+
+EXPORT_RELATION_LABELS = [
+    "Father(pita)",
+    "Mother(mata)",
+    "Wife(patni)",
+    "Husband(pati)",
+    "Son(beta)",
+    "Daughter(beti)",
+    "Daughter-in-law(bahu)",
+    "Brother(bhai)",
+    "Sister(behen)",
+    "Grandson(pota)",
+    "Granddaughter(poti)",
+    "Grandfather(dada)",
+    "Grandmother(dadi)",
+    "Uncle",
+    "Aunt",
+    "Cousin",
+    "Nephew",
+    "Niece",
+    "Father-in-law",
+    "Mother-in-law",
+    "Other",
+]
+
+
+def _relation_filter_key(text):
+    """Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son')."""
+    raw = str(text or "")
+    base = raw.split("(")[0]
+    return re.sub(r"[^a-z]", "", base.lower())
+
+
+def export_relation_options():
+    options = [{
+        "key": APPLICANT_RELATION_KEY,
+        "label": "Applicant",
+    }]
+    for label in EXPORT_RELATION_LABELS:
+        options.append({
+            "key": _relation_filter_key(label),
+            "label": label,
+        })
+    return options
+
+
 DIRECTORY_EXPORT_DETAILED_HEADERS = [
     "Record ID",
     "Family ID",
@@ -2894,8 +2985,33 @@ def _format_created_at(value):
     return str(value or "")
 
 
-def build_directory_export_rows(document, mode="detailed"):
-    """Return a list of CSV rows for one registration document."""
+def _summary_member_name_with_relation(member):
+    """Format a family member name with its relation, e.g. 'Tejas (Son(beta))'."""
+    name = (
+        _bilingual_en(member.get("name"))
+        or _bilingual_mr(member.get("name"))
+    )
+    relation = (
+        member.get("relationToApplicant", "")
+        or member.get("relation", "")
+    )
+    if relation:
+        return f"{name} ({relation})"
+    return name
+
+
+def build_directory_export_rows(
+    document,
+    mode="detailed",
+    selected_relation_keys=None,
+):
+    """Return a list of CSV rows for one registration document.
+
+    ``selected_relation_keys`` is an optional set of normalised relation keys.
+    When provided, only people whose relation is in the set are exported
+    (the applicant uses the key ``applicant``). When ``None`` everything is
+    included.
+    """
     record_id = str(document.get("_id", ""))
     family_id = document.get("familyId", "") or ""
     family_type = document.get("familyType", "") or ""
@@ -2912,15 +3028,34 @@ def build_directory_export_rows(document, mode="detailed"):
     created_by = document.get("createdBy", "") or ""
     created_at = _format_created_at(document.get("createdAt"))
 
-    family_members = [
+    all_members = [
         member
         for member in (document.get("familyMembers") or [])
         if isinstance(member, dict)
     ]
 
+    include_applicant = (
+        selected_relation_keys is None
+        or APPLICANT_RELATION_KEY in selected_relation_keys
+    )
+
+    if selected_relation_keys is None:
+        family_members = all_members
+    else:
+        family_members = [
+            member
+            for member in all_members
+            if _relation_filter_key(
+                member.get("relationToApplicant") or member.get("relation") or ""
+            ) in selected_relation_keys
+        ]
+
     if mode == "summary":
+        # Summary is one row per applicant; relation filters only affect which
+        # family members are listed in the aggregated columns. Member names
+        # include their relation to the applicant in parentheses.
         member_names = "; ".join(
-            _bilingual_en(member.get("name")) or _bilingual_mr(member.get("name"))
+            _summary_member_name_with_relation(member)
             for member in family_members
             if _bilingual_en(member.get("name")) or _bilingual_mr(member.get("name"))
         )
@@ -2952,32 +3087,32 @@ def build_directory_export_rows(document, mode="detailed"):
     name_map = _build_person_name_map(document)
     rows = []
 
-    # Applicant row
-    rows.append([
-        record_id,
-        family_id,
-        family_type,
-        "Applicant",
-        applicant_name_en,
-        applicant_name_mr,
-        "Self",
-        applicant_mobile,
-        "",
-        "",
-        "",
-        "",
-        applicant_name_en,
-        applicant_mobile,
-        address1,
-        address2,
-        state,
-        district,
-        taluka,
-        surname_group,
-        members_count,
-        created_by,
-        created_at,
-    ])
+    if include_applicant:
+        rows.append([
+            record_id,
+            family_id,
+            family_type,
+            "Applicant",
+            applicant_name_en,
+            applicant_name_mr,
+            "Self",
+            applicant_mobile,
+            "",
+            "",
+            "",
+            "",
+            applicant_name_en,
+            applicant_mobile,
+            address1,
+            address2,
+            state,
+            district,
+            taluka,
+            surname_group,
+            members_count,
+            created_by,
+            created_at,
+        ])
 
     for member in family_members:
         rows.append([

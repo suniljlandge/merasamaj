@@ -119,6 +119,10 @@
               </select>
             </label>
             <label class="field">
+              <span>Sort by</span>
+              <select id="export-sort"></select>
+            </label>
+            <label class="field">
               <span>Search text</span>
               <input id="export-q" placeholder="Name or mobile (optional)">
             </label>
@@ -143,7 +147,43 @@
               <select id="export-created-by"><option value="">All operators</option></select>
             </label>
           </div>
-          <div class="form-actions">
+
+          <div style="margin-top:18px;">
+            <div
+              style="
+                display:flex;
+                align-items:center;
+                justify-content:space-between;
+                flex-wrap:wrap;
+                gap:8px;
+              "
+            >
+              <strong>Include relations</strong>
+              <span style="display:flex;gap:10px;">
+                <button type="button" class="button-ghost" id="relations-select-all">
+                  Select all
+                </button>
+                <button type="button" class="button-ghost" id="relations-clear">
+                  Clear all
+                </button>
+              </span>
+            </div>
+            <p style="font-size:12px;opacity:0.7;margin:6px 0 10px;">
+              Only people whose relation is ticked are included in the export
+              (with their names and mobile numbers). Leave everything ticked to
+              export the whole family.
+            </p>
+            <div
+              id="relations-grid"
+              style="
+                display:grid;
+                grid-template-columns:repeat(auto-fill, minmax(170px, 1fr));
+                gap:6px 14px;
+              "
+            ></div>
+          </div>
+
+          <div class="form-actions" style="margin-top:18px;">
             <button class="button-primary" type="button" id="export-btn">
               Download CSV
             </button>
