@@ -35,7 +35,7 @@
       .family-tree-main {
         max-width: 1400px;
         margin: 0 auto;
-        padding: 24px;
+        padding: 12px 16px;
       }
 
       .family-tree-hero,
@@ -43,17 +43,17 @@
         background: rgba(255, 255, 255, 0.86);
         backdrop-filter: blur(18px);
         border: 1px solid rgba(148, 163, 184, 0.18);
-        border-radius: 28px;
-        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+        border-radius: 16px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
       }
 
       .family-tree-hero {
-        padding: 14px 18px;
-        margin-bottom: 12px;
+        padding: 8px 14px;
+        margin-bottom: 8px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 14px;
+        gap: 12px;
         flex-wrap: wrap;
       }
 
@@ -76,10 +76,10 @@
         margin: 0;
         text-transform: uppercase;
         letter-spacing: 0.16em;
-        font-size: 11px;
+        font-size: 10px;
         color: #0f766e;
         font-weight: 700;
-        padding: 7px 11px;
+        padding: 5px 9px;
         border-radius: 999px;
         background: #ecfeff;
         white-space: nowrap;
@@ -105,16 +105,16 @@
 
       .family-tree-chip {
         border-radius: 999px;
-        padding: 7px 12px;
+        padding: 5px 10px;
         background: #f0fdfa;
         color: #115e59;
         font-weight: 700;
-        font-size: 0.88rem;
+        font-size: 0.82rem;
       }
 
       .family-tree-canvas {
-        height: 78vh;
-        min-height: 620px;
+        height: calc(100vh - 130px);
+        min-height: 480px;
         overflow: hidden;
       }
 
@@ -136,11 +136,11 @@
 
       @media (max-width: 768px) {
         .family-tree-main {
-          padding: 16px;
+          padding: 10px 12px;
         }
 
         .family-tree-hero {
-          padding: 14px 16px;
+          padding: 8px 12px;
           align-items: flex-start;
         }
 
@@ -160,8 +160,8 @@
         }
 
         .family-tree-canvas {
-          min-height: 520px;
-          height: 72vh;
+          min-height: 420px;
+          height: calc(100vh - 160px);
         }
       }
     </style>
@@ -978,17 +978,6 @@
             size: 1.2,
             color: "#dbeafe",
           }),
-          React.createElement(MiniMap, {
-            pannable: true,
-            zoomable: true,
-            nodeColor: (node) =>
-              node.data?.isApplicant
-                ? "#14b8a6"
-                : node.data?.isSpouseOnly
-                  ? "#f59e0b"
-                  : "#38bdf8",
-            maskColor: "rgba(255,255,255,0.78)",
-          }),
           React.createElement(Controls),
           React.createElement(FlowToolbar, {
             onFitView: handleFitView,
@@ -1073,19 +1062,25 @@
             creatorChip.style.display = "none";
           }
 
-          // Invitation name display
+          // Invitation name display — visible to ALL roles when set.
           if (invitationName && invitationChip && invitationNameEl) {
             invitationNameEl.textContent = `✉ ${invitationName}`;
             invitationChip.style.display = "inline-flex";
+
+            // Admins can click the chip to edit the invitation name.
+            if (isAdmin) {
+              invitationChip.style.cursor = "pointer";
+              invitationChip.title = "Click to edit invitation name";
+              invitationChip.addEventListener("click", () => {
+                openTreeInvitationModal(memberId, invitationName);
+              });
+            }
           }
 
-          // Invitation edit button (admin only)
-          if (isAdmin && invitationButton) {
-            invitationButton.textContent = invitationName
-              ? `✉ ${invitationName}`
-              : "✉ Set Invitation";
+          // Admins with no invitation name yet get a "Set Invitation" button.
+          if (isAdmin && invitationButton && !invitationName) {
+            invitationButton.textContent = "✉ Set Invitation";
             invitationButton.style.display = "inline-flex";
-            if (invitationChip) invitationChip.style.display = "none"; // Use button instead of chip for admin
             invitationButton.addEventListener("click", () => {
               openTreeInvitationModal(memberId, invitationName);
             });
