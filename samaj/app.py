@@ -1825,6 +1825,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                     + 1
                 ),
                 "createdBy": serialized.get("createdBy", ""),
+                "invitationName": serialized.get("invitationName", ""),
             },
             "graph": build_family_tree_graph_data(
                 serialized
@@ -1945,6 +1946,12 @@ def create_app(config=None, collection=None, correction_collection=None):
             )
         }
 
+        # Preserve invitationName if not explicitly provided in payload
+        if not payload.get("invitationName"):
+            document["invitationName"] = (
+                existing_document.get("invitationName", "")
+            )
+
         get_collection().update_one(
             {
                 "_id": document_id
@@ -1956,6 +1963,69 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         return jsonify({
             "ok": True
+        })
+
+    @app.put("/api/registrations/<id>/invitation-name")
+    def update_invitation_name(id):
+        if not require_role(
+            "admin",
+            "super_admin",
+        ):
+            return jsonify({
+                "error": "Forbidden"
+            }), 403
+
+        document_id = object_id_or_none(id)
+
+        if not document_id:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        existing_document = (
+            get_collection()
+            .find_one({
+                "_id": document_id
+            })
+        )
+
+        if not existing_document:
+            return jsonify({
+                "error": "Not found"
+            }), 404
+
+        payload = (
+            request.get_json(
+                silent=True
+            ) or {}
+        )
+
+        invitation_name = (
+            payload.get("invitationName", "")
+            .strip()
+        )
+
+        get_collection().update_one(
+            {
+                "_id": document_id
+            },
+            {
+                "$set": {
+                    "invitationName": invitation_name,
+                    "updatedAt": datetime.now(
+                        timezone.utc
+                    ),
+                    "updatedBy": session.get(
+                        "username",
+                        ""
+                    ),
+                }
+            }
+        )
+
+        return jsonify({
+            "ok": True,
+            "invitationName": invitation_name,
         })
 
     @app.delete("/api/registrations/<id>")
@@ -2486,6 +2556,10 @@ def serialize_registration_document(document):
     serialized["primaryHouseholdId"] = (
         serialized.get("primaryHouseholdId")
         or "household-primary"
+    )
+    serialized["invitationName"] = (
+        serialized.get("invitationName")
+        or ""
     )
 
     family_members = serialized.get(
@@ -4008,6 +4082,21 @@ def build_family_tree_graph_data(document):
         }
         for node_id, node in nodes.items()
     ]
+
+    # Position normalization (TEMP DISABLED): The frontend `fitView` was
+    # working with the original (unnormalized) coordinates, so we keep
+    # them as-is. If you re-enable this, also retest the family-tree
+    # centering on multiple documents.
+    # if positioned_nodes:
+    #     xs = [n["position"].get("x", 0) for n in positioned_nodes]
+    #     ys = [n["position"].get("y", 0) for n in positioned_nodes]
+    #     center_x = (min(xs) + max(xs)) / 2
+    #     top_y = min(ys)
+    #     for n in positioned_nodes:
+    #         n["position"] = {
+    #             "x": n["position"].get("x", 0) - center_x,
+    #             "y": n["position"].get("y", 0) - top_y,
+    #         }
 
     return {
         "nodes": positioned_nodes,

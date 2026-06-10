@@ -166,7 +166,7 @@ async function loadMemberDirectory(page = 1) {
   directoryTableBody.innerHTML =
     `
       <tr>
-        <td colspan="7" class="px-6 py-10 text-center text-slate-500">
+        <td colspan="8" class="px-6 py-10 text-center text-slate-500">
           Loading members...
         </td>
       </tr>
@@ -362,10 +362,11 @@ const membersCount =
 
       <td
         class="
-          px-6 py-4
+          px-4 py-2
           font-semibold
           text-slate-500
           whitespace-nowrap
+          text-sm
         "
       >
         ${index + 1}
@@ -373,9 +374,10 @@ const membersCount =
 
       <td
         class="
-          px-6 py-4
+          px-4 py-2
           font-semibold
           whitespace-nowrap
+          text-sm
         "
       >
         ${escapeHtml(fullName)}
@@ -383,8 +385,9 @@ const membersCount =
 
       <td
         class="
-          px-6 py-4
+          px-4 py-2
           whitespace-nowrap
+          text-sm
         "
       >
         ${escapeHtml(marathiName)}
@@ -392,7 +395,8 @@ const membersCount =
 
       <td
         class="
-          px-6 py-4
+          px-4 py-2
+          text-sm
         "
       >
         ${escapeHtml(address)}
@@ -400,8 +404,9 @@ const membersCount =
 
       <td
         class="
-          px-6 py-4
+          px-4 py-2
           whitespace-nowrap
+          text-sm
         "
       >
         ${escapeHtml(taluka)}
@@ -409,8 +414,9 @@ const membersCount =
 
       <td
         class="
-          px-6 py-4
+          px-4 py-2
           whitespace-nowrap
+          text-sm
         "
       >
         ${escapeHtml(maskedMobile)}
@@ -418,13 +424,14 @@ const membersCount =
 
       <td
         class="
-          px-6 py-4
+          px-4 py-2
           whitespace-nowrap
+          text-sm
         "
       >
         ${membersCount}
       </td>
-<td class="px-6 py-4">
+<td class="px-4 py-2">
 
   ${renderActionButtons(record)}
 
@@ -482,6 +489,10 @@ function renderActionButtons(
     role === "admin" ||
     role === "super_admin";
 
+  const canSetInvitation =
+    role === "admin" ||
+    role === "super_admin";
+
   if (!canView && !canEdit && !canViewTree) {
     return "";
   }
@@ -490,7 +501,9 @@ function renderActionButtons(
     <div
       style="
         display:flex;
-        gap:8px;
+        gap:6px;
+        flex-wrap:nowrap;
+        align-items:center;
       "
     >
 
@@ -499,6 +512,7 @@ function renderActionButtons(
           ? `
             <button
               class="button-secondary"
+              style="padding:4px 10px;font-size:12px;white-space:nowrap;"
               onclick="viewMember('${record._id}')"
             >
               View
@@ -512,6 +526,7 @@ function renderActionButtons(
           ? `
             <button
               class="button-secondary"
+              style="padding:4px 10px;font-size:12px;white-space:nowrap;"
               onclick="viewFamilyTree('${record._id}')"
             >
               Tree
@@ -525,9 +540,26 @@ function renderActionButtons(
           ? `
             <button
               class="button-primary"
+              style="padding:4px 10px;font-size:12px;white-space:nowrap;"
               onclick="editMember('${record._id}')"
             >
               Edit
+            </button>
+          `
+          : ""
+      }
+
+      ${
+        canSetInvitation
+          ? `
+            <button
+              class="button-secondary"
+              style="padding:4px 10px;font-size:12px;white-space:nowrap;color:#7c3aed;border-color:#c4b5fd;"
+              onclick="openInvitationNameModal('${record._id}', this.dataset.currentName)"
+              data-current-name="${escapeAttribute(record.invitationName || '')}"
+              title="${record.invitationName ? escapeAttribute('Invitation: ' + record.invitationName) : 'Set invitation name'}"
+            >
+              ✉
             </button>
           `
           : ""
@@ -538,10 +570,10 @@ function renderActionButtons(
           ? `
             <button
               class="button-secondary"
-              style="color:#b91c1c;border-color:#fecaca"
+              style="padding:4px 10px;font-size:12px;white-space:nowrap;color:#b91c1c;border-color:#fecaca;"
               onclick="deleteMember('${record._id}')"
             >
-              Delete
+              Del
             </button>
           `
           : ""
@@ -737,4 +769,134 @@ function escapeHtml(
         ];
       }
     );
+}
+
+function escapeAttribute(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// --- Invitation Name Modal ---
+
+function createInvitationModal() {
+  if (document.getElementById("invitationNameModal")) return;
+
+  const modal = document.createElement("div");
+  modal.id = "invitationNameModal";
+  modal.style.cssText = `
+    display:none; position:fixed; inset:0; z-index:9999;
+    background:rgba(0,0,0,0.4); backdrop-filter:blur(4px);
+    align-items:center; justify-content:center;
+  `;
+  modal.innerHTML = `
+    <div style="
+      background:#fff; border-radius:20px; padding:28px 32px;
+      max-width:420px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.15);
+    ">
+      <h3 style="margin:0 0 6px; font-size:20px; font-weight:700;">Set Invitation Name</h3>
+      <p style="margin:0 0 18px; color:#64748b; font-size:14px;">
+        This name will be used on wedding invitations for this household.
+      </p>
+      <input
+        id="invitationNameInput"
+        type="text"
+        placeholder="e.g. Shri. Ramesh Patil & Family"
+        style="
+          width:100%; height:48px; border-radius:12px;
+          border:1px solid #cbd5e1; padding:0 14px;
+          font-size:16px; outline:none;
+        "
+      >
+      <div style="display:flex; gap:10px; margin-top:18px; justify-content:flex-end;">
+        <button
+          id="invitationCancelBtn"
+          type="button"
+          style="
+            padding:10px 20px; border-radius:10px; border:1px solid #e2e8f0;
+            background:#fff; font-weight:600; cursor:pointer;
+          "
+        >Cancel</button>
+        <button
+          id="invitationSaveBtn"
+          type="button"
+          style="
+            padding:10px 20px; border-radius:10px; border:none;
+            background:#7c3aed; color:#fff; font-weight:600; cursor:pointer;
+          "
+        >Save</button>
+      </div>
+      <p id="invitationModalMessage" style="margin:12px 0 0; font-size:13px; color:#dc2626; display:none;"></p>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  document.getElementById("invitationCancelBtn").addEventListener("click", closeInvitationModal);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeInvitationModal();
+  });
+}
+
+let currentInvitationMemberId = null;
+
+function openInvitationNameModal(memberId, currentName) {
+  createInvitationModal();
+  currentInvitationMemberId = memberId;
+  const modal = document.getElementById("invitationNameModal");
+  const input = document.getElementById("invitationNameInput");
+  const msg = document.getElementById("invitationModalMessage");
+  const saveBtn = document.getElementById("invitationSaveBtn");
+
+  input.value = currentName || "";
+  msg.style.display = "none";
+  msg.textContent = "";
+  modal.style.display = "flex";
+  input.focus();
+
+  // Remove old listener and add fresh one
+  const newSaveBtn = saveBtn.cloneNode(true);
+  saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+  newSaveBtn.addEventListener("click", saveInvitationName);
+}
+
+function closeInvitationModal() {
+  const modal = document.getElementById("invitationNameModal");
+  if (modal) modal.style.display = "none";
+  currentInvitationMemberId = null;
+}
+
+async function saveInvitationName() {
+  const input = document.getElementById("invitationNameInput");
+  const msg = document.getElementById("invitationModalMessage");
+  const saveBtn = document.getElementById("invitationSaveBtn");
+  const invitationName = (input.value || "").trim();
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Saving...";
+  msg.style.display = "none";
+
+  try {
+    const res = await fetch(`/api/registrations/${currentInvitationMemberId}/invitation-name`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invitationName }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || "Failed to save");
+    }
+
+    closeInvitationModal();
+    loadMemberDirectory(currentPage);
+  } catch (err) {
+    msg.textContent = err.message || "Failed to save invitation name";
+    msg.style.display = "block";
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save";
+  }
 }

@@ -138,6 +138,11 @@ def normalize_registration(
         .lower()
         .strip()
     )
+
+    normalized["invitationName"] = clean_text(
+        source.get("invitationName")
+    )
+
     return normalized
 
 

@@ -212,6 +212,22 @@
               View
             </button>
 
+            <button
+              id="family-tree-invitation-button"
+              class="button-secondary"
+              style="display:none; color:#7c3aed; border-color:#c4b5fd;"
+            >
+              ✉ Invitation
+            </button>
+
+            <span
+              id="family-tree-invitation-chip"
+              class="family-tree-chip"
+              style="display:none; background:#f5f3ff; color:#7c3aed;"
+            >
+              <span id="family-tree-invitation-name"></span>
+            </span>
+
             <span
               id="family-tree-creator"
               class="family-tree-chip"
@@ -252,6 +268,8 @@
         Panel,
         Position,
         ReactFlow,
+        ReactFlowProvider,
+        useReactFlow,
       } from "https://esm.sh/@xyflow/react@12.10.2?dev&bundle&deps=react@18.3.1,react-dom@18.3.1";
 
       const memberId =
@@ -318,6 +336,7 @@
           return {
             ...node,
             type: "familyUnit",
+            draggable: true,
             style: {
               background: "transparent",
               border: "none",
@@ -470,7 +489,7 @@
                     || "",
                   isMarried: true,
                 },
-                draggable: false,
+                draggable: true,
                 selectable: true,
               });
 
@@ -831,44 +850,120 @@
         );
       }
 
-      function FlowApp({
+      function FlowCanvas({
         nodes,
         edges,
       }) {
-        const [flowInstance, setFlowInstance] =
-          React.useState(null);
         const displayGraph =
-          createDisplayGraph(
-            nodes,
-            edges
+          React.useMemo(
+            () => createDisplayGraph(nodes, edges),
+            [nodes, edges]
           );
-        const styledNodes =
-          createStyledNodes(displayGraph.nodes);
-        const nodesById =
-          Object.fromEntries(
-            styledNodes.map((node) => [
-              node.id,
-              node,
-            ])
+
+        const initialNodes =
+          React.useMemo(
+            () => {
+              const styled = createStyledNodes(displayGraph.nodes);
+
+              if (!styled.length) {
+                return styled;
+              }
+
+              // Shift node positions so the tree's geometric center lands
+              // at the container's center. The default ReactFlow viewport
+              // (0, 0, 1) maps world (0,0) to screen (0,0); by encoding
+              // the centering offset into the node positions themselves
+              // we render centered without relying on the viewport API
+              // (which is broken in this ESM dev build).
+              const container =
+                document.querySelector("#family-tree-flow");
+              const containerWidth =
+                container?.clientWidth || window.innerWidth || 1200;
+              const containerHeight =
+                container?.clientHeight || 619;
+
+              const estimateSize = (node) => {
+                if (node.data?.isCouple) {
+                  return { width: 300, height: 120 };
+                }
+                if (node.data?.isApplicant) {
+                  return { width: 240, height: 110 };
+                }
+                return { width: 200, height: 100 };
+              };
+
+              let minX = Infinity;
+              let minY = Infinity;
+              let maxX = -Infinity;
+              let maxY = -Infinity;
+
+              styled.forEach((node) => {
+                const pos = node.position || { x: 0, y: 0 };
+                const size = estimateSize(node);
+                minX = Math.min(minX, pos.x);
+                minY = Math.min(minY, pos.y);
+                maxX = Math.max(maxX, pos.x + size.width);
+                maxY = Math.max(maxY, pos.y + size.height);
+              });
+
+              const treeCenterX = (minX + maxX) / 2;
+              const treeCenterY = (minY + maxY) / 2;
+              const shiftX = containerWidth / 2 - treeCenterX;
+              const shiftY = containerHeight / 2 - treeCenterY;
+
+              return styled.map((node) => ({
+                ...node,
+                position: {
+                  x: (node.position?.x || 0) + shiftX,
+                  y: (node.position?.y || 0) + shiftY,
+                },
+              }));
+            },
+            [displayGraph]
           );
-        const styledEdges =
-          createStyledEdges(
-            displayGraph.edges.map((edge) => ({
-              ...edge,
-              __sourceNode: nodesById[edge.source],
-              __targetNode: nodesById[edge.target],
-            }))
+
+        const initialEdges =
+          React.useMemo(
+            () => {
+              const nodesById =
+                Object.fromEntries(
+                  initialNodes.map((node) => [
+                    node.id,
+                    node,
+                  ])
+                );
+
+              return createStyledEdges(
+                displayGraph.edges.map((edge) => ({
+                  ...edge,
+                  __sourceNode: nodesById[edge.source],
+                  __targetNode: nodesById[edge.target],
+                }))
+              );
+            },
+            [displayGraph, initialNodes]
           );
+
+        const reactFlow = useReactFlow();
+
+        // Toolbar fit button: re-center using fitView.
+        const handleFitView = React.useCallback(() => {
+          try {
+            reactFlow.fitView({ padding: 0.2 });
+          } catch (error) {
+            // ignore
+          }
+        }, [reactFlow]);
 
         return React.createElement(
           ReactFlow,
           {
-            nodes: styledNodes,
-            edges: styledEdges,
-            fitView: true,
-            minZoom: 0.2,
+            defaultNodes: initialNodes,
+            defaultEdges: initialEdges,
+            fitView: false,
+            minZoom: 0.1,
             maxZoom: 1.4,
-            nodesDraggable: false,
+            nodesDraggable: true,
             nodesConnectable: false,
             elementsSelectable: true,
             nodeTypes: {
@@ -876,12 +971,6 @@
             },
             proOptions: {
               hideAttribution: true,
-            },
-            onInit: setFlowInstance,
-            defaultViewport: {
-              x: 0,
-              y: 0,
-              zoom: 0.9,
             },
           },
           React.createElement(Background, {
@@ -902,11 +991,21 @@
           }),
           React.createElement(Controls),
           React.createElement(FlowToolbar, {
-            onFitView: () =>
-              flowInstance?.fitView({
-                padding: 0.2,
-                duration: 500,
-              }),
+            onFitView: handleFitView,
+          })
+        );
+      }
+
+      function FlowApp({
+        nodes,
+        edges,
+      }) {
+        return React.createElement(
+          ReactFlowProvider,
+          null,
+          React.createElement(FlowCanvas, {
+            nodes,
+            edges,
           })
         );
       }
@@ -943,6 +1042,9 @@
           const viewButton = document.querySelector("#family-tree-view-button");
           const creatorChip = document.querySelector("#family-tree-creator");
           const creatorNameEl = document.querySelector("#family-tree-creator-name");
+          const invitationButton = document.querySelector("#family-tree-invitation-button");
+          const invitationChip = document.querySelector("#family-tree-invitation-chip");
+          const invitationNameEl = document.querySelector("#family-tree-invitation-name");
 
           if (viewButton) {
             viewButton.style.display = "none";
@@ -957,8 +1059,10 @@
 
           // Use createdBy supplied in /api/family-tree payload (authorized for operator)
           const createdByFromPayload = payload.member?.createdBy || "";
+          const invitationName = payload.member?.invitationName || "";
           const role = window.CURRENT_ROLE || "";
           const isViewer = role === "viewer";
+          const isAdmin = role === "admin" || role === "super_admin";
 
           if (createdByFromPayload && !isViewer) {
             if (creatorNameEl) {
@@ -967,6 +1071,24 @@
             if (creatorChip) creatorChip.style.display = "inline-flex";
           } else if (creatorChip) {
             creatorChip.style.display = "none";
+          }
+
+          // Invitation name display
+          if (invitationName && invitationChip && invitationNameEl) {
+            invitationNameEl.textContent = `✉ ${invitationName}`;
+            invitationChip.style.display = "inline-flex";
+          }
+
+          // Invitation edit button (admin only)
+          if (isAdmin && invitationButton) {
+            invitationButton.textContent = invitationName
+              ? `✉ ${invitationName}`
+              : "✉ Set Invitation";
+            invitationButton.style.display = "inline-flex";
+            if (invitationChip) invitationChip.style.display = "none"; // Use button instead of chip for admin
+            invitationButton.addEventListener("click", () => {
+              openTreeInvitationModal(memberId, invitationName);
+            });
           }
 
           if (viewButton) {
@@ -992,6 +1114,101 @@
             "Unable to load family tree."
           );
         }
+      }
+
+      function openTreeInvitationModal(memberId, currentName) {
+        let modal = document.getElementById("treeInvitationModal");
+        if (!modal) {
+          modal = document.createElement("div");
+          modal.id = "treeInvitationModal";
+          modal.style.cssText = `
+            display:none; position:fixed; inset:0; z-index:9999;
+            background:rgba(0,0,0,0.4); backdrop-filter:blur(4px);
+            align-items:center; justify-content:center;
+          `;
+          modal.innerHTML = `
+            <div style="
+              background:#fff; border-radius:20px; padding:28px 32px;
+              max-width:420px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.15);
+            ">
+              <h3 style="margin:0 0 6px; font-size:20px; font-weight:700;">Set Invitation Name</h3>
+              <p style="margin:0 0 18px; color:#64748b; font-size:14px;">
+                This name will appear on wedding invitations for this household.
+              </p>
+              <input
+                id="treeInvitationInput"
+                type="text"
+                placeholder="e.g. Shri. Ramesh Patil & Family"
+                style="
+                  width:100%; height:48px; border-radius:12px;
+                  border:1px solid #cbd5e1; padding:0 14px;
+                  font-size:16px; outline:none;
+                "
+              >
+              <div style="display:flex; gap:10px; margin-top:18px; justify-content:flex-end;">
+                <button id="treeInvCancelBtn" type="button" style="
+                  padding:10px 20px; border-radius:10px; border:1px solid #e2e8f0;
+                  background:#fff; font-weight:600; cursor:pointer;
+                ">Cancel</button>
+                <button id="treeInvSaveBtn" type="button" style="
+                  padding:10px 20px; border-radius:10px; border:none;
+                  background:#7c3aed; color:#fff; font-weight:600; cursor:pointer;
+                ">Save</button>
+              </div>
+              <p id="treeInvModalMsg" style="margin:12px 0 0; font-size:13px; color:#dc2626; display:none;"></p>
+            </div>
+          `;
+          document.body.appendChild(modal);
+          document.getElementById("treeInvCancelBtn").addEventListener("click", () => {
+            modal.style.display = "none";
+          });
+          modal.addEventListener("click", (e) => {
+            if (e.target === modal) modal.style.display = "none";
+          });
+        }
+
+        const input = document.getElementById("treeInvitationInput");
+        const msg = document.getElementById("treeInvModalMsg");
+        input.value = currentName || "";
+        msg.style.display = "none";
+        modal.style.display = "flex";
+        input.focus();
+
+        const saveBtn = document.getElementById("treeInvSaveBtn");
+        const newBtn = saveBtn.cloneNode(true);
+        saveBtn.parentNode.replaceChild(newBtn, saveBtn);
+        newBtn.addEventListener("click", async () => {
+          const invitationName = (input.value || "").trim();
+          newBtn.disabled = true;
+          newBtn.textContent = "Saving...";
+          msg.style.display = "none";
+
+          try {
+            const res = await fetch(`/api/registrations/${memberId}/invitation-name`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ invitationName }),
+            });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              throw new Error(body.error || "Failed to save");
+            }
+            modal.style.display = "none";
+            // Update the button text
+            const btn = document.querySelector("#family-tree-invitation-button");
+            if (btn) {
+              btn.textContent = invitationName
+                ? `✉ ${invitationName}`
+                : "✉ Set Invitation";
+            }
+          } catch (err) {
+            msg.textContent = err.message || "Failed to save";
+            msg.style.display = "block";
+          } finally {
+            newBtn.disabled = false;
+            newBtn.textContent = "Save";
+          }
+        });
       }
 
       loadTree();
