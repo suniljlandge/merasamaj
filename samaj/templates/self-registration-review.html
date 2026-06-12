@@ -20,42 +20,7 @@
     ></script>
   </head>
   <body class="directory-body">
-    <header class="topbar">
-      <a
-        class="brand"
-        href="/"
-        aria-label="SAMAJ home"
-      >
-        <span
-          class="brand-mark"
-          aria-hidden="true"
-        ></span>
-        <span>SAMAJ</span>
-      </a>
-
-      <div
-        style="
-          display:flex;
-          align-items:center;
-          gap:16px;
-        "
-      >
-        {% if current_role == "super_admin" %}
-        <a
-          href="/otp-settings"
-          class="button-secondary"
-        >
-          OTP settings
-        </a>
-        {% endif %}
-        <a
-          href="/logout"
-          class="button-ghost"
-        >
-          Logout
-        </a>
-      </div>
-    </header>
+    {% include "_topbar.html" %}
 
     <main class="directory-layout">
       <section class="directory-table-card">

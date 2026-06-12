@@ -34,6 +34,7 @@
         Username and password login for super admin, admin, operator, and viewer accounts.
       </p>
 
+      {% if mobile_login_enabled %}
       <div
         style="
           display:grid;
@@ -58,6 +59,7 @@
           Login With Mobile
         </button>
       </div>
+      {% endif %}
 
       <div id="staff-login-panel">
         <input

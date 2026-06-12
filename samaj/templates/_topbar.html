@@ -1,0 +1,46 @@
+{# Shared, capability-driven top navigation. Buttons follow the super-admin
+   permission matrix, so any role that is granted a capability gets its button. #}
+<header class="topbar">
+  <a class="brand" href="/" aria-label="SAMAJ home">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>SAMAJ</span>
+  </a>
+
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+    {% if request.path != '/' %}
+    <a href="/" class="button-secondary">Home</a>
+    {% endif %}
+
+    {% if can('access_directory') %}
+    <a href="/directory" class="button-secondary">Member Directory</a>
+    {% endif %}
+
+    {% if can_data_tools %}
+    <a href="/data-tools" class="button-secondary">Data Tools</a>
+    {% endif %}
+
+    {% if can('manage_users') %}
+    <a href="/user-management" class="button-secondary">User Management</a>
+    {% endif %}
+
+    {% if can('review_self_registrations') %}
+    <a href="/self-registration-review" class="button-secondary">Review Self Registrations</a>
+    {% endif %}
+
+    {% if can('view_leaderboard') %}
+    <a href="/operator-leaderboard" class="button-secondary">Leaderboard</a>
+    {% endif %}
+
+    {% if can('manage_role_config') %}
+    <a href="/superadmin" class="button-secondary">Super Admin</a>
+    {% endif %}
+
+    {% if can('manage_otp_settings') %}
+    <a href="/otp-settings" class="button-secondary">OTP Settings</a>
+    {% endif %}
+
+    <a href="/logout" class="button-ghost" id="logoutButton">Logout</a>
+
+    <span class="topbar-status" id="connection-status"></span>
+  </div>
+</header>

@@ -17,32 +17,7 @@
     ></script>
   </head>
   <body class="directory-body">
-    <header class="topbar">
-      <a
-        class="brand"
-        href="/"
-        aria-label="SAMAJ home"
-      >
-        <span
-          class="brand-mark"
-          aria-hidden="true"
-        ></span>
-        <span>SAMAJ</span>
-      </a>
-
-      <div
-        style="
-          display:flex;
-          align-items:center;
-          gap:16px;
-        "
-      >
-        <a href="/user-management" class="button-secondary">User Management</a>
-        <a href="/otp-settings" class="button-secondary">OTP Settings</a>
-        <a href="/directory" class="button-secondary">Member Directory</a>
-        <a href="/logout" class="button-ghost">Logout</a>
-      </div>
-    </header>
+    {% include "_topbar.html" %}
 
     <main class="directory-layout">
 
@@ -92,6 +67,39 @@
             </button>
             <span id="config-status" style="margin-left:12px;"></span>
           </div>
+        </div>
+      </section>
+
+      <!-- Address export columns (per role) -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Reports</p>
+            <h2>Address export columns</h2>
+            <p>
+              Choose which columns each role may include when exporting the
+              address-area CSV from Data Tools. Sensitive columns such as mobile
+              number are off by default.
+            </p>
+          </div>
+        </div>
+
+        <div class="directory-table-wrapper">
+          <table class="directory-table" id="export-cols-table">
+            <thead>
+              <tr id="export-cols-header"><th>Column</th></tr>
+            </thead>
+            <tbody id="export-cols-body">
+              <tr><td>Loading export columns...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="form-actions" style="margin-top:12px;">
+          <button class="button-primary" type="button" id="save-export-cols-btn">
+            Save export columns
+          </button>
+          <span id="export-cols-status" style="margin-left:12px;"></span>
         </div>
       </section>
 

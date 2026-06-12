@@ -65,21 +65,23 @@ activateMode("staff");
 function activateMode(mode) {
   const isStaffMode = mode === "staff";
 
-  staffLoginPanel.hidden = !isStaffMode;
-  mobileLoginPanel.hidden = isStaffMode;
+  if (staffLoginPanel) staffLoginPanel.hidden = !isStaffMode;
+  if (mobileLoginPanel) mobileLoginPanel.hidden = isStaffMode;
 
-  staffModeButton.className = isStaffMode
-    ? "button-primary"
-    : "button-secondary";
-  mobileModeButton.className = isStaffMode
-    ? "button-secondary"
-    : "button-primary";
+  if (staffModeButton) {
+    staffModeButton.className = isStaffMode ? "button-primary" : "button-secondary";
+  }
+  if (mobileModeButton) {
+    mobileModeButton.className = isStaffMode ? "button-secondary" : "button-primary";
+  }
 
-  loginModeCopy.textContent = isStaffMode
-    ? "Username and password login for super admin, admin, operator, and viewer accounts."
-    : "Verify your 10-digit Indian mobile number with OTP to start or continue your samaj self-registration.";
+  if (loginModeCopy) {
+    loginModeCopy.textContent = isStaffMode
+      ? "Username and password login for super admin, admin, operator, and viewer accounts."
+      : "Verify your 10-digit Indian mobile number with OTP to start or continue your samaj self-registration.";
+  }
 
-  if (!isStaffMode) {
+  if (!isStaffMode && mobileInput) {
     handleMobileInput();
     mobileInput.focus();
   }

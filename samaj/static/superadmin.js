@@ -19,12 +19,104 @@ initialize();
 function initialize() {
   loadRoleConfig();
   loadExportFilters();
+  loadExportColumns();
 
   if (saveConfigBtn) {
     saveConfigBtn.addEventListener("click", saveRoleConfig);
   }
   if (exportBtn) {
     exportBtn.addEventListener("click", downloadExport);
+  }
+  const saveExportColsBtn = document.querySelector("#save-export-cols-btn");
+  if (saveExportColsBtn) {
+    saveExportColsBtn.addEventListener("click", saveExportColumns);
+  }
+}
+
+let exportColsState = { columns: [], roles: [], matrix: {} };
+
+async function loadExportColumns() {
+  const body = document.querySelector("#export-cols-body");
+  if (!body) return;
+  try {
+    const response = await fetch("/api/data-tools/export-config");
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to load export columns.");
+    }
+    exportColsState = {
+      columns: payload.columns || [],
+      roles: payload.roles || [],
+      matrix: payload.matrix || {},
+    };
+    renderExportColumns();
+  } catch (error) {
+    body.innerHTML = `<tr><td>${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+
+function renderExportColumns() {
+  const { columns, roles, matrix } = exportColsState;
+  document.querySelector("#export-cols-header").innerHTML =
+    `<th>Column</th>` +
+    roles
+      .map((role) => `<th style="text-align:center;">${escapeHtml(role.label)}</th>`)
+      .join("");
+
+  document.querySelector("#export-cols-body").innerHTML = columns
+    .map((col) => {
+      const cells = roles
+        .map((role) => {
+          const enabled = Boolean((matrix[role.key] || {})[col.key]);
+          return `
+            <td style="text-align:center;">
+              <input
+                type="checkbox"
+                data-ec-role="${escapeHtmlAttribute(role.key)}"
+                data-ec-col="${escapeHtmlAttribute(col.key)}"
+                ${enabled ? "checked" : ""}
+              >
+            </td>`;
+        })
+        .join("");
+      return `<tr><td><strong>${escapeHtml(col.label)}</strong></td>${cells}</tr>`;
+    })
+    .join("");
+}
+
+async function saveExportColumns() {
+  const status = document.querySelector("#export-cols-status");
+  status.textContent = "Saving...";
+
+  const matrix = {};
+  exportColsState.roles.forEach((role) => {
+    matrix[role.key] = {};
+  });
+  document
+    .querySelectorAll("#export-cols-body input[type=checkbox]")
+    .forEach((input) => {
+      const role = input.getAttribute("data-ec-role");
+      const col = input.getAttribute("data-ec-col");
+      if (role && col) {
+        matrix[role] = matrix[role] || {};
+        matrix[role][col] = input.checked;
+      }
+    });
+
+  try {
+    const response = await fetch("/api/data-tools/export-config", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ matrix }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to save.");
+    }
+    status.textContent = "Saved.";
+    window.setTimeout(() => { status.textContent = ""; }, 2500);
+  } catch (error) {
+    status.textContent = error.message || "Unable to save.";
   }
 }
 

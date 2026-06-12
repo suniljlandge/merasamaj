@@ -171,7 +171,7 @@
         Form
       </a>
 
-      {% if current_role in ["admin", "super_admin"] %}
+      {% if can('manage_users') %}
       <a
         href="/user-management"
         class="
@@ -197,7 +197,9 @@
       >
         Users
       </a>
+      {% endif %}
 
+      {% if can('review_self_registrations') %}
       <a
         href="/self-registration-review"
         class="
@@ -225,7 +227,63 @@
       </a>
       {% endif %}
 
-      {% if current_role == "super_admin" %}
+      {% if can_data_tools %}
+      <a
+        href="/data-tools"
+        class="
+          h-10 md:h-11
+
+          px-4 md:px-5
+
+          rounded-full
+          border border-slate-300
+
+          bg-white
+
+          flex items-center justify-center
+
+          text-sm md:text-base
+          font-semibold
+
+          hover:bg-slate-50
+          transition
+
+          whitespace-nowrap
+        "
+      >
+        Data Tools
+      </a>
+      {% endif %}
+
+      {% if can('manage_role_config') %}
+      <a
+        href="/superadmin"
+        class="
+          h-10 md:h-11
+
+          px-4 md:px-5
+
+          rounded-full
+          border border-slate-300
+
+          bg-white
+
+          flex items-center justify-center
+
+          text-sm md:text-base
+          font-semibold
+
+          hover:bg-slate-50
+          transition
+
+          whitespace-nowrap
+        "
+      >
+        Super Admin
+      </a>
+      {% endif %}
+
+      {% if can('manage_otp_settings') %}
       <a
         href="/otp-settings"
         class="

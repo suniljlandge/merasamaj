@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 import bcrypt
 import requests
-from pymongo import MongoClient
+from pymongo import MongoClient, UpdateOne
 from bson import ObjectId
 from bson.errors import InvalidId
 from flask import (
@@ -48,6 +48,8 @@ from .corrections import (
     load_corrections,
     save_corrections,
     )
+
+from . import data_tools
 
 
 def build_corrected_phrase(text, corrections):
@@ -91,6 +93,40 @@ def build_corrected_phrase(text, corrections):
         i += 1
 
     return " ".join(result)
+
+DATA_TOOLS_EXPORT_KEY = "data_tools_export_columns"
+
+# Catalog of exportable columns. `default` is used until the super admin saves
+# a configuration. Sensitive columns (mobile) default to OFF.
+DATA_TOOLS_EXPORT_COLUMNS = [
+    {"key": "area", "label": "Area", "default": True},
+    {"key": "name", "label": "Name (EN)", "default": True},
+    {"key": "name_mr", "label": "Name (MR)", "default": True},
+    {"key": "mobile", "label": "Mobile Number", "default": False},
+    {"key": "address1_clean", "label": "Address 1 (clean)", "default": True},
+    {"key": "address2_clean", "label": "Address 2 (clean)", "default": True},
+    {"key": "address1_raw", "label": "Address 1 (raw)", "default": False},
+    {"key": "address2_raw", "label": "Address 2 (raw)", "default": False},
+    {"key": "address1_mr", "label": "Address 1 (MR)", "default": False},
+    {"key": "address2_mr", "label": "Address 2 (MR)", "default": False},
+    {"key": "district", "label": "District", "default": False},
+    {"key": "taluka", "label": "Taluka", "default": False},
+    {"key": "surname", "label": "Surname group", "default": False},
+    {"key": "members", "label": "Members", "default": True},
+    {"key": "createdBy", "label": "Created By", "default": True},
+]
+
+# Whitelist of editable bilingual field paths for the inline transliteration fix.
+DATA_TOOLS_FIELD_PATTERN = re.compile(
+    r"^(firstName|middleName|lastName|familyMembers\.\d+\.(name|spouseName))$"
+)
+
+
+def _export_row_value(area, row, key):
+    if key == "area":
+        return area
+    return row.get(key, "")
+
 
 def create_app(config=None, collection=None, correction_collection=None):
     app = Flask(__name__)
@@ -148,6 +184,23 @@ def create_app(config=None, collection=None, correction_collection=None):
     app.extensions["mongo_client"] = None
     app.extensions["mongo_collection"] = collection
     app.extensions["mongo_correction_collection"] = correction_collection
+
+    @app.context_processor
+    def inject_nav_capabilities():
+        """Expose capability checks to all templates so nav buttons follow the
+        super-admin permission matrix instead of hard-coded roles."""
+        def can(capability):
+            try:
+                return role_can(capability)
+            except Exception:
+                return False
+
+        return {
+            "can": can,
+            "can_data_tools": (
+                can("manage_transliteration") or can("manage_address_areas")
+            ),
+        }
 
     @app.route("/")
     def index():
@@ -315,6 +368,332 @@ def create_app(config=None, collection=None, correction_collection=None):
             "superadmin.html",
             current_role=current_role(),
         )
+
+    @app.route("/data-tools")
+    def data_tools_page():
+
+        can_translit = role_can("manage_transliteration")
+        can_address = role_can("manage_address_areas")
+        if not (can_translit or can_address):
+            return redirect("/directory")
+
+        return render_template(
+            "data-tools.html",
+            current_role=current_role(),
+            can_translit=can_translit,
+            can_address=can_address,
+            can_export_areas=role_can("export_address_areas"),
+            is_super_admin=current_role() == "super_admin",
+        )
+
+    def _export_settings_doc():
+        return (
+            get_settings_collection().find_one({"key": DATA_TOOLS_EXPORT_KEY})
+            or {}
+        )
+
+    def _column_default_for_role(col, role):
+        # Super admin can export everything by default; other roles fall back to
+        # the column's own default (sensitive columns like mobile -> off).
+        if role == "super_admin":
+            return True
+        return col.get("default", True)
+
+    def _enabled_columns_for_role(role):
+        per_role = _export_settings_doc().get("perRole") or {}
+        role_map = per_role.get(role) or {}
+        return [
+            col for col in DATA_TOOLS_EXPORT_COLUMNS
+            if bool(role_map.get(col["key"], _column_default_for_role(col, role)))
+        ]
+
+    @app.get("/api/data-tools/export-config")
+    def data_tools_export_config_get():
+
+        # The per-role export-column matrix is a super-admin setting.
+        if current_role() != "super_admin":
+            return jsonify({"error": "Forbidden"}), 403
+
+        per_role = _export_settings_doc().get("perRole") or {}
+        matrix = {}
+        for role in MANAGED_ROLES:
+            role_map = per_role.get(role) or {}
+            matrix[role] = {
+                col["key"]: bool(role_map.get(
+                    col["key"], _column_default_for_role(col, role)))
+                for col in DATA_TOOLS_EXPORT_COLUMNS
+            }
+
+        return jsonify({
+            "columns": [
+                {"key": c["key"], "label": c["label"]}
+                for c in DATA_TOOLS_EXPORT_COLUMNS
+            ],
+            "roles": [
+                {"key": r, "label": ROLE_LABELS.get(r, r)}
+                for r in MANAGED_ROLES
+            ],
+            "matrix": matrix,
+        })
+
+    @app.put("/api/data-tools/export-config")
+    def data_tools_export_config_put():
+
+        if current_role() != "super_admin":
+            return jsonify({"error": "Forbidden"}), 403
+
+        payload = request.get_json(silent=True) or {}
+        incoming = payload.get("matrix") or {}
+        valid_cols = {col["key"] for col in DATA_TOOLS_EXPORT_COLUMNS}
+
+        per_role = {}
+        for role in MANAGED_ROLES:
+            role_in = incoming.get(role) or {}
+            per_role[role] = {
+                key: bool(role_in.get(key, False))
+                for key in valid_cols
+            }
+
+        get_settings_collection().update_one(
+            {"key": DATA_TOOLS_EXPORT_KEY},
+            {"$set": {
+                "key": DATA_TOOLS_EXPORT_KEY,
+                "perRole": per_role,
+                "updatedAt": now_utc(),
+                "updatedBy": session.get("username", ""),
+            }},
+            upsert=True,
+        )
+        return jsonify({"ok": True})
+
+    @app.get("/api/data-tools/address-areas")
+    def data_tools_address_areas():
+
+        if not role_can("manage_address_areas"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        documents = list(get_collection().find({}))
+        groups, summary = data_tools.address_report(documents)
+
+        area = request.args.get("area", "").strip()
+        rows = groups.get(area, []) if area else []
+
+        return jsonify({
+            "summary": summary,
+            "totalFamilies": sum(s["families"] for s in summary),
+            "rows": rows,
+        })
+
+    @app.get("/api/data-tools/address-areas/export")
+    def data_tools_address_export():
+
+        if not (role_can("manage_address_areas") and role_can("export_address_areas")):
+            return jsonify({"error": "Forbidden"}), 403
+
+        columns = _enabled_columns_for_role(current_role())
+        if not columns:
+            return jsonify({
+                "error": "No export columns are enabled for your role. "
+                         "Ask a super admin to allow some in the dashboard."
+            }), 403
+
+        documents = list(get_collection().find({}))
+        groups, _summary = data_tools.address_report(documents)
+
+        def generate():
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            buffer.write("\ufeff")
+            writer.writerow([c["label"] for c in columns])
+            yield buffer.getvalue()
+            buffer.seek(0); buffer.truncate(0)
+            for area in sorted(groups):
+                for r in groups[area]:
+                    writer.writerow([
+                        _export_row_value(area, r, c["key"]) for c in columns
+                    ])
+                    yield buffer.getvalue()
+                    buffer.seek(0); buffer.truncate(0)
+
+        timestamp = now_utc().strftime("%Y%m%d-%H%M%S")
+        return Response(
+            generate(),
+            mimetype="text/csv",
+            headers={
+                "Content-Disposition":
+                    f'attachment; filename="samaj-address-areas-{timestamp}.csv"',
+            },
+        )
+
+    @app.get("/api/data-tools/translit/suspects")
+    def data_tools_translit_suspects():
+
+        if not role_can("manage_transliteration"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        overrides = load_corrections(get_correction_collection())
+        documents = list(get_collection().find(
+            {},
+            {
+                "firstName": 1, "middleName": 1, "lastName": 1,
+                "familyMembers.name": 1, "familyMembers.spouseName": 1,
+            },
+        ))
+        result = data_tools.analyze_names(documents, overrides)
+        return jsonify(result)
+
+    @app.get("/api/data-tools/translit/scan")
+    def data_tools_translit_scan():
+
+        if not role_can("manage_transliteration"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        overrides = load_corrections(get_correction_collection())
+        documents = list(get_collection().find(
+            {},
+            {
+                "firstName": 1, "middleName": 1, "lastName": 1,
+                "familyMembers.name": 1, "familyMembers.spouseName": 1,
+            },
+        ))
+
+        def generate():
+            import json as _json
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            stats, unaligned = data_tools.collect_stats(documents)
+            todo = data_tools.words_needing_lookup(stats, unaligned, overrides)
+            total = len(todo)
+            yield _json.dumps({
+                "phase": "fetch", "processed": 0, "total": total,
+                "records": len(documents),
+            }) + "\n"
+
+            done = 0
+            if todo:
+                with ThreadPoolExecutor(max_workers=16) as pool:
+                    futures = {pool.submit(data_tools.fetch_one, w): w for w in todo}
+                    for _fut in as_completed(futures):
+                        done += 1
+                        if done % 5 == 0 or done == total:
+                            yield _json.dumps({
+                                "phase": "fetch",
+                                "processed": done, "total": total,
+                            }) + "\n"
+
+            suspects, ok_count = data_tools.finalize_suspects(stats, overrides)
+            for item in unaligned:
+                item["suggestion"] = data_tools.phrase_suggestion(
+                    item["en"], overrides)
+
+            yield _json.dumps({
+                "done": True,
+                "result": {
+                    "suspects": suspects,
+                    "distinctWords": len(stats),
+                    "okWords": ok_count,
+                    "unaligned": unaligned,
+                },
+            }) + "\n"
+
+        return Response(generate(), mimetype="application/x-ndjson")
+
+    @app.post("/api/data-tools/translit/resolve")
+    def data_tools_translit_resolve():
+
+        if not role_can("manage_transliteration"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        payload = request.get_json(silent=True) or {}
+        picks = payload.get("picks") or {}
+
+        corrections = {}
+        for word, marathi in picks.items():
+            source = data_tools.clean_text(word).lower()
+            target = data_tools.clean_text(marathi)
+            if source and target:
+                corrections[source] = target
+
+        saved = save_corrections(get_correction_collection(), corrections)
+        return jsonify({"ok": True, "saved": saved})
+
+    @app.post("/api/data-tools/translit/fix-record")
+    def data_tools_translit_fix_record():
+
+        if not role_can("manage_transliteration"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        payload = request.get_json(silent=True) or {}
+        record_id = object_id_or_none(payload.get("id"))
+        field = data_tools.clean_text(payload.get("field"))
+        marathi = data_tools.clean_text(payload.get("mr"))
+        english = data_tools.clean_text(payload.get("en"))
+
+        if not record_id or not DATA_TOOLS_FIELD_PATTERN.match(field) or not marathi:
+            return jsonify({"error": "Invalid request"}), 400
+
+        result = get_collection().update_one(
+            {"_id": record_id},
+            {"$set": {f"{field}.mr": marathi, "updatedAt": now_utc()}},
+        )
+
+        # Remember the whole-phrase correction so identical phrases auto-fix later.
+        if english:
+            save_corrections(
+                get_correction_collection(),
+                {english.lower(): marathi},
+            )
+
+        return jsonify({"ok": True, "matched": result.matched_count})
+
+    @app.post("/api/data-tools/translit/apply")
+    def data_tools_translit_apply():
+
+        if not role_can("manage_transliteration"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        overrides = load_corrections(get_correction_collection())
+        collection = get_collection()
+
+        projection = {
+            "firstName": 1, "middleName": 1, "lastName": 1, "familyMembers": 1,
+        }
+
+        def generate():
+            import json as _json
+            total = collection.count_documents({})
+            yield _json.dumps({"total": total}) + "\n"
+
+            processed = 0
+            updated = 0
+            ops = []
+            for document in collection.find({}, projection):
+                processed += 1
+                changes = data_tools.apply_overrides_to_doc(document, overrides)
+                if changes:
+                    changes["updatedAt"] = now_utc()
+                    ops.append(UpdateOne(
+                        {"_id": document["_id"]},
+                        {"$set": changes},
+                    ))
+                    updated += 1
+                if len(ops) >= 200:
+                    collection.bulk_write(ops, ordered=False)
+                    ops = []
+                if processed % 25 == 0 or processed == total:
+                    yield _json.dumps({
+                        "processed": processed,
+                        "updated": updated,
+                        "total": total,
+                    }) + "\n"
+            if ops:
+                collection.bulk_write(ops, ordered=False)
+            yield _json.dumps({
+                "done": True, "processed": processed, "updated": updated,
+            }) + "\n"
+
+        return Response(generate(), mimetype="application/x-ndjson")
+
 
     @app.get("/api/role-config")
     def get_role_config():
@@ -875,7 +1254,13 @@ def create_app(config=None, collection=None, correction_collection=None):
                 return redirect("/")
 
             return render_template(
-                "login.html"
+                "login.html",
+                mobile_login_enabled=is_mobile_login_enabled(
+                    get_settings_collection().find_one({
+                        "key": OTP_SETTINGS_KEY
+                    }),
+                    test_mode=app.config.get("OTP_TEST_MODE", False),
+                ),
             )
 
         payload = request.get_json()
@@ -968,6 +1353,12 @@ def create_app(config=None, collection=None, correction_collection=None):
             settings.get("activeProvider")
             or OTP_PROVIDER_TEST
         )
+
+        if active_provider == OTP_PROVIDER_DISABLED:
+            return jsonify({
+                "error": "Mobile login is currently disabled."
+            }), 403
+
         fixed_code = app.config.get(
             "OTP_FIXED_CODE",
             "",
@@ -1102,6 +1493,11 @@ def create_app(config=None, collection=None, correction_collection=None):
                 False,
             ),
         )
+
+        if settings.get("activeProvider") == OTP_PROVIDER_DISABLED:
+            return jsonify({
+                "error": "Mobile login is currently disabled."
+            }), 403
 
         try:
             provider_result = send_otp_message(
@@ -4655,6 +5051,7 @@ OTP_SETTINGS_KEY = "otp_settings"
 OTP_PROVIDER_TEST = "test"
 OTP_PROVIDER_MSG91 = "msg91"
 OTP_PROVIDER_META = "meta_whatsapp"
+OTP_PROVIDER_DISABLED = "disabled"
 OTP_EXPIRY_MINUTES = 5
 OTP_RESEND_SECONDS = 30
 OTP_MAX_ATTEMPTS = 5
@@ -4689,7 +5086,6 @@ def default_otp_settings(test_mode=False):
 def normalize_otp_settings(payload=None, existing=None, test_mode=False):
     payload = payload or {}
     existing = existing or default_otp_settings(test_mode)
-
     active_provider = (
         payload.get("activeProvider")
         or existing.get("activeProvider")
@@ -4704,6 +5100,7 @@ def normalize_otp_settings(payload=None, existing=None, test_mode=False):
         OTP_PROVIDER_TEST,
         OTP_PROVIDER_MSG91,
         OTP_PROVIDER_META,
+        OTP_PROVIDER_DISABLED,
     }:
         active_provider = (
             OTP_PROVIDER_TEST
@@ -4751,6 +5148,15 @@ def normalize_otp_settings(payload=None, existing=None, test_mode=False):
         "updatedAt": existing.get("updatedAt"),
         "updatedBy": existing.get("updatedBy", ""),
     }
+
+
+def is_mobile_login_enabled(existing_settings, test_mode=False):
+    """Mobile (OTP) login is available unless the active provider is disabled."""
+    settings = normalize_otp_settings(
+        existing=existing_settings,
+        test_mode=test_mode,
+    )
+    return settings.get("activeProvider") != OTP_PROVIDER_DISABLED
 
 
 def serialize_public_account(account):
@@ -5168,6 +5574,21 @@ ROLE_CAPABILITIES = [
         "label": "Manage roles & permissions",
         "description": "Access this super admin dashboard.",
     },
+    {
+        "key": "manage_transliteration",
+        "label": "Use transliteration fixer",
+        "description": "Fix Marathi name transliterations across records.",
+    },
+    {
+        "key": "manage_address_areas",
+        "label": "Use address area tool",
+        "description": "Bifurcate the directory by locality and export it.",
+    },
+    {
+        "key": "export_address_areas",
+        "label": "Export address-area CSV",
+        "description": "Download the grouped address CSV from the address area tool.",
+    },
 ]
 
 ROLE_LIMITS = [
@@ -5216,6 +5637,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "export_directory": True,
         "manage_otp_settings": False,
         "manage_role_config": False,
+        "manage_transliteration": True,
+        "manage_address_areas": True,
+        "export_address_areas": True,
     },
     "operator": {
         "access_directory": True,
@@ -5232,6 +5656,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "export_directory": False,
         "manage_otp_settings": False,
         "manage_role_config": False,
+        "manage_transliteration": False,
+        "manage_address_areas": False,
+        "export_address_areas": False,
     },
     "viewer": {
         "access_directory": True,
@@ -5248,6 +5675,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "export_directory": False,
         "manage_otp_settings": False,
         "manage_role_config": False,
+        "manage_transliteration": False,
+        "manage_address_areas": False,
+        "export_address_areas": False,
     },
 }
 

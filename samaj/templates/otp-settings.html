@@ -17,40 +17,7 @@
     ></script>
   </head>
   <body class="directory-body">
-    <header class="topbar">
-      <a
-        class="brand"
-        href="/"
-        aria-label="SAMAJ home"
-      >
-        <span
-          class="brand-mark"
-          aria-hidden="true"
-        ></span>
-        <span>SAMAJ</span>
-      </a>
-
-      <div
-        style="
-          display:flex;
-          align-items:center;
-          gap:16px;
-        "
-      >
-        <a
-          href="/self-registration-review"
-          class="button-secondary"
-        >
-          Review queue
-        </a>
-        <a
-          href="/logout"
-          class="button-ghost"
-        >
-          Logout
-        </a>
-      </div>
-    </header>
+    {% include "_topbar.html" %}
 
     <main class="directory-layout">
       <section class="directory-search-card">
@@ -80,6 +47,7 @@
                 <option value="msg91">MSG91</option>
                 <option value="meta_whatsapp">Meta WhatsApp</option>
                 <option value="test">Test mode</option>
+                <option value="disabled">Disabled (no mobile login)</option>
               </select>
             </label>
           </div>
