@@ -77,7 +77,7 @@ function activateMode(mode) {
 
   if (loginModeCopy) {
     loginModeCopy.textContent = isStaffMode
-      ? "Username and password login for super admin, admin, operator, and viewer accounts."
+      ? "Username and password login."
       : "Verify your 10-digit Indian mobile number with OTP to start or continue your samaj self-registration.";
   }
 
