@@ -811,11 +811,11 @@ function renderMemberCard(index, value = {}, allMembers = []) {
           <input
             data-member-contact="${index}"
             inputmode="tel"
-            maxlength="10"
+            maxlength="13"
             value="${escapeAttribute(
               contactNumber
             )}"
-            placeholder="9876543210 (without +91)"
+            placeholder="9876543210 or +919876543210"
             required
           >
 
@@ -1492,12 +1492,15 @@ function setupPhoneInputSanitization() {
       return;
     }
 
-    const digitsOnly = input.value
-      .replace(/\D/g, "")
-      .slice(0, 10);
+    // Allow an optional leading "+" (e.g. +919876543210) plus digits, or a
+    // bare 10-digit number (9876543210). Strip everything else and keep only
+    // a single leading "+".
+    let sanitized = input.value.replace(/[^\d+]/g, "");
+    sanitized = sanitized.replace(/(?!^)\+/g, "");
+    sanitized = sanitized.slice(0, 13);
 
-    if (input.value !== digitsOnly) {
-      input.value = digitsOnly;
+    if (input.value !== sanitized) {
+      input.value = sanitized;
     }
   });
 }
@@ -2135,7 +2138,7 @@ function getWizardStepForField(fieldName = "") {
 function validateWizardStep(stepNumber) {
   const payload = readRegistration();
   const errors = [];
-  const phonePattern = /^[6-9]\d{9}$/;
+  const phonePattern = /^(?:\+91)?[6-9]\d{9}$/;
 
   if (stepNumber === 1) {
     if (!payload.firstName.en.trim()) {
