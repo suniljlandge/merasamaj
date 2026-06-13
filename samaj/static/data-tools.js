@@ -263,3 +263,43 @@ async function loadAreaDetail(area) {
     tbody.appendChild(tr);
   });
 }
+
+// ---- grouped PDF export (with circular progress while it builds) ---------
+const exportBtn = document.getElementById("exportPdfBtn");
+if (exportBtn) {
+  exportBtn.addEventListener("click", async () => {
+    if (exportBtn.classList.contains("is-loading")) return;
+    const label = document.getElementById("exportPdfLabel");
+    const original = label.textContent;
+    exportBtn.classList.add("is-loading");
+    exportBtn.disabled = true;
+    label.textContent = "Preparing…";
+    try {
+      const res = await fetch("/api/data-tools/address-areas/export");
+      if (!res.ok) {
+        let msg = "Export failed (" + res.status + ")";
+        try { const j = await res.json(); if (j.error) msg = j.error; } catch (e) {}
+        alert(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const name = match ? match[1] : "samaj-address-areas.pdf";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Export failed: " + e.message);
+    } finally {
+      exportBtn.classList.remove("is-loading");
+      exportBtn.disabled = false;
+      label.textContent = original;
+    }
+  });
+}

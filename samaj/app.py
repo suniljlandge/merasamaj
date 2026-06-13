@@ -50,6 +50,7 @@ from .corrections import (
     )
 
 from . import data_tools
+from . import pdf_export
 
 
 def build_corrected_phrase(text, corrections):
@@ -498,30 +499,47 @@ def create_app(config=None, collection=None, correction_collection=None):
             }), 403
 
         documents = list(get_collection().find({}))
-        groups, _summary = data_tools.address_report(documents)
+        groups, summary = data_tools.address_report(documents)
 
-        def generate():
-            buffer = io.StringIO()
-            writer = csv.writer(buffer)
-            buffer.write("\ufeff")
-            writer.writerow([c["label"] for c in columns])
-            yield buffer.getvalue()
-            buffer.seek(0); buffer.truncate(0)
-            for area in sorted(groups):
-                for r in groups[area]:
-                    writer.writerow([
-                        _export_row_value(area, r, c["key"]) for c in columns
-                    ])
-                    yield buffer.getvalue()
-                    buffer.seek(0); buffer.truncate(0)
+        # "area" becomes the per-section heading, so it is dropped from the
+        # table body columns.
+        body_columns = [c for c in columns if c["key"] != "area"]
+        if not body_columns:
+            body_columns = columns
+
+        family_counts = {s["area"]: s["families"] for s in summary}
+        areas = []
+        for area in sorted(groups):
+            rows = [
+                [_export_row_value(area, r, c["key"]) for c in body_columns]
+                for r in groups[area]
+            ]
+            areas.append((area, family_counts.get(area, len(rows)), rows))
+
+        generated = now_utc().strftime("%Y-%m-%d %H:%M UTC")
+        watermark_path = os.path.join(
+            os.path.dirname(__file__), "static", "samajwatermark1000.png"
+        )
+        pdf_bytes = pdf_export.render_address_pdf(
+            headers=[c["label"] for c in body_columns],
+            keys=[c["key"] for c in body_columns],
+            areas=areas,
+            title="SAMAJ — Address Areas Directory",
+            subtitle=(
+                f"{sum(s['families'] for s in summary)} families across "
+                f"{len(summary)} areas · generated {generated}"
+            ),
+            watermark_path=watermark_path,
+            watermark_text="SAMAJ",
+        )
 
         timestamp = now_utc().strftime("%Y%m%d-%H%M%S")
         return Response(
-            generate(),
-            mimetype="text/csv",
+            pdf_bytes,
+            mimetype="application/pdf",
             headers={
                 "Content-Disposition":
-                    f'attachment; filename="samaj-address-areas-{timestamp}.csv"',
+                    f'attachment; filename="samaj-address-areas-{timestamp}.pdf"',
             },
         )
 

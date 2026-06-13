@@ -128,8 +128,10 @@
           <div class="dt-bar">
             <span class="dt-muted" id="addressStatus">Loading…</span>
             {% if can_export_areas %}
-            <a class="button-secondary" href="/api/data-tools/address-areas/export">
-              Export grouped CSV</a>
+            <button type="button" class="button-secondary" id="exportPdfBtn">
+              <span class="dt-spinner" id="exportSpinner" aria-hidden="true"></span>
+              <span id="exportPdfLabel">Export grouped PDF</span>
+            </button>
             {% endif %}
           </div>
 

@@ -1649,3 +1649,35 @@ input[readonly][lang="mr"] {
     font-size: 20px !important;
   }
 }
+
+/* -----------------------------------------
+   EXPORT BUTTON — CIRCULAR PROGRESS
+----------------------------------------- */
+
+#exportPdfBtn {
+  gap: 8px;
+}
+
+#exportPdfBtn[disabled] {
+  cursor: progress;
+  opacity: 0.85;
+}
+
+.dt-spinner {
+  display: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(16, 110, 78, 0.25);
+  border-top-color: #106e4e;
+  animation: dt-spin 0.7s linear infinite;
+  flex: 0 0 auto;
+}
+
+#exportPdfBtn.is-loading .dt-spinner {
+  display: inline-block;
+}
+
+@keyframes dt-spin {
+  to { transform: rotate(360deg); }
+}
