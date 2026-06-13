@@ -765,6 +765,8 @@ def create_app(config=None, collection=None, correction_collection=None):
         return jsonify({
             "results": data_tools.inspect_documents(docs, overrides),
         })
+
+    @app.get("/api/role-config")
     def get_role_config():
 
         if not role_can("manage_role_config"):
