@@ -614,7 +614,11 @@ def create_app(config=None, collection=None, correction_collection=None):
                 },
             }) + "\n"
 
-        return Response(generate(), mimetype="application/x-ndjson")
+        return Response(
+            generate(),
+            mimetype="application/x-ndjson",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.post("/api/data-tools/translit/resolve")
     def data_tools_translit_resolve():
@@ -712,8 +716,55 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         return Response(generate(), mimetype="application/x-ndjson")
 
+    @app.get("/api/data-tools/translit/auto-suggest")
+    def data_tools_translit_auto_suggest():
 
-    @app.get("/api/role-config")
+        # Preview only: returns the best spelling for each flagged word WITHOUT
+        # saving or modifying any record. The UI pre-selects these in the cards
+        # so the admin can review, adjust, then Save picks + Apply.
+        if not role_can("manage_transliteration"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        overrides = load_corrections(get_correction_collection())
+        documents = list(get_collection().find(
+            {},
+            {
+                "firstName": 1, "middleName": 1, "lastName": 1,
+                "familyMembers.name": 1, "familyMembers.spouseName": 1,
+            },
+        ))
+        stats, _unaligned = data_tools.collect_stats(documents)
+        suggestions = data_tools.compute_auto_canonical(stats, overrides)
+        return jsonify({
+            "suggestions": suggestions,
+            "words": len(suggestions),
+        })
+
+    @app.get("/api/data-tools/translit/inspect")
+    def data_tools_translit_inspect():
+
+        if not role_can("manage_transliteration"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        q = data_tools.clean_text(request.args.get("q")).lower()
+        if not q:
+            return jsonify({"results": []})
+
+        rx = {"$regex": re.escape(q), "$options": "i"}
+        query = {"$or": [
+            {"firstName.en": rx},
+            {"middleName.en": rx},
+            {"lastName.en": rx},
+            {"familyMembers.name.en": rx},
+        ]}
+        overrides = load_corrections(get_correction_collection())
+        docs = list(get_collection().find(
+            query,
+            {"firstName": 1, "middleName": 1, "lastName": 1, "familyMembers": 1},
+        ).limit(25))
+        return jsonify({
+            "results": data_tools.inspect_documents(docs, overrides),
+        })
     def get_role_config():
 
         if not role_can("manage_role_config"):

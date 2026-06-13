@@ -85,6 +85,7 @@
               <span class="dt-muted" id="translitStatus" style="margin-left:10px;">Not started.</span>
             </span>
             <span>
+              <button class="button-secondary" id="suggestAll" type="button">Suggest best for all</button>
               <button class="button-primary" id="saveTranslit" type="button">Save picks</button>
               <button class="button-secondary" id="applyTranslit" type="button">
                 Apply corrections to existing records</button>
@@ -108,11 +109,25 @@
              transliteration. Pick the correct spelling or type your own, then Save picks.</p>
           <div id="translitList"></div>
 
+          <details style="margin-top:14px;">
+            <summary><strong>Inspect a record</strong> — see exactly how each field is classified</summary>
+            <div style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap;">
+              <input type="text" id="inspectQ" placeholder="English name e.g. Ishwar"
+                     style="font-size:16px;padding:6px 10px;border:1px solid #cdd6dd;border-radius:8px;">
+              <button class="button-secondary" id="inspectBtn" type="button">Inspect</button>
+            </div>
+            <div id="inspectResult"></div>
+          </details>
+
           <details id="unalignedBox" style="margin-top:18px;" open>
             <summary><strong>Records to review</strong> — Marathi/English word counts
               don't match (<span id="unalignedCount">0</span>). Edit Marathi directly here.</summary>
             <p class="dt-muted">The suggestion is from Google transliteration. Accept it,
                edit it, or type your own, then Save row. Saving also updates the record.</p>
+            <div style="margin:8px 0;">
+              <button class="button-primary" id="saveAllRows" type="button">Save all rows</button>
+              <span class="dt-muted" id="saveAllRowsStatus" style="margin-left:10px;"></span>
+            </div>
             <div class="dt-table-wrap">
               <table class="dt-table" id="unalignedTable" style="margin-top:10px;">
                 <thead><tr><th>Member / field</th><th>English</th><th>Marathi (editable)</th><th></th></tr></thead>

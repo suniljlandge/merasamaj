@@ -257,7 +257,8 @@ def collect_stats(documents):
 
 def words_needing_lookup(stats, unaligned, overrides):
     """Distinct English word keys whose Google suggestion is required and not
-    yet cached / overridden."""
+    yet cached. (Override words are included too, since their saved correction
+    must be validated against Google.)"""
     words = set(stats.keys())
     for item in unaligned:
         for w in item["en"].split():
@@ -266,7 +267,7 @@ def words_needing_lookup(stats, unaligned, overrides):
                 words.add(ek)
     return sorted(
         w for w in words
-        if w and w not in overrides and w not in _SUGGEST_CACHE
+        if w and w not in _SUGGEST_CACHE
     )
 
 
@@ -293,27 +294,78 @@ def phrase_suggestion(en, overrides):
     return " ".join(out)
 
 
+def compute_auto_canonical(stats, overrides):
+    """Decide the single correct Marathi spelling for each name word:
+
+      1. a saved correction that is itself a valid transliteration is kept, else
+      2. the most common stored spelling that is a valid transliteration, else
+      3. Google's top suggestion.
+
+    A wrong saved correction (e.g. ishwar -> ईश्व) is overridden by the best
+    valid spelling. Returns {word: chosen} only where something needs changing.
+    """
+    canonical = {}
+    for ek, counter in stats.items():
+        suggs = suggest_cached(ek)
+        target = overrides.get(ek)
+        if target is not None and (not suggs or target in suggs):
+            chosen = target
+        else:
+            valid = [sp for sp, _ in counter.most_common() if sp in suggs]
+            chosen = valid[0] if valid else (suggs[0] if suggs else None)
+        if not chosen:
+            continue
+        if any(sp != chosen for sp in counter) or (target is not None and target != chosen):
+            canonical[ek] = chosen
+    return canonical
+
+
 def finalize_suspects(stats, overrides):
     suspects = []
     ok_count = 0
     for ek, counter in stats.items():
-        if ek in overrides:
-            ok_count += 1
-            continue
         suggs = suggest_cached(ek)
-        top, _ = counter.most_common(1)[0]
-        if suggs and top in suggs:
+        target = overrides.get(ek)
+        # A saved correction that isn't a valid transliteration is itself wrong.
+        override_invalid = (
+            target is not None and bool(suggs) and target not in suggs
+        )
+
+        if target is not None and not override_invalid:
+            # Good saved correction: OK only when every record already matches.
+            if all(sp == target for sp in counter):
+                ok_count += 1
+                continue
+            options = _build_options(ek, counter)
+            if not any(o["spelling"] == target for o in options):
+                options.insert(0, {"spelling": target, "source": "saved"})
+            suspects.append({
+                "word": ek, "options": options,
+                "count": sum(counter.values()), "variants": len(counter),
+                "reason": "needs_apply", "target": target,
+            })
+            continue
+
+        # No correction yet, OR the saved correction is wrong.
+        has_invalid = (not suggs) or any(m not in suggs for m in counter)
+        inconsistent = len(counter) > 1
+        if not (has_invalid or inconsistent or override_invalid):
             ok_count += 1
             continue
-        if (any(m not in suggs for m in counter)) or not suggs:
-            suspects.append({
-                "word": ek,
-                "options": _build_options(ek, counter),
-                "count": sum(counter.values()),
-            })
-        else:
-            ok_count += 1
-    suspects.sort(key=lambda s: (-s["count"], s["word"]))
+        valid_data = [sp for sp, _ in counter.most_common() if sp in suggs]
+        best = valid_data[0] if valid_data else (suggs[0] if suggs else "")
+        options = _build_options(ek, counter)
+        if best and not any(o["spelling"] == best for o in options):
+            options.insert(0, {"spelling": best, "source": "suggested"})
+        reason = ("bad_override" if override_invalid
+                  else ("invalid" if has_invalid else "inconsistent"))
+        suspects.append({
+            "word": ek, "options": options,
+            "count": sum(counter.values()), "variants": len(counter),
+            "reason": reason, "target": best,
+        })
+
+    suspects.sort(key=lambda s: (-s["variants"], -s["count"], s["word"]))
     return suspects, ok_count
 
 
@@ -401,3 +453,66 @@ def apply_overrides_to_doc(doc, overrides):
         changes["familyMembers"] = new_members
 
     return changes
+
+
+# ---------------------------------------------------------------------------
+# Record inspector — shows exactly how each name field is classified, so you
+# can see WHY a given record is or isn't flagged.
+# ---------------------------------------------------------------------------
+def inspect_field(field, en, mr, overrides):
+    en = clean_text(en)
+    mr = clean_text(mr)
+    en_words = en.split()
+    mr_words = mr.split()
+    aligned = bool(en_words) and len(en_words) == len(mr_words)
+    words = []
+    if aligned:
+        for e, m in zip(en_words, mr_words):
+            ek = _en_word_key(e)
+            base, _ = _strip_mr_ji(m)
+            suggs = suggest_cached(ek)
+            words.append({
+                "en": e,
+                "ek": ek,
+                "mr": m,
+                "override": overrides.get(ek, ""),
+                "valid": base in suggs,
+                "suggestions": suggs[:4],
+            })
+    return {
+        "field": field,
+        "en": en,
+        "mr": mr,
+        "enWords": len(en_words),
+        "mrWords": len(mr_words),
+        "aligned": aligned,
+        "words": words,
+    }
+
+
+def inspect_documents(documents, overrides):
+    results = []
+    for doc in documents:
+        fields = []
+        for field in BILINGUAL_NAME_FIELDS:
+            val = doc.get(field) or {}
+            if isinstance(val, dict):
+                en = clean_text(val.get("en"))
+                mr = clean_text(val.get("mr"))
+                if en or mr:
+                    fields.append(inspect_field(field, en, mr, overrides))
+        for index, member in enumerate(doc.get("familyMembers") or []):
+            for name_field in ("name", "spouseName"):
+                val = member.get(name_field) or {}
+                if isinstance(val, dict):
+                    en = clean_text(val.get("en"))
+                    mr = clean_text(val.get("mr"))
+                    if en or mr:
+                        fields.append(inspect_field(
+                            f"familyMembers.{index}.{name_field}", en, mr, overrides))
+        results.append({
+            "id": str(doc.get("_id", "")),
+            "label": _person_label(doc),
+            "fields": fields,
+        })
+    return results

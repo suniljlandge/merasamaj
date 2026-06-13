@@ -38,6 +38,7 @@ if (FLAGS.canTranslit) {
   const scanBar = document.getElementById("scanProgressBar");
   const scanText = document.getElementById("scanProgressText");
   let scanning = false;
+  let unalignedRows = [];
 
   async function runScan() {
     if (scanning) return;
@@ -50,8 +51,11 @@ if (FLAGS.canTranslit) {
     scanWrap.style.display = "block";
     scanBar.style.width = "0%";
     scanText.textContent = "Reading records…";
+    let records = 0;
     try {
-      const res = await fetch("/api/data-tools/translit/scan");
+      const res = await fetch("/api/data-tools/translit/scan?t=" + Date.now(), {
+        cache: "no-store",
+      });
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
@@ -64,18 +68,19 @@ if (FLAGS.canTranslit) {
         for (const line of lines) {
           if (!line.trim()) continue;
           const msg = JSON.parse(line);
+          if (msg.records != null) records = msg.records;
           if (msg.phase === "fetch") {
             const pct = msg.total ? Math.round((msg.processed / msg.total) * 100) : 100;
             scanBar.style.width = pct + "%";
             scanText.textContent = msg.total
-              ? `Fetching transliterations ${msg.processed}/${msg.total}…`
-              : "Analysing…";
+              ? `Scanning ${records} records · fetching transliterations ${msg.processed}/${msg.total}…`
+              : `Scanning ${records} records · analysing…`;
           }
           if (msg.done) {
             scanBar.style.width = "100%";
-            scanText.textContent = "Done.";
+            scanText.textContent = `Scanned ${records} records.`;
             renderResult(msg.result);
-            setTimeout(() => { scanWrap.style.display = "none"; }, 800);
+            setTimeout(() => { scanWrap.style.display = "none"; }, 1200);
           }
         }
       }
@@ -85,7 +90,7 @@ if (FLAGS.canTranslit) {
     } finally {
       scanning = false;
       startBtn.disabled = false;
-      startBtn.textContent = "Re-scan";
+      startBtn.textContent = "Re-scan entire database";
     }
   }
 
@@ -104,12 +109,21 @@ if (FLAGS.canTranslit) {
           (o) =>
             `<label class="dt-opt"><input type="radio" name="w_${escapeHtml(s.word)}" value="${escapeHtml(
               o.spelling
-            )}">${escapeHtml(o.spelling)}<span class="dt-src">${o.source}</span></label>`
+            )}" ${o.spelling === s.target ? "checked" : ""}>${escapeHtml(o.spelling)}<span class="dt-src">${o.source}</span></label>`
         )
         .join("");
+      const reasonLabel = s.reason === "needs_apply"
+        ? '<span class="dt-src" style="color:#fa6e39">saved · not applied yet → run Apply</span>'
+        : (s.reason === "bad_override"
+            ? '<span class="dt-src" style="color:#c00">saved spelling is wrong → pick correct, Save, Apply</span>'
+            : (s.reason === "inconsistent"
+                ? '<span class="dt-src">inconsistent spellings</span>'
+                : '<span class="dt-src">invalid transliteration</span>'));
       card.innerHTML = `
         <div><span class="dt-tag">word</span><span class="dt-key">${escapeHtml(s.word)}</span>
-          <span class="dt-muted"> · seen ${s.count}x</span></div>
+          <span class="dt-muted"> · seen ${s.count}x${
+            s.variants > 1 ? " · " + s.variants + " different spellings" : ""
+          }</span> ${reasonLabel}</div>
         <div class="dt-opts">${opts || '<span class="dt-muted">no suggestions</span>'}</div>
         <div class="dt-custom">or type: <input type="text" data-custom="${escapeHtml(
           s.word
@@ -123,6 +137,7 @@ if (FLAGS.canTranslit) {
     document.getElementById("unalignedCount").textContent = items.length;
     const tbody = document.querySelector("#unalignedTable tbody");
     tbody.innerHTML = "";
+    unalignedRows = [];
     items.forEach((u) => {
       const tr = document.createElement("tr");
       const initial = u.suggestion || u.mr || "";
@@ -137,22 +152,26 @@ if (FLAGS.canTranslit) {
             <span class="dt-saved"></span></td>`;
       const input = tr.querySelector("input");
       const chip = tr.querySelector(".dt-chip");
+      const savedEl = tr.querySelector(".dt-saved");
       if (chip) chip.addEventListener("click", () => { input.value = chip.textContent; });
-      tr.querySelector("button").addEventListener("click", async () => {
-        const mr = input.value.trim();
-        if (!mr) { alert("Enter the Marathi text first."); return; }
-        const saved = tr.querySelector(".dt-saved");
-        saved.textContent = "Saving…";
-        const res = await fetch("/api/data-tools/translit/fix-record", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: u.id, field: u.field, en: u.en, mr }),
-        });
-        const data = await res.json();
-        saved.textContent = data.ok ? "Saved ✓" : ("Error: " + (data.error || ""));
-      });
+      tr.querySelector("button").addEventListener("click", () => saveOneRow(u, input, savedEl));
+      unalignedRows.push({ item: u, input, savedEl });
       tbody.appendChild(tr);
     });
+  }
+
+  async function saveOneRow(u, input, savedEl) {
+    const mr = input.value.trim();
+    if (!mr) { alert("Enter the Marathi text first."); return false; }
+    savedEl.textContent = "Saving…";
+    const res = await fetch("/api/data-tools/translit/fix-record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: u.id, field: u.field, en: u.en, mr }),
+    });
+    const data = await res.json();
+    savedEl.textContent = data.ok ? "Saved ✓" : ("Error: " + (data.error || ""));
+    return !!data.ok;
   }
 
   function collectPicks() {
@@ -168,6 +187,107 @@ if (FLAGS.canTranslit) {
     return picks;
   }
 
+  document.getElementById("inspectBtn").addEventListener("click", async () => {
+    const q = document.getElementById("inspectQ").value.trim();
+    const box = document.getElementById("inspectResult");
+    if (!q) { box.textContent = "Enter a name to inspect."; return; }
+    box.textContent = "Looking up…";
+    try {
+      const res = await fetch("/api/data-tools/translit/inspect?q=" + encodeURIComponent(q) + "&t=" + Date.now(), { cache: "no-store" });
+      const data = await res.json();
+      const results = data.results || [];
+      if (!results.length) { box.textContent = "No matching records."; return; }
+      box.innerHTML = results.map((r) => {
+        const rows = r.fields.map((f) => {
+          const align = f.aligned
+            ? "aligned"
+            : `<b style="color:#c00">NOT aligned (EN ${f.enWords} words, MR ${f.mrWords})</b>`;
+          const words = f.aligned
+            ? f.words.map((w) =>
+                `<div style="margin-left:14px">${escapeHtml(w.en)} → <b>${escapeHtml(w.mr)}</b> · ${
+                  w.valid ? "valid" : '<span style="color:#c00">INVALID</span>'
+                }${w.override ? " · override=" + escapeHtml(w.override) : ""} · google: ${
+                  (w.suggestions || []).map(escapeHtml).join(", ")
+                }</div>`
+              ).join("")
+            : "";
+          return `<div style="margin:6px 0"><code>${escapeHtml(f.field)}</code>: ${escapeHtml(f.en)} = <b>${escapeHtml(f.mr)}</b> — ${align}${words}</div>`;
+        }).join("");
+        return `<div class="dt-card"><div class="dt-key">${escapeHtml(r.label)}</div>${rows}</div>`;
+      }).join("");
+    } catch (e) {
+      box.textContent = "Inspect failed: " + e;
+    }
+  });
+
+  loadInspectorEnter();
+  function loadInspectorEnter() {
+    const inp = document.getElementById("inspectQ");
+    if (inp) inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") document.getElementById("inspectBtn").click();
+    });
+  }
+
+  document.getElementById("saveAllRows").addEventListener("click", async () => {
+    if (!unalignedRows.length) { alert("Nothing to save."); return; }
+    if (!confirm(`Save Marathi for all ${unalignedRows.length} record(s) shown here? This updates the records directly.`)) return;
+    const btn = document.getElementById("saveAllRows");
+    const status = document.getElementById("saveAllRowsStatus");
+    btn.disabled = true;
+    let ok = 0, fail = 0;
+    for (let i = 0; i < unalignedRows.length; i++) {
+      const { item, input, savedEl } = unalignedRows[i];
+      status.textContent = `Saving ${i + 1}/${unalignedRows.length}…`;
+      try {
+        const done = await saveOneRow(item, input, savedEl);
+        done ? ok++ : fail++;
+      } catch (e) {
+        fail++;
+      }
+    }
+    status.textContent = `Done — ${ok} saved${fail ? ", " + fail + " failed" : ""}.`;
+    btn.disabled = false;
+  });
+
+  document.getElementById("suggestAll").addEventListener("click", async () => {
+    const btn = document.getElementById("suggestAll");
+    btn.disabled = true;
+    const prevStatus = translitStatus.textContent;
+    translitStatus.textContent = "Computing best spellings…";
+    try {
+      const res = await fetch("/api/data-tools/translit/auto-suggest?t=" + Date.now(), {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      const map = data.suggestions || {};
+      let filled = 0;
+      Object.keys(map).forEach((word) => {
+        const chosen = map[word];
+        const radios = document.querySelectorAll(
+          `#translitList input[type=radio][name="w_${word}"]`
+        );
+        let matched = false;
+        radios.forEach((r) => {
+          if (r.value === chosen) { r.checked = true; matched = true; }
+        });
+        if (!matched) {
+          const custom = document.querySelector(
+            `#translitList input[data-custom="${word}"]`
+          );
+          if (custom) { custom.value = chosen; matched = true; }
+        }
+        if (matched) filled += 1;
+      });
+      translitStatus.textContent =
+        `Pre-filled ${filled} suggestion(s). Review the picks, then "Save picks" and "Apply corrections".`;
+    } catch (e) {
+      translitStatus.textContent = prevStatus;
+      alert("Could not compute suggestions: " + e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   document.getElementById("saveTranslit").addEventListener("click", async () => {
     const picks = collectPicks();
     if (!Object.keys(picks).length) { alert("Pick or type at least one spelling first."); return; }
@@ -178,15 +298,16 @@ if (FLAGS.canTranslit) {
     });
     const data = await res.json();
     if (data.ok) {
-      alert(`Saved ${data.saved} correction(s). They apply to new registrations automatically.`);
       runScan();
+      if (confirm(`Saved ${data.saved} correction(s). They auto-apply to NEW registrations.\n\nApply them to EXISTING records now?`)) {
+        runApply();
+      }
     } else {
       alert("Save failed: " + (data.error || "unknown"));
     }
   });
 
-  document.getElementById("applyTranslit").addEventListener("click", async () => {
-    if (!confirm("Re-generate Marathi for existing records using saved corrections? Only words with a saved correction are changed.")) return;
+  async function runApply() {
     const btn = document.getElementById("applyTranslit");
     const wrap = document.getElementById("applyProgressWrap");
     const bar = document.getElementById("applyProgressBar");
@@ -225,6 +346,11 @@ if (FLAGS.canTranslit) {
     } finally {
       btn.disabled = false; btn.textContent = "Apply corrections to existing records";
     }
+  }
+
+  document.getElementById("applyTranslit").addEventListener("click", () => {
+    if (!confirm("Re-generate Marathi for existing records using saved corrections? Only words with a saved correction are changed.")) return;
+    runApply();
   });
 }
 
