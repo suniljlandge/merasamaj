@@ -51,6 +51,23 @@ _BOLD_CANDIDATES = [
     r"C:\Windows\Fonts\Nirmala.ttc",
 ]
 
+# Latin-capable fonts. The Noto Devanagari face has no Latin letters, so Latin
+# text is drawn with a separate font (DejaVu / Noto Sans / Arial).
+_LATIN_CANDIDATES = [
+    os.getenv("SAMAJ_PDF_LATIN_FONT"),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    r"C:\Windows\Fonts\arial.ttf",
+    r"C:\Windows\Fonts\segoeui.ttf",
+]
+_LATIN_BOLD_CANDIDATES = [
+    os.getenv("SAMAJ_PDF_LATIN_FONT_BOLD"),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+    r"C:\Windows\Fonts\arialbd.ttf",
+    r"C:\Windows\Fonts\segoeuib.ttf",
+]
+
 _LAYOUT = (
     ImageFont.Layout.RAQM if features.check("raqm") else ImageFont.Layout.BASIC
 )
@@ -67,6 +84,8 @@ def _first_existing(paths):
 
 _REGULAR_PATH = _first_existing(_FONT_CANDIDATES)
 _BOLD_PATH = _first_existing(_BOLD_CANDIDATES) or _REGULAR_PATH
+_LATIN_PATH = _first_existing(_LATIN_CANDIDATES)
+_LATIN_BOLD_PATH = _first_existing(_LATIN_BOLD_CANDIDATES) or _LATIN_PATH
 
 
 def raqm_available():
@@ -89,6 +108,70 @@ def _font(size, bold=False):
         font = ImageFont.load_default()
     _font_cache[key] = font
     return font
+
+
+_latin_cache = {}
+
+
+def _latin_font(size, bold=False):
+    key = (size, bold)
+    cached = _latin_cache.get(key)
+    if cached is not None:
+        return cached
+    path = _LATIN_BOLD_PATH if bold else _LATIN_PATH
+    if path:
+        font = ImageFont.truetype(path, size, layout_engine=_LAYOUT)
+    else:  # no Latin font found -> fall back to the Devanagari face
+        font = _font(size, bold)
+    _latin_cache[key] = font
+    return font
+
+
+# --- mixed-script text (Latin + Devanagari in one string) -------------------
+def _is_deva(ch):
+    return "\u0900" <= ch <= "\u097F" or "\uA8E0" <= ch <= "\uA8FF"
+
+
+def _segments(text):
+    """Split text into (run, is_devanagari) segments. Neutral characters
+    (digits, spaces, punctuation) stick to the current run to avoid splits."""
+    segs = []
+    cur = None
+    buf = ""
+    for ch in text:
+        if _is_deva(ch):
+            t = True
+        elif ("a" <= ch <= "z") or ("A" <= ch <= "Z"):
+            t = False
+        else:
+            t = cur if cur is not None else False
+        if cur is None:
+            cur, buf = t, ch
+        elif t == cur:
+            buf += ch
+        else:
+            segs.append((buf, cur))
+            cur, buf = t, ch
+    if buf:
+        segs.append((buf, cur))
+    return segs
+
+
+def _mixed_len(draw, text, size, bold):
+    latin_f, deva_f = _latin_font(size, bold), _font(size, bold)
+    return sum(
+        draw.textlength(b, font=(deva_f if d else latin_f))
+        for b, d in _segments(text)
+    )
+
+
+def _mixed_draw(draw, x, y, text, size, bold, fill):
+    latin_f, deva_f = _latin_font(size, bold), _font(size, bold)
+    for b, d in _segments(text):
+        f = deva_f if d else latin_f
+        draw.text((x, y), b, font=f, fill=fill)
+        x += draw.textlength(b, font=f)
+    return x
 
 
 # --- font sizes / spacing ---------------------------------------------------
@@ -125,7 +208,7 @@ def _line_h(size):
     return int(size * LINE_GAP)
 
 
-def _wrap(draw, text, font, max_w):
+def _wrap(draw, text, size, bold, max_w):
     """Greedy word-wrap; falls back to hard char-breaks for long tokens."""
     text = "" if text is None else str(text)
     if not text.strip():
@@ -136,10 +219,10 @@ def _wrap(draw, text, font, max_w):
         cur = ""
         for word in words:
             trial = word if not cur else cur + " " + word
-            if draw.textlength(trial, font=font) <= max_w or not cur:
+            if _mixed_len(draw, trial, size, bold) <= max_w or not cur:
                 # token itself may still be wider than the cell
-                if draw.textlength(trial, font=font) > max_w and not cur:
-                    lines.extend(_hard_break(draw, word, font, max_w))
+                if _mixed_len(draw, trial, size, bold) > max_w and not cur:
+                    lines.extend(_hard_break(draw, word, size, bold, max_w))
                     cur = ""
                 else:
                     cur = trial
@@ -150,10 +233,10 @@ def _wrap(draw, text, font, max_w):
     return lines or [""]
 
 
-def _hard_break(draw, token, font, max_w):
+def _hard_break(draw, token, size, bold, max_w):
     out, cur = [], ""
     for ch in token:
-        if draw.textlength(cur + ch, font=font) <= max_w or not cur:
+        if _mixed_len(draw, cur + ch, size, bold) <= max_w or not cur:
             cur += ch
         else:
             out.append(cur)
@@ -237,11 +320,10 @@ def _title_height(subtitle):
     return h + 12
 
 
-def _plan_pages(headers, areas, widths, body_fonts, title, subtitle):
+def _plan_pages(headers, areas, widths, body_specs, title, subtitle):
     measure = ImageDraw.Draw(Image.new("RGB", (8, 8)))
-    header_font = _font(HEADER_SIZE, bold=True)
-    header_fonts = [header_font] * len(headers)
-    header_h, header_cells = _measure_row(measure, headers, header_fonts, widths)
+    header_specs = [(HEADER_SIZE, True)] * len(headers)
+    header_h, header_cells = _measure_row(measure, headers, header_specs, widths)
     area_h = _line_h(AREA_SIZE) + 6
 
     pages, cur = [], []
@@ -257,7 +339,7 @@ def _plan_pages(headers, areas, widths, body_fonts, title, subtitle):
     y += _title_height(subtitle)
 
     for area_name, families, rows in areas:
-        first_h = (_measure_row(measure, rows[0], body_fonts, widths)[0]
+        first_h = (_measure_row(measure, rows[0], body_specs, widths)[0]
                    if rows else _line_h(BODY_SIZE))
         if (CONTENT_BOTTOM - y) < area_h + header_h + first_h:
             new_page()
@@ -268,7 +350,7 @@ def _plan_pages(headers, areas, widths, body_fonts, title, subtitle):
 
         alt = False
         for row in rows:
-            h, cells = _measure_row(measure, row, body_fonts, widths)
+            h, cells = _measure_row(measure, row, body_specs, widths)
             if (CONTENT_BOTTOM - y) < h:
                 new_page()
                 cur.append(("area", area_name, families, True))
@@ -282,30 +364,32 @@ def _plan_pages(headers, areas, widths, body_fonts, title, subtitle):
         y += 18  # gap after an area block
 
     pages.append(cur)
-    return pages, header_fonts
+    return pages, header_specs
 
 
-def _measure_row(draw, values, fonts, widths):
-    """Return (row_height, wrapped_cells)."""
+def _measure_row(draw, values, specs, widths):
+    """Return (row_height, wrapped_cells). ``specs`` is a list of (size, bold)
+    per column."""
     cells = []
     max_lines = 1
-    for val, font, w in zip(values, fonts, widths):
-        lines = _wrap(draw, val, font, w - 2 * CELL_PAD_X)
+    max_size = BODY_SIZE
+    for val, (size, bold), w in zip(values, specs, widths):
+        lines = _wrap(draw, val, size, bold, w - 2 * CELL_PAD_X)
         cells.append(lines)
         max_lines = max(max_lines, len(lines))
-    line_h = _line_h(BODY_SIZE)
-    height = max_lines * line_h + 2 * CELL_PAD_Y
+        max_size = max(max_size, size)
+    height = max_lines * _line_h(max_size) + 2 * CELL_PAD_Y
     return height, cells
 
 
-def _paint_cells(draw, y, cells, fonts, widths, height, ink):
+def _paint_cells(draw, y, cells, specs, widths, height, ink):
     x = MARGIN
-    line_h = _line_h(BODY_SIZE)
-    for lines, font, w in zip(cells, fonts, widths):
+    for lines, (size, bold), w in zip(cells, specs, widths):
+        lh = _line_h(size)
         ty = y + CELL_PAD_Y
         for ln in lines:
-            draw.text((x + CELL_PAD_X, ty), ln, font=font, fill=ink)
-            ty += line_h
+            _mixed_draw(draw, x + CELL_PAD_X, ty, ln, size, bold, ink)
+            ty += lh
         x += w
     gx = MARGIN
     for w in widths:
@@ -314,52 +398,50 @@ def _paint_cells(draw, y, cells, fonts, widths, height, ink):
     draw.line([gx, y, gx, y + height], fill=GRID, width=1)
 
 
-def _render_op(draw, y, op, widths, body_fonts, header_fonts):
+def _render_op(draw, y, op, widths, body_specs, header_specs):
     kind = op[0]
     if kind == "title":
         _, title, subtitle = op
-        draw.text((MARGIN, y), title, font=_font(TITLE_SIZE, bold=True), fill=INK)
+        _mixed_draw(draw, MARGIN, y, title, TITLE_SIZE, True, INK)
         y += _line_h(TITLE_SIZE)
         if subtitle:
-            draw.text((MARGIN, y), subtitle, font=_font(SUBTITLE_SIZE), fill=MUTED)
+            _mixed_draw(draw, MARGIN, y, subtitle, SUBTITLE_SIZE, False, MUTED)
             y += _line_h(SUBTITLE_SIZE)
         return y + 12
     if kind == "area":
         _, area, families, continued = op
         label = (area or "Unclassified") + ("  (continued)" if continued else "")
-        draw.text((MARGIN, y), label, font=_font(AREA_SIZE, bold=True),
-                  fill=AREA_INK)
-        f_n = _font(SUBTITLE_SIZE)
+        _mixed_draw(draw, MARGIN, y, label, AREA_SIZE, True, AREA_INK)
         count = f"{families} families"
-        draw.text((PAGE_W - MARGIN - draw.textlength(count, font=f_n), y + 6),
-                  count, font=f_n, fill=MUTED)
+        cw = _mixed_len(draw, count, SUBTITLE_SIZE, False)
+        _mixed_draw(draw, PAGE_W - MARGIN - cw, y + 6, count,
+                    SUBTITLE_SIZE, False, MUTED)
         return y + _line_h(AREA_SIZE) + 6
     if kind == "header":
         _, cells, h = op
         draw.rectangle([MARGIN, y, PAGE_W - MARGIN, y + h], fill=HEADER_BG)
-        _paint_cells(draw, y, cells, header_fonts, widths, h, HEADER_INK)
+        _paint_cells(draw, y, cells, header_specs, widths, h, HEADER_INK)
         return y + h
     # data row
     _, cells, h, alt = op
     if alt:
         draw.rectangle([MARGIN, y, PAGE_W - MARGIN, y + h], fill=ROW_ALT)
-    _paint_cells(draw, y, cells, body_fonts, widths, h, INK)
+    _paint_cells(draw, y, cells, body_specs, widths, h, INK)
     draw.line([MARGIN, y + h, PAGE_W - MARGIN, y + h], fill=GRID, width=1)
     return y + h
 
 
 def _draw_footer(draw, page_no, total, label):
-    font = _font(SUBTITLE_SIZE)
     fy = PAGE_H - MARGIN + 14
     draw.line(
         [MARGIN, PAGE_H - MARGIN + 4, PAGE_W - MARGIN, PAGE_H - MARGIN + 4],
         fill=GRID, width=1,
     )
     if label:
-        draw.text((MARGIN, fy), label, font=font, fill=MUTED)
+        _mixed_draw(draw, MARGIN, fy, label, SUBTITLE_SIZE, False, MUTED)
     text = f"Page {page_no} of {total}"
-    draw.text((PAGE_W - MARGIN - draw.textlength(text, font=font), fy),
-              text, font=font, fill=MUTED)
+    tw = _mixed_len(draw, text, SUBTITLE_SIZE, False)
+    _mixed_draw(draw, PAGE_W - MARGIN - tw, fy, text, SUBTITLE_SIZE, False, MUTED)
 
 
 def render_address_pdf(headers, keys, areas, title, subtitle,
@@ -376,10 +458,10 @@ def render_address_pdf(headers, keys, areas, title, subtitle,
     footer. Peak memory stays around a single page bitmap.
     """
     widths = _column_widths(keys, PAGE_W - 2 * MARGIN)
-    body_fonts = [_font(BODY_SIZE)] * len(headers)
+    body_specs = [(BODY_SIZE, False)] * len(headers)
 
-    pages, header_fonts = _plan_pages(
-        headers, areas, widths, body_fonts, title, subtitle)
+    pages, header_specs = _plan_pages(
+        headers, areas, widths, body_specs, title, subtitle)
     total = len(pages)
 
     # Watermarked blank page built ONCE; each page is a fast in-memory copy.
@@ -396,7 +478,7 @@ def render_address_pdf(headers, keys, areas, title, subtitle,
             draw = ImageDraw.Draw(img)
             y = MARGIN
             for op in page_ops:
-                y = _render_op(draw, y, op, widths, body_fonts, header_fonts)
+                y = _render_op(draw, y, op, widths, body_specs, header_specs)
             _draw_footer(draw, idx, total, watermark_text)
             path = os.path.join(tmpdir, f"page-{idx:04d}.png")
             img.save(path, format="PNG", compress_level=1)

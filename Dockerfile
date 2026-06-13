@@ -2,11 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Noto Sans Devanagari font + FriBiDi so the rasterized PDF export renders
-# Marathi correctly. Pillow's Linux wheel bundles raqm/HarfBuzz, but raqm only
-# activates when FriBiDi is present on the system.
+# Fonts + FriBiDi for the rasterized PDF export:
+#  - fonts-noto-core    : Noto Sans Devanagari (Marathi glyphs)
+#  - fonts-dejavu-core  : DejaVu Sans (Latin; the Devanagari face has no Latin)
+#  - libfribidi0        : enables Pillow's bundled raqm/HarfBuzz shaping
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fonts-noto-core libfribidi0 \
+    && apt-get install -y --no-install-recommends \
+        fonts-noto-core fonts-dejavu-core libfribidi0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
