@@ -132,5 +132,40 @@
         </div>
       </section>
     </main>
+
+    <!-- Change Password Modal -->
+    <dialog id="change-password-dialog" style="border:none;border-radius:12px;padding:0;min-width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+      <form id="change-password-form" method="dialog" style="padding:28px 28px 20px;display:flex;flex-direction:column;gap:16px;">
+        <h3 style="margin:0 0 4px;">Change Password</h3>
+        <p id="change-password-label" style="margin:0;font-size:14px;opacity:0.7;"></p>
+        <label class="field">
+          <span>New password</span>
+          <input
+            id="change-password-input"
+            type="password"
+            autocomplete="new-password"
+            minlength="6"
+            required
+            style="width:100%;"
+          >
+        </label>
+        <label class="field">
+          <span>Confirm password</span>
+          <input
+            id="change-password-confirm"
+            type="password"
+            autocomplete="new-password"
+            minlength="6"
+            required
+            style="width:100%;"
+          >
+        </label>
+        <p id="change-password-error" style="color:#c0392b;font-size:13px;margin:0;min-height:18px;"></p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" class="button-ghost" id="change-password-cancel">Cancel</button>
+          <button type="submit" class="button-primary" id="change-password-submit">Save</button>
+        </div>
+      </form>
+    </dialog>
   </body>
 </html>

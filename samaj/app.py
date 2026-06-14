@@ -1951,6 +1951,50 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "SESSION_MONGODB_COLLECTION"
             ),
         }
+    @app.put("/api/users/<username>/password")
+    def change_user_password(username):
+
+        if not role_can("manage_users"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        target_username = username.strip()
+        if not target_username:
+            return jsonify({"error": "Username required"}), 400
+
+        payload = request.get_json(silent=True) or {}
+        new_password = payload.get("password", "")
+
+        if len(new_password) < 6:
+            return jsonify({
+                "error": "Password must be at least 6 characters"
+            }), 400
+
+        users_collection = get_users_collection()
+        user = users_collection.find_one({"username": target_username})
+
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Only allow changing password for roles the caller can manage
+        allowed_roles = get_assignable_roles(current_role())
+        if user.get("role") not in allowed_roles:
+            return jsonify({"error": "Forbidden"}), 403
+
+        password_hash = (
+            bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        )
+
+        users_collection.update_one(
+            {"username": target_username},
+            {"$set": {
+                "passwordHash": password_hash,
+                "passwordChangedAt": now_utc(),
+                "passwordChangedBy": session.get("username", ""),
+            }},
+        )
+
+        return jsonify({"ok": True})
+
     @app.delete("/api/users/<username>")
     def delete_user(username):
 

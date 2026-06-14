@@ -132,7 +132,21 @@ function renderUserRow(user) {
         Delete
       </button>
     `
-    : "-";
+    : "";
+
+  const changePasswordAction = canChangePassword(user)
+    ? `
+      <button
+        type="button"
+        class="button-ghost"
+        data-change-password-username="${escapeHtmlAttribute(user.username || "")}"
+      >
+        Change password
+      </button>
+    `
+    : "";
+
+  const actions = [changePasswordAction, deleteAction].filter(Boolean).join("") || "-";
 
   return `
     <tr>
@@ -141,9 +155,23 @@ function renderUserRow(user) {
       <td>${user.isActive ? "Yes" : "No"}</td>
       <td>${escapeHtml(user.createdBy || "-")}</td>
       <td>${escapeHtml(formatDate(user.createdAt))}</td>
-      <td>${deleteAction}</td>
+      <td style="white-space:nowrap;">${actions}</td>
     </tr>
   `;
+}
+
+function canChangePassword(user) {
+  const role = user.role || "";
+
+  if (currentRole === "super_admin") {
+    return true;
+  }
+
+  if (currentRole === "admin") {
+    return role === "operator" || role === "viewer";
+  }
+
+  return false;
 }
 
 function canDeleteUser(user) {
@@ -165,49 +193,52 @@ document.addEventListener("click", async (event) => {
     "[data-delete-username]"
   );
 
-  if (!deleteButton) {
-    return;
-  }
+  if (deleteButton) {
+    const username = deleteButton.dataset.deleteUsername || "";
 
-  const username = deleteButton.dataset.deleteUsername || "";
+    if (!username) return;
 
-  if (!username) {
-    return;
-  }
-
-  const confirmed = window.confirm(
-    `Delete user "${username}"?`
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  deleteButton.disabled = true;
-
-  try {
-    const response = await fetch(
-      `/api/users/${encodeURIComponent(username)}`,
-      {
-        method: "DELETE"
-      }
+    const confirmed = window.confirm(
+      `Delete user "${username}"?`
     );
 
-    const payload = await response.json();
+    if (!confirmed) return;
 
-    if (!response.ok) {
-      throw new Error(
-        payload.error || "Unable to delete user."
+    deleteButton.disabled = true;
+
+    try {
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(username)}`,
+        { method: "DELETE" }
+      );
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          payload.error || "Unable to delete user."
+        );
+      }
+
+      window.alert("User deleted successfully.");
+      await loadUsers();
+    } catch (error) {
+      deleteButton.disabled = false;
+      window.alert(
+        error.message || "Unable to delete user."
       );
     }
 
-    window.alert("User deleted successfully.");
-    await loadUsers();
-  } catch (error) {
-    deleteButton.disabled = false;
-    window.alert(
-      error.message || "Unable to delete user."
-    );
+    return;
+  }
+
+  const changePasswordButton = event.target.closest(
+    "[data-change-password-username]"
+  );
+
+  if (changePasswordButton) {
+    const username = changePasswordButton.dataset.changePasswordUsername || "";
+    openChangePasswordDialog(username);
   }
 });
 
@@ -242,4 +273,82 @@ function escapeHtml(value) {
 
 function escapeHtmlAttribute(value) {
   return escapeHtml(value);
+}
+
+// ── Change Password Modal ────────────────────────────────────────────────────
+
+const changePasswordDialog = document.querySelector("#change-password-dialog");
+const changePasswordForm = document.querySelector("#change-password-form");
+const changePasswordLabel = document.querySelector("#change-password-label");
+const changePasswordInput = document.querySelector("#change-password-input");
+const changePasswordConfirm = document.querySelector("#change-password-confirm");
+const changePasswordError = document.querySelector("#change-password-error");
+const changePasswordCancel = document.querySelector("#change-password-cancel");
+const changePasswordSubmit = document.querySelector("#change-password-submit");
+
+let pendingChangePasswordUsername = null;
+
+function openChangePasswordDialog(username) {
+  pendingChangePasswordUsername = username;
+  changePasswordLabel.textContent = `Set a new password for "${username}"`;
+  changePasswordInput.value = "";
+  changePasswordConfirm.value = "";
+  changePasswordError.textContent = "";
+  changePasswordDialog.showModal();
+  changePasswordInput.focus();
+}
+
+if (changePasswordCancel) {
+  changePasswordCancel.addEventListener("click", () => {
+    changePasswordDialog.close();
+  });
+}
+
+if (changePasswordForm) {
+  changePasswordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    changePasswordError.textContent = "";
+
+    const password = changePasswordInput.value;
+    const confirm = changePasswordConfirm.value;
+
+    if (password.length < 6) {
+      changePasswordError.textContent = "Password must be at least 6 characters.";
+      return;
+    }
+
+    if (password !== confirm) {
+      changePasswordError.textContent = "Passwords do not match.";
+      return;
+    }
+
+    changePasswordSubmit.disabled = true;
+    changePasswordSubmit.textContent = "Saving...";
+
+    try {
+      const username = pendingChangePasswordUsername;
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(username)}/password`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ password }),
+        }
+      );
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to change password.");
+      }
+
+      changePasswordDialog.close();
+      window.alert(`Password for "${username}" changed successfully.`);
+    } catch (error) {
+      changePasswordError.textContent = error.message || "Unable to change password.";
+    } finally {
+      changePasswordSubmit.disabled = false;
+      changePasswordSubmit.textContent = "Save";
+    }
+  });
 }
