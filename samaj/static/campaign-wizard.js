@@ -1,0 +1,1881 @@
+/* ============================================================ */
+/* Campaign Wizard — step logic (Step 1: Recipient selection)   */
+/*                                                              */
+/* Lives in a dedicated file so it never conflicts with         */
+/* campaign-manager.js (tab switching + wizard reset) or         */
+/* campaign-directory.js (member directory). This file owns the  */
+/* per-step behaviour inside #cm-wizard-root and is written so   */
+/* later tasks (10.2 Template, 11.x Payment/Confirmation/Report) */
+/* can register additional steps without touching Step 1.        */
+/*                                                              */
+/* Step 1 implements (Requirement 3):                            */
+/*   - District multi-select (from LOCATION_DATA)        (3.1)   */
+/*   - Cascading Taluka multi-select                     (3.1)   */
+/*   - Clearing invalid taluka/area on district change   (3.2)   */
+/*   - Surname Group multi-select (fetched)              (3.1)   */
+/*   - Area multi-select with family counts (fetched)    (3.3)   */
+/*   - "Apply Filters" -> audience preview               (3.7)   */
+/*   - HOF list with per-row checkboxes                  (3.7)   */
+/*   - "Select All" toggle                               (3.8)   */
+/*   - Live selected-count update (within 200ms)         (3.9)   */
+/*   - Block Step 2 with zero selections                 (3.11)  */
+/*                                                              */
+/* Shared state for later steps is exposed on                    */
+/* window.CampaignWizard so Step 3 (payment) can read the        */
+/* selected recipients.                                          */
+/* ============================================================ */
+
+(function () {
+  "use strict";
+
+  /* District -> talukas hierarchy. Mirrors directory.js /        */
+  /* campaign-directory.js LOCATION_DATA so the cascade matches    */
+  /* the rest of the app.                                          */
+  var LOCATION_DATA = {
+    Maharashtra: {
+      Washim: ["Washim", "Malegaon", "Mangrulpir", "Karanja", "Risod", "Manora"],
+      Amravati: ["Amravati", "Achalpur", "Chandur Railway", "Daryapur", "Morshi"],
+      Akola: ["Akola", "Balapur", "Patur", "Murtizapur"],
+      Buldhana: ["Buldhana", "Khamgaon", "Shegaon", "Malkapur"],
+      Yavatmal: ["Yavatmal", "Darwha", "Pusad", "Umarkhed"],
+    },
+  };
+
+  /* ---------------------------------------------------------- */
+  /* Shared wizard state (readable by later steps).             */
+  /* ---------------------------------------------------------- */
+  var state = {
+    currentStep: 1,
+    /* recipients: full list returned by the last audience       */
+    /* preview fetch (objects from the API).                     */
+    recipients: [],
+    /* selectedIds: registration ids currently checked.          */
+    selectedIds: new Set(),
+    /* filters: the filter selection used for the last fetch.    */
+    filters: {
+      districts: [],
+      talukas: [],
+      surnameGroups: [],
+      areas: [],
+    },
+  };
+
+  /* DOM references (resolved on init). */
+  var root;
+  var elDistricts, elTalukas, elSurnames, elAreas;
+  var elApply, elApplyStatus;
+  var elSelectAll, elSelectedCount, elRecipients;
+  var elError, elNext;
+
+  /* Step 2 (template) DOM references + state. */
+  var elTList, elTStatus, elTError, elTErrorMsg, elTRetry;
+  var elTBack, elTNext, elTNavError;
+  /* Step 2 sub-state: templates fetched + the selected one. */
+  state.templates = [];
+  state.selectedTemplate = null;
+  /* Guards a single in-flight fetch / first-entry lazy load. */
+  var templatesLoaded = false;
+  var templatesLoading = false;
+
+  /* Step 3 (payment) DOM references + state. */
+  var elPCount, elPTotal, elPSummary, elPStatus, elPError, elPPay, elPBack;
+  /* paying guards against double-submits while a checkout flow is  */
+  /* in progress. campaignId is the created campaign (also exposed  */
+  /* on window.CampaignWizard for Steps 4 and 5).                  */
+  state.campaignId = null;
+  var paying = false;
+  /* The Razorpay checkout.js loader is shared/cached across pays.  */
+  var razorpayScriptPromise = null;
+
+  /* Step 4 (confirmation / execution status) DOM references.      */
+  var elCStatus;
+  /* Handle for the active status poll so it can be cancelled when  */
+  /* leaving Step 4 or on wizard reset. POLL_INTERVAL_MS controls   */
+  /* the cadence of the GET /api/campaigns/<id> status checks.      */
+  var confirmationPollTimer = null;
+  var POLL_INTERVAL_MS = 4000;
+
+  /* Step 5 (delivery report) DOM references + state.              */
+  var elRepStatus, elRepTotal, elRepSent, elRepFailed, elRepPending;
+  var elRepError, elRepErrorMsg, elRepRetry, elRepRows;
+  /* Handle for the auto-refresh timer (Req 8.3). Cancelled when    */
+  /* the campaign reaches a terminal status, when leaving Step 5,   */
+  /* and on wizard reset. REPORT_REFRESH_MS is the 5s cadence.      */
+  var reportRefreshTimer = null;
+  var reportLoading = false;
+  var REPORT_REFRESH_MS = 5000;
+
+  /* ---------------------------------------------------------- */
+  /* Small helpers                                              */
+  /* ---------------------------------------------------------- */
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  /* Mask a mobile number for display, showing only the last 4 digits
+     (e.g. "9876543210" -> "******3210"). The full number is kept in the
+     recipient data used for selection and sending; only the display is
+     masked so campaigners cannot harvest full numbers from the preview. */
+  function maskMobile(value) {
+    var digits = String(value == null ? "" : value).replace(/\D/g, "");
+    if (digits.length <= 4) {
+      return digits;
+    }
+    var last4 = digits.slice(-4);
+    return new Array(digits.length - 4 + 1).join("*") + last4;
+  }
+
+  /* Build a checkbox row used by every filter group. */
+  function checkboxRow(group, value, labelText, checked) {
+    var label = document.createElement("label");
+    label.className =
+      "flex items-center gap-2 px-1 py-1 rounded cursor-pointer " +
+      "hover:bg-slate-50 text-slate-700";
+
+    var input = document.createElement("input");
+    input.type = "checkbox";
+    input.className =
+      "h-4 w-4 rounded border-slate-300 text-emerald-600";
+    input.value = value;
+    input.checked = !!checked;
+    input.setAttribute("data-filter-value", value);
+
+    var span = document.createElement("span");
+    span.className = "text-sm";
+    span.textContent = labelText;
+
+    label.appendChild(input);
+    label.appendChild(span);
+    return { label: label, input: input };
+  }
+
+  /* Read the checked values from a filter group container. */
+  function readGroup(container) {
+    if (!container) {
+      return [];
+    }
+    var inputs = container.querySelectorAll(
+      'input[type="checkbox"]:checked'
+    );
+    return Array.prototype.map.call(inputs, function (i) {
+      return i.value;
+    });
+  }
+
+  /* Toggle the "disabled" visual treatment on a filter group. */
+  function setGroupEnabled(container, enabled) {
+    if (!container) {
+      return;
+    }
+    container.setAttribute("aria-disabled", enabled ? "false" : "true");
+    container.classList.toggle("bg-slate-50", !enabled);
+    container.classList.toggle("text-slate-400", !enabled);
+    container.classList.toggle("bg-white", enabled);
+  }
+
+  /* Build a query string from the current filter selection. */
+  function buildQuery(includeSurnameAndArea) {
+    var params = new URLSearchParams();
+    var d = readGroup(elDistricts);
+    var t = readGroup(elTalukas);
+    if (d.length) {
+      params.set("districts", d.join(","));
+    }
+    if (t.length) {
+      params.set("talukas", t.join(","));
+    }
+    if (includeSurnameAndArea) {
+      var s = readGroup(elSurnames);
+      var a = readGroup(elAreas);
+      if (s.length) {
+        params.set("surnameGroups", s.join(","));
+      }
+      if (a.length) {
+        params.set("areas", a.join(","));
+      }
+    }
+    return params.toString();
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Filter population                                          */
+  /* ---------------------------------------------------------- */
+
+  function populateDistricts() {
+    if (!elDistricts) {
+      return;
+    }
+    elDistricts.innerHTML = "";
+    var districts = Object.keys(LOCATION_DATA.Maharashtra);
+    districts.forEach(function (district) {
+      var row = checkboxRow("districts", district, district, false);
+      row.input.addEventListener("change", onDistrictChange);
+      elDistricts.appendChild(row.label);
+    });
+  }
+
+  /* Req 3.2: when districts change, refresh the taluka options to */
+  /* only those belonging to the selected districts, preserving    */
+  /* still-valid selections and clearing invalid ones.             */
+  function refreshTalukas() {
+    if (!elTalukas) {
+      return;
+    }
+    var selectedDistricts = readGroup(elDistricts);
+    var previouslySelected = readGroup(elTalukas);
+
+    if (!selectedDistricts.length) {
+      elTalukas.innerHTML =
+        '<p class="text-xs text-slate-400 p-1">Select a district first.</p>';
+      setGroupEnabled(elTalukas, false);
+      return;
+    }
+
+    /* Union of talukas for the selected districts. */
+    var available = [];
+    selectedDistricts.forEach(function (district) {
+      var talukas = LOCATION_DATA.Maharashtra[district] || [];
+      talukas.forEach(function (taluka) {
+        if (available.indexOf(taluka) === -1) {
+          available.push(taluka);
+        }
+      });
+    });
+    available.sort();
+
+    setGroupEnabled(elTalukas, true);
+    elTalukas.innerHTML = "";
+    available.forEach(function (taluka) {
+      /* Preserve a prior selection only if it is still valid. */
+      var keep = previouslySelected.indexOf(taluka) !== -1;
+      var row = checkboxRow("talukas", taluka, taluka, keep);
+      row.input.addEventListener("change", onTalukaChange);
+      elTalukas.appendChild(row.label);
+    });
+  }
+
+  function onDistrictChange() {
+    /* District drives taluka options (Req 3.2). Refresh taluka,   */
+    /* then surname groups + areas which are scoped to the         */
+    /* district/taluka selection.                                  */
+    refreshTalukas();
+    fetchSurnameGroups();
+    fetchAreas();
+  }
+
+  function onTalukaChange() {
+    /* Surname groups + areas are scoped to district/taluka.       */
+    fetchSurnameGroups();
+    fetchAreas();
+  }
+
+  /* Surname groups: fetched, optionally scoped by district/taluka. */
+  function fetchSurnameGroups() {
+    if (!elSurnames) {
+      return;
+    }
+    var previouslySelected = readGroup(elSurnames);
+    var query = buildQuery(false);
+    var url =
+      "/api/campaigns/surname-groups" + (query ? "?" + query : "");
+
+    fetch(url, { credentials: "same-origin" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("surname-groups " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var groups = (data && data.surnameGroups) || [];
+        elSurnames.innerHTML = "";
+        if (!groups.length) {
+          elSurnames.innerHTML =
+            '<p class="text-xs text-slate-400 p-1">No surname groups.</p>';
+          return;
+        }
+        groups.forEach(function (group) {
+          var keep = previouslySelected.indexOf(group) !== -1;
+          var row = checkboxRow("surnameGroups", group, group, keep);
+          elSurnames.appendChild(row.label);
+        });
+      })
+      .catch(function () {
+        elSurnames.innerHTML =
+          '<p class="text-xs text-red-500 p-1">Failed to load surname groups.</p>';
+      });
+  }
+
+  /* Area: fetched with family counts. Req 3.1 keeps the Area      */
+  /* filter disabled until at least one taluka is selected; Req    */
+  /* 3.3 populates it with area names + family counts scoped to    */
+  /* the district/taluka selection.                                */
+  function fetchAreas() {
+    if (!elAreas) {
+      return;
+    }
+    var selectedTalukas = readGroup(elTalukas);
+    if (!selectedTalukas.length) {
+      elAreas.innerHTML =
+        '<p class="text-xs text-slate-400 p-1">Select a taluka first.</p>';
+      setGroupEnabled(elAreas, false);
+      return;
+    }
+
+    var previouslySelected = readGroup(elAreas);
+    var query = buildQuery(false);
+    var url = "/api/campaigns/areas" + (query ? "?" + query : "");
+
+    setGroupEnabled(elAreas, true);
+    elAreas.innerHTML =
+      '<p class="text-xs text-slate-400 p-1">Loading areas...</p>';
+
+    fetch(url, { credentials: "same-origin" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("areas " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var areas = (data && data.areas) || [];
+        elAreas.innerHTML = "";
+        if (!areas.length) {
+          elAreas.innerHTML =
+            '<p class="text-xs text-slate-400 p-1">No areas found.</p>';
+          return;
+        }
+        areas.forEach(function (area) {
+          var name = area && area.name != null ? area.name : "";
+          var count =
+            area && typeof area.familyCount === "number"
+              ? area.familyCount
+              : 0;
+          var keep = previouslySelected.indexOf(name) !== -1;
+          var labelText = name + " (" + count + " families)";
+          var row = checkboxRow("areas", name, labelText, keep);
+          elAreas.appendChild(row.label);
+        });
+      })
+      .catch(function () {
+        elAreas.innerHTML =
+          '<p class="text-xs text-red-500 p-1">Failed to load areas.</p>';
+      });
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Apply Filters -> audience preview (Req 3.7)                */
+  /* ---------------------------------------------------------- */
+
+  function applyFilters() {
+    var query = buildQuery(true);
+    var url =
+      "/api/campaigns/audience-preview" + (query ? "?" + query : "");
+
+    /* Remember the filter selection used for this fetch so later  */
+    /* steps can reference it.                                     */
+    state.filters = {
+      districts: readGroup(elDistricts),
+      talukas: readGroup(elTalukas),
+      surnameGroups: readGroup(elSurnames),
+      areas: readGroup(elAreas),
+    };
+
+    if (elApplyStatus) {
+      elApplyStatus.textContent = "Loading recipients...";
+    }
+    if (elApply) {
+      elApply.disabled = true;
+    }
+
+    fetch(url, { credentials: "same-origin" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("audience-preview " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        state.recipients = (data && data.recipients) || [];
+        /* A fresh audience invalidates the previous selection. */
+        state.selectedIds = new Set();
+        renderRecipients();
+        updateSelectedCount();
+        if (elSelectAll) {
+          elSelectAll.checked = false;
+        }
+        if (elApplyStatus) {
+          elApplyStatus.textContent =
+            state.recipients.length +
+            " matching recipient" +
+            (state.recipients.length === 1 ? "" : "s") +
+            " found.";
+        }
+      })
+      .catch(function () {
+        if (elApplyStatus) {
+          elApplyStatus.textContent = "Failed to load recipients.";
+        }
+      })
+      .then(function () {
+        if (elApply) {
+          elApply.disabled = false;
+        }
+      });
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Recipient list rendering (Req 3.7)                         */
+  /* ---------------------------------------------------------- */
+
+  function recipientId(recipient) {
+    return String(
+      recipient._id != null
+        ? recipient._id
+        : recipient.registrationId != null
+        ? recipient.registrationId
+        : ""
+    );
+  }
+
+  function renderRecipients() {
+    if (!elRecipients) {
+      return;
+    }
+    if (!state.recipients.length) {
+      elRecipients.innerHTML =
+        '<p class="px-4 py-10 text-center text-slate-500 text-sm">' +
+        "No recipients match the selected filters.</p>";
+      return;
+    }
+
+    var rows = state.recipients
+      .map(function (recipient) {
+        var id = recipientId(recipient);
+        var checked = state.selectedIds.has(id) ? " checked" : "";
+        var place = [recipient.district, recipient.taluka]
+          .filter(Boolean)
+          .join(", ");
+        return (
+          '<label class="flex items-center gap-3 px-4 py-2.5 ' +
+          'cursor-pointer hover:bg-slate-50">' +
+          '<input type="checkbox" class="cm-r-row h-4 w-4 rounded ' +
+          'border-slate-300 text-emerald-600" ' +
+          'data-recipient-id="' +
+          escapeHtml(id) +
+          '"' +
+          checked +
+          ">" +
+          '<span class="flex-1 min-w-0">' +
+          '<span class="block text-sm font-medium text-slate-800 truncate">' +
+          escapeHtml(recipient.name || "(no name)") +
+          "</span>" +
+          '<span class="block text-xs text-slate-500">' +
+          escapeHtml(place) +
+          "</span>" +
+          "</span>" +
+          '<span class="text-xs text-slate-500 whitespace-nowrap">' +
+          escapeHtml(
+            recipient.mobileMasked || maskMobile(recipient.mobileNumber || "")
+          ) +
+          "</span>" +
+          "</label>"
+        );
+      })
+      .join("");
+
+    elRecipients.innerHTML = rows;
+
+    Array.prototype.forEach.call(
+      elRecipients.querySelectorAll(".cm-r-row"),
+      function (input) {
+        input.addEventListener("change", onRecipientToggle);
+      }
+    );
+  }
+
+  function onRecipientToggle(event) {
+    var input = event.target;
+    var id = input.getAttribute("data-recipient-id");
+    if (input.checked) {
+      state.selectedIds.add(id);
+    } else {
+      state.selectedIds.delete(id);
+    }
+    syncSelectAllState();
+    updateSelectedCount();
+    clearError();
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Select All toggle (Req 3.8)                                */
+  /* ---------------------------------------------------------- */
+
+  function onSelectAllToggle() {
+    var check = elSelectAll.checked;
+    var inputs = elRecipients
+      ? elRecipients.querySelectorAll(".cm-r-row")
+      : [];
+    Array.prototype.forEach.call(inputs, function (input) {
+      input.checked = check;
+      var id = input.getAttribute("data-recipient-id");
+      if (check) {
+        state.selectedIds.add(id);
+      } else {
+        state.selectedIds.delete(id);
+      }
+    });
+    updateSelectedCount();
+    clearError();
+  }
+
+  /* Keep the Select All box in sync with individual checkboxes. */
+  function syncSelectAllState() {
+    if (!elSelectAll || !elRecipients) {
+      return;
+    }
+    var inputs = elRecipients.querySelectorAll(".cm-r-row");
+    var total = inputs.length;
+    var checked = elRecipients.querySelectorAll(
+      ".cm-r-row:checked"
+    ).length;
+    elSelectAll.checked = total > 0 && checked === total;
+    elSelectAll.indeterminate = checked > 0 && checked < total;
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Live selected count (Req 3.9 — updated synchronously, well  */
+  /* within the 200ms budget).                                   */
+  /* ---------------------------------------------------------- */
+
+  function updateSelectedCount() {
+    if (!elSelectedCount) {
+      return;
+    }
+    var count = state.selectedIds.size;
+    elSelectedCount.textContent =
+      "Selected: " + count + " recipient" + (count === 1 ? "" : "s");
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Error + navigation (Req 3.11)                              */
+  /* ---------------------------------------------------------- */
+
+  function showError(message) {
+    if (!elError) {
+      return;
+    }
+    elError.textContent = message;
+    elError.classList.remove("hidden");
+  }
+
+  function clearError() {
+    if (!elError) {
+      return;
+    }
+    elError.textContent = "";
+    elError.classList.add("hidden");
+  }
+
+  /* Selected recipient objects (for later steps). Only the registration id
+     and display name are kept — full mobile numbers are never received from
+     the server, so the campaign is created from ids alone. */
+  function getSelectedRecipients() {
+    return state.recipients
+      .filter(function (recipient) {
+        return state.selectedIds.has(recipientId(recipient));
+      })
+      .map(function (recipient) {
+        return {
+          registrationId: recipientId(recipient),
+          name: recipient.name || "",
+        };
+      });
+  }
+
+  function goToStep2() {
+    /* Req 3.11: block navigation with zero selections. */
+    if (state.selectedIds.size === 0) {
+      showError("Please select at least one recipient before continuing.");
+      return;
+    }
+    clearError();
+
+    /* Persist the selection where Step 3 (payment) can read it. */
+    var selected = getSelectedRecipients();
+    state.selectedRecipients = selected;
+    window.CampaignWizard.selectedRecipients = selected;
+    window.CampaignWizard.audienceFilters = state.filters;
+
+    showStep(2);
+  }
+
+  /* ========================================================== */
+  /* STEP 2 — Template selection (Requirement 4)                */
+  /* ---------------------------------------------------------- */
+  /* On entry to Step 2 the available WhatsApp ad templates are  */
+  /* fetched from /api/campaigns/templates and rendered as a     */
+  /* selectable list showing name, language and a body-text      */
+  /* preview with placeholder indicators (Req 4.1, 4.2).         */
+  /* Selecting a template highlights it and stores the template  */
+  /* name + language (and the derived body-vars template) on      */
+  /* window.CampaignWizard so Step 3 can read it (Req 4.3).      */
+  /* Next blocks advancing without a selection (Req 4.4); a      */
+  /* fetch failure shows an error with a Retry button (Req 4.5). */
+  /* ========================================================== */
+
+  /* Extract placeholder tokens (e.g. {name}, {mobile}) from a   */
+  /* template body in positional order. This becomes the         */
+  /* bodyVarsTemplate the delivery service resolves per          */
+  /* recipient. Literal segments are not included — only the     */
+  /* recognised {placeholder} tokens, matching the backend       */
+  /* resolve_body_vars() contract (Requirement 13).              */
+  function extractBodyVars(bodyText) {
+    var vars = [];
+    var re = /\{[^{}]+\}/g;
+    var match;
+    while ((match = re.exec(String(bodyText || ""))) !== null) {
+      vars.push(match[0]);
+    }
+    return vars;
+  }
+
+  /* Build the highlighted body preview: wrap {placeholder}      */
+  /* tokens in a styled span so the indicators stand out         */
+  /* (Req 4.2). Everything is escaped first to stay XSS-safe.    */
+  function renderBodyPreview(bodyText) {
+    var escaped = escapeHtml(bodyText);
+    return escaped.replace(/\{[^{}]+\}/g, function (token) {
+      return (
+        '<span class="font-mono text-xs px-1 py-0.5 rounded ' +
+        'bg-amber-100 text-amber-800">' +
+        token +
+        "</span>"
+      );
+    });
+  }
+
+  function clearTemplateNavError() {
+    if (!elTNavError) {
+      return;
+    }
+    elTNavError.textContent = "";
+    elTNavError.classList.add("hidden");
+  }
+
+  function showTemplateNavError(message) {
+    if (!elTNavError) {
+      return;
+    }
+    elTNavError.textContent = message;
+    elTNavError.classList.remove("hidden");
+  }
+
+  function setTemplateStatus(text) {
+    if (elTStatus) {
+      elTStatus.textContent = text || "";
+    }
+  }
+
+  /* Show the error/retry panel (Req 4.5). */
+  function showTemplateError(message) {
+    if (elTList) {
+      elTList.classList.add("hidden");
+    }
+    if (elTErrorMsg) {
+      elTErrorMsg.textContent =
+        message || "Could not load templates. Please try again.";
+    }
+    if (elTError) {
+      elTError.classList.remove("hidden");
+    }
+    setTemplateStatus("");
+  }
+
+  function hideTemplateError() {
+    if (elTError) {
+      elTError.classList.add("hidden");
+    }
+    if (elTList) {
+      elTList.classList.remove("hidden");
+    }
+  }
+
+  function templateKey(template) {
+    return (
+      String(template.name || "") + "|" + String(template.language || "")
+    );
+  }
+
+  /* Apply the selected/unselected visual treatment to each card. */
+  function highlightSelectedTemplate() {
+    if (!elTList) {
+      return;
+    }
+    var cards = elTList.querySelectorAll(".cm-t-item");
+    var selectedKey = state.selectedTemplate
+      ? templateKey(state.selectedTemplate)
+      : null;
+    Array.prototype.forEach.call(cards, function (card) {
+      var isSel = card.getAttribute("data-template-key") === selectedKey;
+      card.classList.toggle("border-emerald-500", isSel);
+      card.classList.toggle("ring-2", isSel);
+      card.classList.toggle("ring-emerald-200", isSel);
+      card.classList.toggle("bg-emerald-50", isSel);
+      card.classList.toggle("border-slate-200", !isSel);
+      var radio = card.querySelector(".cm-t-radio");
+      if (radio) {
+        radio.checked = isSel;
+      }
+      card.setAttribute("aria-checked", isSel ? "true" : "false");
+    });
+  }
+
+  /* Req 4.3: store the selection and expose it for Step 3. */
+  function selectTemplate(template) {
+    state.selectedTemplate = template;
+    window.CampaignWizard.templateName = template.name || "";
+    window.CampaignWizard.templateLanguage = template.language || "";
+    window.CampaignWizard.bodyVarsTemplate = extractBodyVars(
+      template.bodyText
+    );
+    highlightSelectedTemplate();
+    clearTemplateNavError();
+    setTemplateStatus("Template selected.");
+  }
+
+  function renderTemplates() {
+    if (!elTList) {
+      return;
+    }
+    hideTemplateError();
+
+    if (!state.templates.length) {
+      elTList.innerHTML =
+        '<p class="px-1 py-8 text-center text-slate-500 text-sm">' +
+        "No templates are available right now.</p>";
+      setTemplateStatus("");
+      return;
+    }
+
+    elTList.innerHTML = state.templates
+      .map(function (template) {
+        var key = templateKey(template);
+        var name = escapeHtml(template.name || "(unnamed)");
+        var language = escapeHtml(template.language || "");
+        var preview = renderBodyPreview(template.bodyText || "");
+        return (
+          '<div class="cm-t-item flex items-start gap-3 rounded-xl ' +
+          'border p-4 cursor-pointer transition hover:bg-slate-50 ' +
+          'border-slate-200" role="radio" tabindex="0" ' +
+          'aria-checked="false" data-template-key="' +
+          escapeHtml(key) +
+          '">' +
+          '<input type="radio" name="cm-t-radio" class="cm-t-radio ' +
+          'mt-1 h-4 w-4 border-slate-300 text-emerald-600" ' +
+          'tabindex="-1">' +
+          '<span class="flex-1 min-w-0">' +
+          '<span class="flex items-center gap-2 flex-wrap">' +
+          '<span class="text-sm font-semibold text-slate-800">' +
+          name +
+          "</span>" +
+          '<span class="text-[11px] font-medium text-slate-600 ' +
+          'bg-slate-100 rounded-full px-2 py-0.5">' +
+          language +
+          "</span>" +
+          "</span>" +
+          '<span class="block mt-1.5 text-sm text-slate-600 ' +
+          'leading-relaxed">' +
+          preview +
+          "</span>" +
+          "</span>" +
+          "</div>"
+        );
+      })
+      .join("");
+
+    /* Wire selection on each card (click + keyboard). */
+    Array.prototype.forEach.call(
+      elTList.querySelectorAll(".cm-t-item"),
+      function (card) {
+        var key = card.getAttribute("data-template-key");
+        var template = state.templates.filter(function (t) {
+          return templateKey(t) === key;
+        })[0];
+        if (!template) {
+          return;
+        }
+        card.addEventListener("click", function () {
+          selectTemplate(template);
+        });
+        card.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectTemplate(template);
+          }
+        });
+      }
+    );
+
+    /* Restore highlight if a template was previously chosen. */
+    highlightSelectedTemplate();
+    setTemplateStatus(
+      state.templates.length +
+        " template" +
+        (state.templates.length === 1 ? "" : "s") +
+        " available."
+    );
+  }
+
+  /* Req 4.1: fetch the template list. force=true re-fetches    */
+  /* (used by Retry). Otherwise the list is loaded once on first */
+  /* entry to Step 2 and cached for the session.                 */
+  function fetchTemplates(force) {
+    if (!elTList) {
+      return;
+    }
+    if (templatesLoading) {
+      return;
+    }
+    if (templatesLoaded && !force) {
+      renderTemplates();
+      return;
+    }
+
+    templatesLoading = true;
+    hideTemplateError();
+    elTList.innerHTML =
+      '<p class="px-1 py-8 text-center text-slate-500 text-sm">' +
+      "Loading templates...</p>";
+    setTemplateStatus("Loading templates...");
+
+    fetch("/api/campaigns/templates", { credentials: "same-origin" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("templates " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        state.templates = (data && data.templates) || [];
+        templatesLoaded = true;
+        renderTemplates();
+      })
+      .catch(function () {
+        /* Req 4.5: show an error message with a retry option. */
+        showTemplateError(
+          "Could not load templates. Please check your connection and try again."
+        );
+      })
+      .then(function () {
+        templatesLoading = false;
+      });
+  }
+
+  /* Req 4.4: block advancing to Step 3 without a selection. */
+  function goToStep3() {
+    if (!state.selectedTemplate) {
+      showTemplateNavError("Please select a template before continuing.");
+      return;
+    }
+    clearTemplateNavError();
+    showStep(3);
+  }
+
+  function goBackToStep1() {
+    clearTemplateNavError();
+    showStep(1);
+  }
+
+  /* Reset Step 2 selection (Req 2.5 — wizard reset). */
+  function resetTemplateState() {
+    state.selectedTemplate = null;
+    window.CampaignWizard.templateName = "";
+    window.CampaignWizard.templateLanguage = "";
+    window.CampaignWizard.bodyVarsTemplate = [];
+    clearTemplateNavError();
+    /* Re-render so any prior highlight is cleared; templates       */
+    /* themselves stay cached and will re-render on next entry.     */
+    if (templatesLoaded) {
+      renderTemplates();
+    }
+  }
+
+  /* Lazy-load templates the first time Step 2 becomes active.   */
+  function onStepChanged(event) {
+    var step = event && event.detail ? event.detail.step : null;
+    if (step === 2) {
+      fetchTemplates(false);
+    } else if (step === 3) {
+      onEnterPayment();
+    } else if (step === 4) {
+      onEnterConfirmation();
+    } else if (step === 5) {
+      /* Entering the report — stop Step 4 polling and load the     */
+      /* delivery report (which starts its own auto-refresh).       */
+      stopConfirmationPoll();
+      onEnterReport();
+    } else {
+      /* Leaving Step 4/5 — stop both timers. */
+      stopConfirmationPoll();
+      stopReportRefresh();
+    }
+  }
+
+  /* ========================================================== */
+  /* STEP 3 — Payment via Razorpay (Requirement 5, 14)          */
+  /* ---------------------------------------------------------- */
+  /* On entry the payment summary is computed from the selected  */
+  /* recipient count: "N recipients x Rs.1 = Rs.N total"         */
+  /* (Req 5.1). The Pay button POSTs to                          */
+  /* /api/campaigns/create-with-payment to create the campaign + */
+  /* Razorpay order (Req 5.4), then opens the Razorpay Checkout  */
+  /* modal with the returned order details. On checkout success  */
+  /* the payment id/order id/signature are POSTed to             */
+  /* /api/campaigns/<id>/verify-payment (Req 5.5); a verified     */
+  /* payment advances to Step 4. Order-creation errors           */
+  /* (Req 14.1) and payment failure / abandonment (Req 14.2) are */
+  /* surfaced to the user while the campaign stays pending.      */
+  /* The created campaignId is stored on window.CampaignWizard    */
+  /* so Steps 4 and 5 can read it.                               */
+  /* ========================================================== */
+
+  /* ₹ amount equals the selected recipient count (₹1 each). */
+  function selectedRecipientCount() {
+    var recipients = window.CampaignWizard.selectedRecipients;
+    return recipients && recipients.length ? recipients.length : 0;
+  }
+
+  function renderPaymentSummary() {
+    var count = selectedRecipientCount();
+    if (elPCount) {
+      elPCount.textContent = String(count);
+    }
+    if (elPTotal) {
+      elPTotal.textContent = "\u20B9" + count;
+    }
+    if (elPSummary) {
+      elPSummary.textContent =
+        count +
+        " recipient" +
+        (count === 1 ? "" : "s") +
+        " \u00D7 \u20B91 = \u20B9" +
+        count +
+        " total";
+    }
+    if (elPPay) {
+      elPPay.textContent = "Pay \u20B9" + count;
+      /* Req 5.x / 9.4: cannot pay for zero recipients. */
+      elPPay.disabled = paying || count < 1;
+    }
+  }
+
+  function setPaymentStatus(message) {
+    if (!elPStatus) {
+      return;
+    }
+    if (message) {
+      elPStatus.textContent = message;
+      elPStatus.classList.remove("hidden");
+    } else {
+      elPStatus.textContent = "";
+      elPStatus.classList.add("hidden");
+    }
+  }
+
+  function showPaymentError(message) {
+    if (!elPError) {
+      return;
+    }
+    elPError.textContent = message || "";
+    elPError.classList.toggle("hidden", !message);
+  }
+
+  function clearPaymentError() {
+    showPaymentError("");
+  }
+
+  /* Re-enable the Pay button after a flow ends (success path     */
+  /* leaves it disabled since we advance to Step 4).             */
+  function endPaying() {
+    paying = false;
+    renderPaymentSummary();
+  }
+
+  /* Req 5.1: refresh the summary every time Step 3 is shown.    */
+  function onEnterPayment() {
+    clearPaymentError();
+    setPaymentStatus("");
+    renderPaymentSummary();
+  }
+
+  /* Dynamically load Razorpay's checkout.js on demand. Cached    */
+  /* after the first load so repeated attempts reuse the script.  */
+  function loadRazorpayCheckout() {
+    if (window.Razorpay) {
+      return Promise.resolve();
+    }
+    if (razorpayScriptPromise) {
+      return razorpayScriptPromise;
+    }
+    razorpayScriptPromise = new Promise(function (resolve, reject) {
+      var existing = document.querySelector(
+        'script[data-razorpay-checkout="true"]'
+      );
+      if (existing) {
+        existing.addEventListener("load", function () {
+          resolve();
+        });
+        existing.addEventListener("error", function () {
+          reject(new Error("razorpay-load-failed"));
+        });
+        return;
+      }
+      var script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.setAttribute("data-razorpay-checkout", "true");
+      script.onload = function () {
+        resolve();
+      };
+      script.onerror = function () {
+        /* Allow a later retry by clearing the cached promise. */
+        razorpayScriptPromise = null;
+        reject(new Error("razorpay-load-failed"));
+      };
+      document.head.appendChild(script);
+    });
+    return razorpayScriptPromise;
+  }
+
+  /* Req 5.5: server-side verification of the completed payment. */
+  function verifyPayment(campaignId, response) {
+    setPaymentStatus("Verifying payment...");
+    fetch(
+      "/api/campaigns/" +
+        encodeURIComponent(campaignId) +
+        "/verify-payment",
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_signature: response.razorpay_signature,
+        }),
+      }
+    )
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("verify-payment " + res.status);
+        }
+        return res.json();
+      })
+      .then(function () {
+        /* Verified — campaign is now payment_verified. Advance to  */
+        /* Step 4 (confirmation / execution status).               */
+        setPaymentStatus("Payment verified.");
+        endPaying();
+        showStep(4);
+      })
+      .catch(function () {
+        /* Req 14.5 mirror: verification failed — campaign stays    */
+        /* pending, surface a clear message so the user can retry.  */
+        showPaymentError(
+          "We could not verify your payment. If money was deducted it " +
+            "will be confirmed automatically, otherwise please try again."
+        );
+        setPaymentStatus("");
+        endPaying();
+      });
+  }
+
+  /* Open the Razorpay Checkout modal with the created order.    */
+  /* Req 5.4 (open modal), Req 5.5 (verify on success),           */
+  /* Req 14.2 (graceful failure / abandonment).                  */
+  function openCheckout(order) {
+    var options = {
+      key: order.razorpayKey,
+      order_id: order.razorpayOrderId,
+      amount: order.amount,
+      currency: "INR",
+      name: "SAMAJ",
+      description: "WhatsApp ad campaign",
+      handler: function (response) {
+        verifyPayment(order.campaignId, response);
+      },
+      modal: {
+        ondismiss: function () {
+          /* Req 14.2: user abandoned checkout. Campaign remains in  */
+          /* pending_payment; let them retry.                       */
+          setPaymentStatus("");
+          showPaymentError(
+            "Payment was not completed. Your campaign is saved — " +
+              "you can try paying again."
+          );
+          endPaying();
+        },
+      },
+    };
+
+    try {
+      var rzp = new window.Razorpay(options);
+      if (typeof rzp.on === "function") {
+        rzp.on("payment.failed", function () {
+          /* Req 14.2: payment failed at the gateway. */
+          setPaymentStatus("");
+          showPaymentError(
+            "Payment failed. Your campaign is saved — please try again."
+          );
+          endPaying();
+        });
+      }
+      setPaymentStatus("Opening secure payment...");
+      rzp.open();
+    } catch (err) {
+      showPaymentError(
+        "Could not open the payment window. Please try again."
+      );
+      setPaymentStatus("");
+      endPaying();
+    }
+  }
+
+  /* Pay button — create the campaign + order, then open checkout. */
+  function startPayment() {
+    if (paying) {
+      return;
+    }
+    var count = selectedRecipientCount();
+    if (count < 1) {
+      showPaymentError("Please select at least one recipient.");
+      return;
+    }
+
+    paying = true;
+    clearPaymentError();
+    setPaymentStatus("Creating your campaign...");
+    if (elPPay) {
+      elPPay.disabled = true;
+    }
+
+    var selectedRecipients = window.CampaignWizard.selectedRecipients || [];
+    var body = {
+      /* Privacy hardening: send only the selected registration ids; the
+         server re-resolves full mobile numbers. */
+      registrationIds: selectedRecipients.map(function (recipient) {
+        return recipient.registrationId;
+      }),
+      templateName: window.CampaignWizard.templateName || "",
+      templateLanguage: window.CampaignWizard.templateLanguage || "",
+      bodyVarsTemplate: window.CampaignWizard.bodyVarsTemplate || [],
+      audienceFilters: window.CampaignWizard.audienceFilters || null,
+    };
+
+    fetch("/api/campaigns/create-with-payment", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          /* Surface the server's specific error message when available
+             (e.g. "Payments are not configured") instead of a generic one. */
+          return res
+            .json()
+            .catch(function () {
+              return {};
+            })
+            .then(function (data) {
+              var err = new Error("create-with-payment " + res.status);
+              err.serverMessage = data && data.error;
+              throw err;
+            });
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var order = data || {};
+        if (!order.campaignId || !order.razorpayOrderId) {
+          throw new Error("create-with-payment malformed");
+        }
+        /* Persist the campaign id for Steps 4 and 5. */
+        state.campaignId = order.campaignId;
+        window.CampaignWizard.campaignId = order.campaignId;
+
+        setPaymentStatus("Loading secure payment...");
+        return loadRazorpayCheckout().then(function () {
+          openCheckout(order);
+        });
+      })
+      .catch(function (error) {
+        /* Req 14.1: order creation (or checkout load) failed. No    */
+        /* messages are sent; allow the user to retry.              */
+        showPaymentError(
+          (error && error.serverMessage) ||
+            "We could not start the payment. Please check your connection " +
+              "and try again."
+        );
+        setPaymentStatus("");
+        endPaying();
+      });
+  }
+
+  /* Reset Step 3 state (Req 2.5 / 14.2 — wizard reset). */
+  function resetPaymentState() {
+    paying = false;
+    state.campaignId = null;
+    window.CampaignWizard.campaignId = null;
+    clearPaymentError();
+    setPaymentStatus("");
+    renderPaymentSummary();
+  }
+
+  /* ========================================================== */
+  /* STEP 4 — Confirmation & execution status (Requirement 6)   */
+  /* ---------------------------------------------------------- */
+  /* When the user reaches Step 4 their payment has been         */
+  /* verified, so we show a "Payment confirmed" indicator and a  */
+  /* "Campaign is being sent..." progress state (Req 6.4). The   */
+  /* webhook-driven backend transitions the campaign through      */
+  /* "sending" -> "sent"/"failed"; we poll                       */
+  /* GET /api/campaigns/<id> on a fixed cadence and, once the    */
+  /* status reaches a terminal value, stop polling and auto-      */
+  /* advance to Step 5 (delivery report) (Req 6.5). Polling is    */
+  /* cancelled when leaving Step 4 and on wizard reset so no       */
+  /* stray timers outlive the step.                              */
+  /* ========================================================== */
+
+  /* Terminal campaign states — reaching either ends the poll.   */
+  function isTerminalCampaignStatus(status) {
+    return status === "sent" || status === "failed";
+  }
+
+  function setConfirmationStatus(message) {
+    if (elCStatus) {
+      elCStatus.textContent = message || "";
+    }
+  }
+
+  /* Cancel any in-flight status poll. Safe to call repeatedly.  */
+  function stopConfirmationPoll() {
+    if (confirmationPollTimer !== null) {
+      clearTimeout(confirmationPollTimer);
+      confirmationPollTimer = null;
+    }
+  }
+
+  /* Schedule the next status check (unless one is already due).  */
+  function scheduleConfirmationPoll() {
+    stopConfirmationPoll();
+    confirmationPollTimer = setTimeout(pollCampaignStatus, POLL_INTERVAL_MS);
+  }
+
+  /* One status check: GET the campaign, inspect its status, and  */
+  /* either advance to Step 5 (terminal) or schedule another poll. */
+  function pollCampaignStatus() {
+    confirmationPollTimer = null;
+
+    var campaignId = window.CampaignWizard.campaignId;
+    if (!campaignId) {
+      /* Nothing to poll — leave the progress state as-is. */
+      return;
+    }
+
+    /* Capture which campaign this poll is for so a late response   */
+    /* after a reset/restart is ignored.                           */
+    var pollCampaignId = campaignId;
+
+    fetch("/api/campaigns/" + encodeURIComponent(campaignId), {
+      credentials: "same-origin",
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("get-campaign " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        /* Ignore stale responses if the wizard moved on/reset.     */
+        if (
+          state.currentStep !== 4 ||
+          window.CampaignWizard.campaignId !== pollCampaignId
+        ) {
+          return;
+        }
+
+        var campaign = (data && data.campaign) || {};
+        var status = campaign.status || "";
+
+        if (isTerminalCampaignStatus(status)) {
+          /* Req 6.5: sending complete — stop and show the report.  */
+          stopConfirmationPoll();
+          setConfirmationStatus(
+            status === "sent"
+              ? "Campaign sent. Loading delivery report\u2026"
+              : "Sending finished. Loading delivery report\u2026"
+          );
+          showStep(5);
+          return;
+        }
+
+        /* Still pending/sending — keep the progress state and poll. */
+        setConfirmationStatus("Campaign is being sent\u2026");
+        scheduleConfirmationPoll();
+      })
+      .catch(function () {
+        /* Transient error — keep trying while we remain on Step 4. */
+        if (
+          state.currentStep === 4 &&
+          window.CampaignWizard.campaignId === pollCampaignId
+        ) {
+          scheduleConfirmationPoll();
+        }
+      });
+  }
+
+  /* Req 6.4: entering Step 4 shows the confirmed/progress state  */
+  /* and kicks off polling. Handles the case where the campaign   */
+  /* is already terminal on the very first check.                */
+  function onEnterConfirmation() {
+    stopConfirmationPoll();
+    setConfirmationStatus("Campaign is being sent\u2026");
+    /* Poll immediately so an already sent/failed campaign advances */
+    /* without waiting a full interval.                            */
+    pollCampaignStatus();
+  }
+
+  /* Reset Step 4 state (Req 2.5 — wizard reset). */
+  function resetConfirmationState() {
+    stopConfirmationPoll();
+    setConfirmationStatus("Campaign is being sent\u2026");
+  }
+
+  /* ========================================================== */
+  /* STEP 5 — Delivery report (Requirement 8)                   */
+  /* ---------------------------------------------------------- */
+  /* On entry to Step 5 the report is fetched from               */
+  /* GET /api/campaigns/<campaignId>/report and rendered as      */
+  /* summary stats (total / sent / failed / pending) (Req 8.1)   */
+  /* plus a per-recipient status table showing name, masked      */
+  /* mobile (already masked by the backend), delivery status and */
+  /* a formatted timestamp (Req 8.2). While the report's         */
+  /* campaign status is "sending" the report auto-refreshes      */
+  /* every 5 seconds (Req 8.3); refreshing stops once the status */
+  /* reaches "sent"/"failed". The refresh timer is cancelled     */
+  /* when leaving Step 5 and on wizard reset so no stray timers  */
+  /* outlive the step.                                           */
+  /* ========================================================== */
+
+  /* The campaign is still actively sending — drives auto-refresh. */
+  function isSendingStatus(status) {
+    return status === "sending";
+  }
+
+  function setReportStatus(message) {
+    if (elRepStatus) {
+      elRepStatus.textContent = message || "";
+    }
+  }
+
+  function showReportError(message) {
+    if (!elRepError) {
+      return;
+    }
+    if (elRepErrorMsg && message) {
+      elRepErrorMsg.textContent = message;
+    }
+    elRepError.classList.remove("hidden");
+  }
+
+  function hideReportError() {
+    if (elRepError) {
+      elRepError.classList.add("hidden");
+    }
+  }
+
+  /* Cancel any pending auto-refresh. Safe to call repeatedly. */
+  function stopReportRefresh() {
+    if (reportRefreshTimer !== null) {
+      clearTimeout(reportRefreshTimer);
+      reportRefreshTimer = null;
+    }
+  }
+
+  /* Schedule the next 5s refresh (Req 8.3). */
+  function scheduleReportRefresh() {
+    stopReportRefresh();
+    reportRefreshTimer = setTimeout(function () {
+      reportRefreshTimer = null;
+      fetchReport();
+    }, REPORT_REFRESH_MS);
+  }
+
+  /* Human-friendly label for a delivery status. */
+  function statusLabel(status) {
+    if (status === "sent") {
+      return "Sent";
+    }
+    if (status === "failed") {
+      return "Failed";
+    }
+    if (status === "pending") {
+      return "Pending";
+    }
+    return status ? String(status) : "Pending";
+  }
+
+  /* Tailwind classes for the per-status pill. */
+  function statusPillClass(status) {
+    if (status === "sent") {
+      return "bg-emerald-100 text-emerald-700";
+    }
+    if (status === "failed") {
+      return "bg-red-100 text-red-700";
+    }
+    return "bg-amber-100 text-amber-700";
+  }
+
+  /* Format an ISO-8601 UTC timestamp for display. Falls back to  */
+  /* the raw value (or an em dash) if it cannot be parsed.        */
+  function formatTimestamp(iso) {
+    if (!iso) {
+      return "\u2014";
+    }
+    var date = new Date(iso);
+    if (isNaN(date.getTime())) {
+      return String(iso);
+    }
+    try {
+      return date.toLocaleString();
+    } catch (err) {
+      return String(iso);
+    }
+  }
+
+  /* Render the summary stat cards (Req 8.1). */
+  function renderReportStats(stats) {
+    var s = stats || {};
+    if (elRepTotal) {
+      elRepTotal.textContent = String(s.total != null ? s.total : 0);
+    }
+    if (elRepSent) {
+      elRepSent.textContent = String(s.sent != null ? s.sent : 0);
+    }
+    if (elRepFailed) {
+      elRepFailed.textContent = String(s.failed != null ? s.failed : 0);
+    }
+    if (elRepPending) {
+      elRepPending.textContent = String(
+        s.pending != null ? s.pending : 0
+      );
+    }
+  }
+
+  /* Render the per-recipient status table (Req 8.2). The mobile  */
+  /* is already masked by the backend, so it is displayed as-is.  */
+  function renderReportRows(recipients) {
+    if (!elRepRows) {
+      return;
+    }
+    var list = recipients || [];
+    if (!list.length) {
+      elRepRows.innerHTML =
+        '<tr><td colspan="4" class="px-4 py-10 text-center ' +
+        'text-slate-500">No recipients to display yet.</td></tr>';
+      return;
+    }
+
+    elRepRows.innerHTML = list
+      .map(function (recipient) {
+        var name = escapeHtml(recipient.name || "(no name)");
+        var mobile = escapeHtml(recipient.mobile || "\u2014");
+        var status = recipient.status || "pending";
+        var pill =
+          '<span class="inline-flex items-center rounded-full px-2 ' +
+          'py-0.5 text-xs font-medium ' +
+          statusPillClass(status) +
+          '">' +
+          escapeHtml(statusLabel(status)) +
+          "</span>";
+        var timestamp = escapeHtml(formatTimestamp(recipient.timestamp));
+        return (
+          "<tr>" +
+          '<td class="px-4 py-2.5 text-slate-800">' +
+          name +
+          "</td>" +
+          '<td class="px-4 py-2.5 text-slate-600 font-mono ' +
+          'whitespace-nowrap">' +
+          mobile +
+          "</td>" +
+          '<td class="px-4 py-2.5">' +
+          pill +
+          "</td>" +
+          '<td class="px-4 py-2.5 text-slate-500 whitespace-nowrap">' +
+          timestamp +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+  }
+
+  /* Fetch + render the delivery report once. While the campaign  */
+  /* status is "sending" this re-arms the 5s auto-refresh; once    */
+  /* terminal the refresh stops (Req 8.3).                        */
+  function fetchReport() {
+    var campaignId = window.CampaignWizard.campaignId;
+    if (!campaignId) {
+      setReportStatus("");
+      showReportError("No campaign to report on yet.");
+      return;
+    }
+    if (reportLoading) {
+      return;
+    }
+
+    /* Capture which campaign this fetch is for so a late response  */
+    /* after a reset/restart is ignored.                           */
+    var fetchCampaignId = campaignId;
+    reportLoading = true;
+    setReportStatus("Refreshing\u2026");
+
+    fetch("/api/campaigns/" + encodeURIComponent(campaignId) + "/report", {
+      credentials: "same-origin",
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("report " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        /* Ignore stale responses if the wizard moved on/reset.     */
+        if (
+          state.currentStep !== 5 ||
+          window.CampaignWizard.campaignId !== fetchCampaignId
+        ) {
+          return;
+        }
+
+        hideReportError();
+        renderReportStats(data && data.stats);
+        renderReportRows(data && data.recipients);
+
+        var status = (data && data.status) || "";
+        if (isSendingStatus(status)) {
+          /* Req 8.3: still sending — refresh again in 5 seconds.   */
+          setReportStatus("Sending\u2026 refreshing every 5s");
+          scheduleReportRefresh();
+        } else {
+          /* Terminal (sent/failed) — stop auto-refreshing.         */
+          stopReportRefresh();
+          setReportStatus(
+            status === "sent"
+              ? "Delivery complete"
+              : status === "failed"
+              ? "Delivery finished"
+              : ""
+          );
+        }
+      })
+      .catch(function () {
+        if (
+          state.currentStep !== 5 ||
+          window.CampaignWizard.campaignId !== fetchCampaignId
+        ) {
+          return;
+        }
+        setReportStatus("");
+        showReportError(
+          "Could not load the delivery report. Please try again."
+        );
+        /* Keep auto-refresh alive on transient errors so the report */
+        /* recovers on its own while the campaign is still sending.  */
+        scheduleReportRefresh();
+      })
+      .then(function () {
+        reportLoading = false;
+      });
+  }
+
+  /* Req 8.1/8.3: entering Step 5 loads the report and (if the     */
+  /* campaign is still sending) begins the 5s auto-refresh.        */
+  function onEnterReport() {
+    stopReportRefresh();
+    hideReportError();
+    fetchReport();
+  }
+
+  /* Reset Step 5 state (Req 2.5 — wizard reset). */
+  function resetReportState() {
+    stopReportRefresh();
+    reportLoading = false;
+    hideReportError();
+    setReportStatus("");
+    renderReportStats({ total: 0, sent: 0, failed: 0, pending: 0 });
+    if (elRepRows) {
+      elRepRows.innerHTML =
+        '<tr><td colspan="4" class="px-4 py-10 text-center ' +
+        'text-slate-500">Loading delivery report\u2026</td></tr>';
+    }
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Step show/hide — coordinated with the wizard convention     */
+  /* used by campaign-manager.js (.cm-wizard-step + the           */
+  /* #cm-wizard-steps indicator list). Extensible: later tasks    */
+  /* call showStep(n) to move between steps.                      */
+  /* ---------------------------------------------------------- */
+
+  function showStep(stepNumber) {
+    var target = String(stepNumber);
+    state.currentStep = Number(stepNumber);
+
+    var steps = document.querySelectorAll(".cm-wizard-step");
+    Array.prototype.forEach.call(steps, function (step) {
+      var isTarget =
+        step.getAttribute("data-wizard-step") === target;
+      step.classList.toggle("hidden", !isTarget);
+    });
+
+    var indicators = document.querySelectorAll(
+      "#cm-wizard-steps li[data-step-indicator]"
+    );
+    Array.prototype.forEach.call(indicators, function (indicator) {
+      var isTarget =
+        indicator.getAttribute("data-step-indicator") === target;
+      indicator.classList.toggle("font-medium", isTarget);
+      indicator.classList.toggle("text-slate-900", isTarget);
+    });
+
+    document.dispatchEvent(
+      new CustomEvent("cm:step-changed", {
+        detail: { step: Number(stepNumber) },
+      })
+    );
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Reset (Req 2.5) — clear Step 1 selections when the wizard    */
+  /* is reset by campaign-manager.js (tab re-activation).         */
+  /* ---------------------------------------------------------- */
+
+  function resetState() {
+    state.currentStep = 1;
+    state.recipients = [];
+    state.selectedIds = new Set();
+    state.filters = {
+      districts: [],
+      talukas: [],
+      surnameGroups: [],
+      areas: [],
+    };
+    state.selectedRecipients = [];
+    window.CampaignWizard.selectedRecipients = [];
+    window.CampaignWizard.audienceFilters = null;
+
+    /* Re-render filters to a pristine state. */
+    populateDistricts();
+    if (elTalukas) {
+      elTalukas.innerHTML =
+        '<p class="text-xs text-slate-400 p-1">Select a district first.</p>';
+      setGroupEnabled(elTalukas, false);
+    }
+    if (elAreas) {
+      elAreas.innerHTML =
+        '<p class="text-xs text-slate-400 p-1">Select a taluka first.</p>';
+      setGroupEnabled(elAreas, false);
+    }
+    fetchSurnameGroups();
+
+    if (elRecipients) {
+      elRecipients.innerHTML =
+        '<p class="px-4 py-10 text-center text-slate-500 text-sm">' +
+        "Apply filters to load matching recipients.</p>";
+    }
+    if (elSelectAll) {
+      elSelectAll.checked = false;
+      elSelectAll.indeterminate = false;
+    }
+    if (elApplyStatus) {
+      elApplyStatus.textContent = "";
+    }
+    updateSelectedCount();
+    clearError();
+
+    /* Clear Step 2 selection too (Req 2.5). */
+    resetTemplateState();
+
+    /* Clear Step 3 (payment) state too (Req 2.5). */
+    resetPaymentState();
+
+    /* Clear Step 4 (confirmation) state too (Req 2.5). */
+    resetConfirmationState();
+
+    /* Clear Step 5 (delivery report) state too (Req 2.5). */
+    resetReportState();
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Init                                                       */
+  /* ---------------------------------------------------------- */
+
+  function init() {
+    root = document.getElementById("cm-wizard-root");
+    if (!root) {
+      /* Wizard is not on this page. */
+      return;
+    }
+
+    elDistricts = el("cm-r-districts");
+    elTalukas = el("cm-r-talukas");
+    elSurnames = el("cm-r-surnames");
+    elAreas = el("cm-r-areas");
+    elApply = el("cm-r-apply");
+    elApplyStatus = el("cm-r-apply-status");
+    elSelectAll = el("cm-r-select-all");
+    elSelectedCount = el("cm-r-selected-count");
+    elRecipients = el("cm-r-recipients");
+    elError = el("cm-r-error");
+    elNext = el("cm-r-next");
+
+    /* Step 2 (template) elements. */
+    elTList = el("cm-t-list");
+    elTStatus = el("cm-t-status");
+    elTError = el("cm-t-error");
+    elTErrorMsg = el("cm-t-error-msg");
+    elTRetry = el("cm-t-retry");
+    elTBack = el("cm-t-back");
+    elTNext = el("cm-t-next");
+    elTNavError = el("cm-t-nav-error");
+
+    /* Step 3 (payment) elements. */
+    elPCount = el("cm-p-count");
+    elPTotal = el("cm-p-total");
+    elPSummary = el("cm-p-summary");
+    elPStatus = el("cm-p-status");
+    elPError = el("cm-p-error");
+    elPPay = el("cm-p-pay");
+    elPBack = el("cm-p-back");
+
+    /* Step 4 (confirmation / execution status) elements. */
+    elCStatus = el("cm-c-status");
+
+    /* Step 5 (delivery report) elements. */
+    elRepStatus = el("cm-rep-status");
+    elRepTotal = el("cm-rep-total");
+    elRepSent = el("cm-rep-sent");
+    elRepFailed = el("cm-rep-failed");
+    elRepPending = el("cm-rep-pending");
+    elRepError = el("cm-rep-error");
+    elRepErrorMsg = el("cm-rep-error-msg");
+    elRepRetry = el("cm-rep-retry");
+    elRepRows = el("cm-rep-rows");
+
+    populateDistricts();
+    fetchSurnameGroups();
+
+    if (elApply) {
+      elApply.addEventListener("click", applyFilters);
+    }
+    if (elSelectAll) {
+      elSelectAll.addEventListener("change", onSelectAllToggle);
+    }
+    if (elNext) {
+      elNext.addEventListener("click", goToStep2);
+    }
+
+    /* Step 2 wiring. */
+    if (elTRetry) {
+      elTRetry.addEventListener("click", function () {
+        fetchTemplates(true);
+      });
+    }
+    if (elTBack) {
+      elTBack.addEventListener("click", goBackToStep1);
+    }
+    if (elTNext) {
+      elTNext.addEventListener("click", goToStep3);
+    }
+
+    /* Step 3 (payment) wiring. */
+    if (elPPay) {
+      elPPay.addEventListener("click", startPayment);
+    }
+    if (elPBack) {
+      elPBack.addEventListener("click", function () {
+        clearPaymentError();
+        setPaymentStatus("");
+        showStep(2);
+      });
+    }
+
+    /* Step 5 (delivery report) wiring — manual retry. */
+    if (elRepRetry) {
+      elRepRetry.addEventListener("click", function () {
+        hideReportError();
+        fetchReport();
+      });
+    }
+    /* Lazy-load templates when Step 2 becomes active. */
+    document.addEventListener("cm:step-changed", onStepChanged);
+
+    /* Reset Step 1 when the wizard is reset (tab re-activation). */
+    document.addEventListener("cm:wizard-reset", resetState);
+
+    updateSelectedCount();
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Public API for later wizard tasks (10.2, 11.x).            */
+  /* ---------------------------------------------------------- */
+  window.CampaignWizard = window.CampaignWizard || {};
+  window.CampaignWizard.showStep = showStep;
+  window.CampaignWizard.getSelectedRecipients = getSelectedRecipients;
+  window.CampaignWizard.getState = function () {
+    return state;
+  };
+  /* Populated when the user advances past Step 1. */
+  window.CampaignWizard.selectedRecipients =
+    window.CampaignWizard.selectedRecipients || [];
+  window.CampaignWizard.audienceFilters =
+    window.CampaignWizard.audienceFilters || null;
+  /* Populated when the user selects a template in Step 2        */
+  /* (Req 4.3). Step 3 (payment) reads templateName +            */
+  /* templateLanguage + bodyVarsTemplate to build the campaign.  */
+  window.CampaignWizard.templateName =
+    window.CampaignWizard.templateName || "";
+  window.CampaignWizard.templateLanguage =
+    window.CampaignWizard.templateLanguage || "";
+  window.CampaignWizard.bodyVarsTemplate =
+    window.CampaignWizard.bodyVarsTemplate || [];
+  window.CampaignWizard.getSelectedTemplate = function () {
+    return state.selectedTemplate;
+  };
+  /* Populated when the user pays in Step 3 (Req 5.4). Steps 4    */
+  /* (confirmation/execution) and 5 (report) read this id to       */
+  /* poll campaign status and fetch the delivery report.          */
+  window.CampaignWizard.campaignId =
+    window.CampaignWizard.campaignId || null;
+
+  if (
+    document.readyState === "loading"
+  ) {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();

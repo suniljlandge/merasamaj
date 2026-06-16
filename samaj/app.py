@@ -3,6 +3,7 @@ import re
 import csv
 import io
 import secrets
+import functools
 from datetime import datetime, timedelta, timezone
 import bcrypt
 import requests
@@ -26,7 +27,23 @@ from .registration import (
     clean_text,
     normalize_relationship_links,
     normalize_phone,
+    normalize_public_mobile,
     validate_registration,
+    get_redirect_for_account,
+    normalize_account_type,
+    DEFAULT_ACCOUNT_TYPE,
+    ACCOUNT_TYPE_CAMPAIGNER,
+    ACCOUNT_TYPE_REGISTRANT,
+)
+from . import campaign
+from .campaign import (
+    get_hof_by_area,
+    get_areas_with_counts,
+    get_distinct_surname_groups,
+    get_ad_templates,
+    verify_razorpay_signature,
+    validate_campaign_status_transition,
+    PAYMENT_VERIFIED,
 )
 from .transliterate import (
     transliteration_suggestions,
@@ -177,6 +194,13 @@ def create_app(config=None, collection=None, correction_collection=None):
         ),
         OTP_TEST_MODE=env_flag("OTP_TEST_MODE"),
         OTP_FIXED_CODE=os.getenv("OTP_FIXED_CODE", "").strip(),
+        # Razorpay credentials for the Campaign Manager payment flow. Loaded
+        # from the environment at startup so the campaign module can read them
+        # from app config (with an env fallback). Overridable via the `config`
+        # argument for tests (Requirements 5.2, 6.1).
+        RAZORPAY_KEY_ID=os.getenv("RAZORPAY_KEY_ID", "").strip(),
+        RAZORPAY_KEY_SECRET=os.getenv("RAZORPAY_KEY_SECRET", "").strip(),
+        RAZORPAY_WEBHOOK_SECRET=os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip(),
     )
 
     if config:
@@ -321,6 +345,20 @@ def create_app(config=None, collection=None, correction_collection=None):
             initial_submission=serialize_self_registration(
                 latest_submission or {}
             ),
+        )
+
+    @app.route("/campaign-manager")
+    def campaign_manager_page():
+
+        # Only campaigner sessions may view the campaign manager. Any other
+        # visitor (unauthenticated, staff, or registrant) is sent to login
+        # (Requirements 1.5, 2.1).
+        if not is_campaigner_session():
+            return redirect("/login")
+
+        return render_template(
+            "campaign-manager.html",
+            current_role=current_role(),
         )
 
     @app.route("/otp-settings")
@@ -789,6 +827,134 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "super_admin": sorted(SUPER_ADMIN_LOCKED_CAPABILITIES),
             },
         })
+
+    @app.get("/api/public-accounts")
+    def list_public_accounts():
+        """List public (OTP-login) accounts for super-admin management.
+
+        Returns id, mobile number, account type, and status so the super-admin
+        dashboard can toggle an account between "registrant" and "campaigner".
+        """
+        if not role_can("manage_role_config"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        accounts = list(
+            get_public_accounts_collection()
+            .find({})
+            .sort("updatedAt", -1)
+        )
+
+        return jsonify({
+            "accounts": [
+                serialize_public_account(account)
+                for account in accounts
+            ]
+        })
+
+    @app.put("/api/public-accounts/<account_id>/account-type")
+    def set_public_account_type(account_id):
+        """Set a public account's accountType (campaigner | registrant).
+
+        Super-admin only. This is how a member's account is promoted to a
+        campaigner so they are routed to /campaign-manager on next login.
+        """
+        if not role_can("manage_role_config"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        payload = request.get_json(silent=True) or {}
+        requested = clean_text(payload.get("accountType")).lower()
+
+        if requested not in (
+            ACCOUNT_TYPE_CAMPAIGNER,
+            ACCOUNT_TYPE_REGISTRANT,
+        ):
+            return jsonify({
+                "error": (
+                    "accountType must be 'campaigner' or 'registrant'."
+                )
+            }), 400
+
+        account_object_id = object_id_or_none(account_id)
+        if account_object_id is None:
+            return jsonify({"error": "Invalid account id."}), 400
+
+        public_accounts = get_public_accounts_collection()
+        account = public_accounts.find_one({"_id": account_object_id})
+
+        if not account:
+            return jsonify({"error": "Account not found."}), 404
+
+        account_type = normalize_account_type(requested)
+        public_accounts.update_one(
+            {"_id": account_object_id},
+            {
+                "$set": {
+                    "accountType": account_type,
+                    "updatedAt": now_utc(),
+                }
+            },
+        )
+        account["accountType"] = account_type
+
+        return jsonify({
+            "ok": True,
+            "account": serialize_public_account(account),
+        })
+
+    @app.get("/api/public-signup-settings")
+    def get_public_signup_settings():
+        """Return the global default account type for new mobile signups."""
+        if not role_can("manage_role_config"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        return jsonify({
+            "defaultAccountType": read_default_account_type(
+                get_settings_collection()
+            )
+        })
+
+    @app.put("/api/public-signup-settings")
+    def update_public_signup_settings():
+        """Set the global default account type applied to all future first-time
+        mobile logins (super-admin only). When set to "campaigner", every new
+        OTP signup becomes a campaigner; when "registrant", a self-registration
+        user."""
+        if not role_can("manage_role_config"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        payload = request.get_json(silent=True) or {}
+        requested = clean_text(payload.get("defaultAccountType")).lower()
+
+        if requested not in (
+            ACCOUNT_TYPE_CAMPAIGNER,
+            ACCOUNT_TYPE_REGISTRANT,
+        ):
+            return jsonify({
+                "error": (
+                    "defaultAccountType must be 'campaigner' or 'registrant'."
+                )
+            }), 400
+
+        account_type = normalize_account_type(requested)
+        settings_collection = get_settings_collection()
+        existing = settings_collection.find_one(
+            {"key": PUBLIC_SIGNUP_SETTINGS_KEY}
+        )
+        doc = {
+            "key": PUBLIC_SIGNUP_SETTINGS_KEY,
+            "defaultAccountType": account_type,
+            "updatedAt": now_utc(),
+            "updatedBy": session.get("username", ""),
+        }
+        if existing:
+            settings_collection.update_one(
+                {"key": PUBLIC_SIGNUP_SETTINGS_KEY},
+                {"$set": doc},
+            )
+        else:
+            settings_collection.insert_one(doc)
+
+        return jsonify({"ok": True, "defaultAccountType": account_type})
 
     @app.put("/api/role-config")
     def update_role_config():
@@ -1396,7 +1562,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             request.get_json(silent=True)
             or {}
         )
-        mobile_number = normalize_phone(
+        mobile_number = normalize_public_mobile(
             payload.get("mobileNumber")
         )
 
@@ -1404,6 +1570,30 @@ def create_app(config=None, collection=None, correction_collection=None):
             return jsonify({
                 "error": "Mobile number required"
             }), 400
+
+        # Server-side rate limiting: block back-to-back OTP requests for the
+        # same number until the previous challenge's resend window elapses.
+        otp_collection = get_public_otp_collection()
+        existing_challenge = otp_collection.find_one({
+            "mobileNumber": mobile_number
+        })
+        now = now_utc()
+        if existing_challenge and not existing_challenge.get("verifiedAt"):
+            resend_available_at = as_utc_datetime(
+                existing_challenge.get("resendAvailableAt")
+            )
+            if resend_available_at and now < resend_available_at:
+                retry_after = max(
+                    1,
+                    int((resend_available_at - now).total_seconds()) + 1,
+                )
+                return jsonify({
+                    "error": (
+                        "Please wait " + str(retry_after)
+                        + " seconds before requesting another OTP."
+                    ),
+                    "retryAfterSeconds": retry_after,
+                }), 429
 
         settings_collection = (
             get_settings_collection()
@@ -1505,6 +1695,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             "ok": True,
             "mobileNumber": mobile_number,
             "provider": provider_result["provider"],
+            "resendAvailableInSeconds": OTP_RESEND_SECONDS,
         }
 
         if app.config.get(
@@ -1521,7 +1712,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             request.get_json(silent=True)
             or {}
         )
-        mobile_number = normalize_phone(
+        mobile_number = normalize_public_mobile(
             payload.get("mobileNumber")
         )
         otp_collection = (
@@ -1545,8 +1736,16 @@ def create_app(config=None, collection=None, correction_collection=None):
             resend_available_at
             and now < resend_available_at
         ):
+            retry_after = max(
+                1,
+                int((resend_available_at - now).total_seconds()) + 1,
+            )
             return jsonify({
-                "error": "Please wait before resending OTP"
+                "error": (
+                    "Please wait " + str(retry_after)
+                    + " seconds before resending OTP."
+                ),
+                "retryAfterSeconds": retry_after,
             }), 429
 
         settings_collection = (
@@ -1599,7 +1798,8 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         response = {
-            "ok": True
+            "ok": True,
+            "resendAvailableInSeconds": OTP_RESEND_SECONDS,
         }
 
         if app.config.get(
@@ -1616,7 +1816,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             request.get_json(silent=True)
             or {}
         )
-        mobile_number = normalize_phone(
+        mobile_number = normalize_public_mobile(
             payload.get("mobileNumber")
         )
         provided_otp = clean_text(
@@ -1677,13 +1877,17 @@ def create_app(config=None, collection=None, correction_collection=None):
         public_accounts = (
             get_public_accounts_collection()
         )
-        account = public_accounts.find_one({
-            "mobileNumber": mobile_number
-        })
+        account = find_public_account_by_mobile(
+            public_accounts,
+            mobile_number,
+        )
 
         if not account:
             account = {
                 "mobileNumber": mobile_number,
+                "accountType": read_default_account_type(
+                    get_settings_collection()
+                ),
                 "status": "pending",
                 "approvedRegistrationId": "",
                 "latestSubmissionId": "",
@@ -1731,11 +1935,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             "account": serialize_public_account(
                 account
             ),
-            "redirectTo": (
-                "/directory"
-                if account.get("status") == "approved"
-                else "/self-register"
-            ),
+            "redirectTo": get_redirect_for_account(account),
         })
 
     @app.get("/api/otp-settings")
@@ -2047,6 +2247,13 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Forbidden"
             }), 403
 
+        # Registrant-only endpoint: campaigner sessions are denied
+        # (Requirements 1.7, 11.3).
+        if is_campaigner_session():
+            return jsonify({
+                "error": "Campaigners cannot access self-registrations."
+            }), 403
+
         account_id = ensure_object_id(
             session["public_account_id"]
         )
@@ -2095,6 +2302,14 @@ def create_app(config=None, collection=None, correction_collection=None):
         if not is_public_session():
             return jsonify({
                 "error": "Forbidden"
+            }), 403
+
+        # Self-registration submission is a registrant-only endpoint. A
+        # campaigner session must not be able to submit registrations
+        # (Requirements 1.7, 11.3).
+        if is_campaigner_session():
+            return jsonify({
+                "error": "Campaigners cannot submit self-registrations."
             }), 403
 
         payload = (
@@ -3149,6 +3364,430 @@ def create_app(config=None, collection=None, correction_collection=None):
             "suggestions": suggestions[:8]
         })
 
+    # ---- Campaign Manager API routes ----
+
+    @app.get("/api/campaigns/audience-preview")
+    @require_campaigner
+    def campaign_audience_preview():
+        """Return HOF recipients matching cascading area filters for Step 1 of
+        the campaign wizard. Accepts comma-separated district, taluka,
+        surnameGroup, and area query params; area is applied as a post-query
+        filter inside get_hof_by_area (Requirements 3.1, 3.5, 3.6, 3.7)."""
+
+        def parse_csv_param(*names):
+            for name in names:
+                raw = request.args.get(name)
+                if raw:
+                    values = [part.strip() for part in raw.split(",")]
+                    values = [value for value in values if value]
+                    if values:
+                        return values
+            return None
+
+        filters = {
+            "districts": parse_csv_param("district", "districts"),
+            "talukas": parse_csv_param("taluka", "talukas"),
+            "surnameGroups": parse_csv_param("surnameGroup", "surnameGroups"),
+            "areas": parse_csv_param("area", "areas"),
+        }
+
+        recipients = get_hof_by_area(filters, get_collection())
+
+        # Privacy hardening: never send full mobile numbers to the browser.
+        # The wizard selects recipients by registrationId and the server
+        # re-resolves the full numbers at campaign-creation time. Only a masked
+        # number (last 4 digits) is exposed for display.
+        safe_recipients = [
+            {
+                "_id": recipient.get("_id", ""),
+                "registrationId": recipient.get("_id", ""),
+                "name": recipient.get("name", ""),
+                "mobileMasked": campaign.mask_mobile(
+                    recipient.get("mobileNumber", "")
+                ),
+                "district": recipient.get("district", ""),
+                "taluka": recipient.get("taluka", ""),
+                "surnameGroup": recipient.get("surnameGroup", ""),
+                "area": recipient.get("area", ""),
+            }
+            for recipient in recipients
+        ]
+
+        return jsonify({
+            "recipients": safe_recipients,
+            "count": len(safe_recipients),
+        })
+
+    @app.get("/api/campaigns/areas")
+    @require_campaigner
+    def campaign_areas():
+        """Return available area names with family counts for the Area filter
+        dropdown in Step 1 of the campaign wizard. Accepts comma-separated
+        district and taluka query params (singular or plural names); areas are
+        computed on-the-fly via classify_area inside get_areas_with_counts
+        (Requirements 3.3, 3.4)."""
+
+        def parse_csv_param(*names):
+            for name in names:
+                raw = request.args.get(name)
+                if raw:
+                    values = [part.strip() for part in raw.split(",")]
+                    values = [value for value in values if value]
+                    if values:
+                        return values
+            return None
+
+        filters = {
+            "districts": parse_csv_param("district", "districts"),
+            "talukas": parse_csv_param("taluka", "talukas"),
+        }
+
+        areas = get_areas_with_counts(filters, get_collection())
+
+        return jsonify({
+            "areas": areas,
+        })
+
+    @app.get("/api/campaigns/surname-groups")
+    @require_campaigner
+    def campaign_surname_groups():
+        """Return distinct surname group values for the Surname Group filter
+        dropdown in Step 1 of the campaign wizard. Accepts comma-separated
+        district and taluka query params (singular or plural names); values are
+        title-cased and sorted inside get_distinct_surname_groups
+        (Requirement 3.1)."""
+
+        def parse_csv_param(*names):
+            for name in names:
+                raw = request.args.get(name)
+                if raw:
+                    values = [part.strip() for part in raw.split(",")]
+                    values = [value for value in values if value]
+                    if values:
+                        return values
+            return None
+
+        filters = {
+            "districts": parse_csv_param("district", "districts"),
+            "talukas": parse_csv_param("taluka", "talukas"),
+        }
+
+        surname_groups = get_distinct_surname_groups(filters, get_collection())
+
+        return jsonify({
+            "surnameGroups": surname_groups,
+        })
+
+    @app.get("/api/campaigns/templates")
+    @require_campaigner
+    def campaign_templates():
+        """Return the list of available WhatsApp ad templates for Step 2 of the
+        campaign wizard. Each template exposes its name, language, and a body
+        text preview with placeholder indicators like {name}
+        (Requirements 4.1, 4.2)."""
+
+        return jsonify({
+            "templates": get_ad_templates(),
+        })
+
+    @app.post("/api/campaigns/create-with-payment")
+    @require_campaigner
+    def create_campaign_with_payment_route():
+        """Create a campaign and its Razorpay order in one step for Step 3 of
+        the campaign wizard.
+
+        Parses the selected recipient registration ids, template selection,
+        body variable template, and the audience filters used during selection
+        from the JSON body, then delegates to
+        campaign.create_campaign_with_payment() using the authenticated
+        campaigner's account id from the session.
+
+        Privacy hardening: the browser sends only registration ids
+        ("registrationIds"). The full mobile numbers are re-resolved here,
+        server-side, from the registrations collection so they never need to
+        leave the server. A legacy "recipients" array is still accepted (ids
+        are extracted from it) for backward compatibility.
+
+        On success returns {campaignId, razorpayOrderId, amount, razorpayKey}.
+        An empty recipients list yields a 400 (Requirement 9.4). A Razorpay
+        API/network failure yields a 500 without leaving a campaign or payment
+        record behind (Requirement 14.1).
+
+        Requirements: 5.2, 14.1
+        """
+        payload = request.get_json(silent=True) or {}
+
+        registration_ids = payload.get("registrationIds")
+        if not registration_ids:
+            # Backward compatibility: derive ids from a legacy recipients array.
+            legacy_recipients = payload.get("recipients") or []
+            registration_ids = [
+                (item.get("registrationId") or item.get("_id"))
+                for item in legacy_recipients
+                if isinstance(item, dict)
+                and (item.get("registrationId") or item.get("_id"))
+            ]
+
+        template_name = payload.get("templateName")
+        template_language = payload.get("templateLanguage")
+        body_vars_template = payload.get("bodyVarsTemplate") or []
+        audience_filters = payload.get("audienceFilters") or {}
+
+        # Re-resolve full recipient records (incl. mobile numbers) server-side
+        # from the selected registration ids.
+        recipients = campaign.resolve_recipients_by_ids(
+            registration_ids, get_collection()
+        )
+
+        account_id = session.get("public_account_id", "")
+
+        # Clear, actionable error when Razorpay keys are not configured, rather
+        # than a generic 500 from an "Authentication failed" SDK error.
+        if not campaign.razorpay_is_configured():
+            current_app.logger.error(
+                "Razorpay credentials are not configured "
+                "(RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)."
+            )
+            return jsonify({
+                "error": (
+                    "Payments are not configured on the server. Please set the "
+                    "Razorpay API keys and try again."
+                )
+            }), 503
+
+        try:
+            result = campaign.create_campaign_with_payment(
+                account_id=account_id,
+                recipients=recipients,
+                template_name=template_name,
+                template_language=template_language,
+                body_vars_template=body_vars_template,
+                audience_filters=audience_filters,
+            )
+        except ValueError as exc:
+            # Validation failure, e.g. empty recipients list (Requirement 9.4).
+            return jsonify({"error": str(exc)}), 400
+        except Exception:
+            # Razorpay order creation failed due to a network or API error.
+            # No campaign document or payment record is created (Requirement 14.1).
+            current_app.logger.exception(
+                "create_campaign_with_payment failed for account %s", account_id
+            )
+            return jsonify({
+                "error": "Unable to initialize payment. Please try again."
+            }), 500
+
+        return jsonify(result)
+
+    @app.get("/api/campaigns")
+    @require_campaigner
+    def list_campaigns():
+        """Return all campaigns belonging to the authenticated campaigner.
+
+        Campaigns are filtered by accountId matching the campaigner's
+        public_account_id stored in the session. accountId is persisted as an
+        ObjectId, so the session id is coerced via ensure_object_id
+        (Requirement 8.4)."""
+
+        account_object_id = ensure_object_id(
+            session.get("public_account_id", "")
+        )
+
+        campaigns = list(
+            get_campaigns_collection()
+            .find({"accountId": account_object_id})
+            .sort("createdAt", -1)
+        )
+
+        return jsonify({
+            "campaigns": [serialize_document(campaign) for campaign in campaigns],
+        })
+
+    @app.get("/api/campaigns/<campaign_id>")
+    @require_campaigner
+    def get_campaign(campaign_id):
+        """Return a single campaign's details (status, stats, recipients) for the
+        authenticated campaigner. Responds 404 if the campaign does not exist or
+        does not belong to the current campaigner (Requirement 8.4)."""
+
+        account_object_id = ensure_object_id(
+            session.get("public_account_id", "")
+        )
+
+        campaign_object_id = object_id_or_none(campaign_id)
+        if campaign_object_id is None:
+            return jsonify({"error": "Campaign not found."}), 404
+
+        campaign = get_campaigns_collection().find_one({
+            "_id": campaign_object_id,
+            "accountId": account_object_id,
+        })
+
+        if campaign is None:
+            return jsonify({"error": "Campaign not found."}), 404
+
+        return jsonify({
+            "campaign": serialize_document(campaign),
+        })
+
+    @app.post("/api/campaigns/<campaign_id>/verify-payment")
+    @require_campaigner
+    def verify_payment(campaign_id):
+        """Verify a Razorpay payment signature for the given campaign (Step 3 of
+        the campaign wizard).
+
+        Expects a JSON body with razorpay_payment_id, razorpay_order_id, and
+        razorpay_signature. On a valid signature the campaign transitions
+        pending_payment -> payment_verified and the linked payment record is
+        marked "attempted". On an invalid signature the campaign is left in
+        pending_payment and a 400 is returned (Requirements 5.5, 5.6, 5.7, 14.5).
+        """
+
+        account_object_id = ensure_object_id(
+            session.get("public_account_id", "")
+        )
+
+        campaign_object_id = object_id_or_none(campaign_id)
+        if campaign_object_id is None:
+            return jsonify({"error": "Campaign not found."}), 404
+
+        campaigns = get_campaigns_collection()
+        campaign = campaigns.find_one({
+            "_id": campaign_object_id,
+            "accountId": account_object_id,
+        })
+
+        if campaign is None:
+            return jsonify({"error": "Campaign not found."}), 404
+
+        payload = request.get_json(silent=True) or {}
+        payment_id = (payload.get("razorpay_payment_id") or "").strip()
+        order_id = (payload.get("razorpay_order_id") or "").strip()
+        signature = (payload.get("razorpay_signature") or "").strip()
+
+        is_valid = verify_razorpay_signature(order_id, payment_id, signature)
+
+        if not is_valid:
+            # Keep the campaign in pending_payment and log the failure.
+            app.logger.warning(
+                "Razorpay signature verification failed for campaign %s "
+                "(order_id=%s)",
+                campaign_id,
+                order_id or "<missing>",
+            )
+            return jsonify({
+                "verified": False,
+                "error": "Payment signature verification failed.",
+            }), 400
+
+        # Enforce the campaign state machine for the status change.
+        current_status = campaign.get("status")
+        transition = validate_campaign_status_transition(
+            current_status, PAYMENT_VERIFIED
+        )
+        if not transition["valid"]:
+            return jsonify({
+                "verified": False,
+                "error": transition["error"],
+            }), 400
+
+        now = now_utc()
+
+        campaigns.update_one(
+            {"_id": campaign_object_id},
+            {"$set": {"status": PAYMENT_VERIFIED, "updatedAt": now}},
+        )
+
+        # Mark the linked payment record as "attempted" and persist the
+        # Razorpay identifiers from the client-side verification. The payment
+        # record is linked to the campaign via its campaignId field.
+        payments = get_campaign_payments_collection()
+        payments.update_one(
+            {"campaignId": campaign_object_id},
+            {"$set": {
+                "status": "attempted",
+                "razorpayPaymentId": payment_id,
+                "razorpaySignature": signature,
+                "updatedAt": now,
+            }},
+        )
+
+        return jsonify({
+            "verified": True,
+            "status": PAYMENT_VERIFIED,
+        })
+
+    @app.get("/api/campaigns/<campaign_id>/report")
+    @require_campaigner
+    def campaign_report(campaign_id):
+        """Return the delivery report for a campaign (Step 5 of the wizard).
+
+        Aggregates the campaign_message records into summary statistics
+        (total, sent, failed, pending) and a per-recipient status list with
+        masked mobile numbers (last 4 digits only) and UTC delivery-attempt
+        timestamps.
+
+        The campaign must belong to the authenticated campaigner: the lookup is
+        scoped by accountId so a campaigner can never view another campaigner's
+        report. Responds 404 if the campaign does not exist or is not owned by
+        the current campaigner (Requirements 8.1, 8.2, 8.4).
+        """
+
+        account_object_id = ensure_object_id(
+            session.get("public_account_id", "")
+        )
+
+        campaign_object_id = object_id_or_none(campaign_id)
+        if campaign_object_id is None:
+            return jsonify({"error": "Campaign not found."}), 404
+
+        campaign_doc = get_campaigns_collection().find_one({
+            "_id": campaign_object_id,
+            "accountId": account_object_id,
+        })
+
+        if campaign_doc is None:
+            return jsonify({"error": "Campaign not found."}), 404
+
+        report = campaign.build_campaign_report(
+            campaign_doc, campaign.get_campaign_messages_collection()
+        )
+
+        return jsonify({
+            "campaignId": str(campaign_object_id),
+            "status": campaign_doc.get("status"),
+            "stats": report["stats"],
+            "recipients": report["recipients"],
+        })
+
+    @app.post("/api/webhooks/razorpay")
+    def razorpay_webhook():
+        """Razorpay payment webhook endpoint.
+
+        This endpoint is intentionally public: Razorpay calls it directly, so
+        it has no session protection. Authenticity is established by verifying
+        the X-Razorpay-Signature header against the raw request body using the
+        configured webhook secret inside process_razorpay_webhook.
+
+        The raw request body bytes must be passed through unmodified because the
+        HMAC-SHA256 signature is computed over those exact bytes. The handler
+        returns 200 on success (including idempotent/ignored events and unknown
+        order ids) and 400 only when the signature is invalid
+        (Requirements 6.1, 6.2, 6.3).
+        """
+
+        raw_body = request.get_data()
+        signature = request.headers.get("X-Razorpay-Signature", "")
+
+        result = campaign.process_razorpay_webhook(raw_body, signature)
+
+        status_code = result.get("status", 200 if result.get("ok") else 400)
+
+        return jsonify({
+            "ok": result.get("ok", False),
+            "reason": result.get("reason"),
+        }), status_code
+
     def close_mongo():
         client = app.extensions.get("mongo_client")
 
@@ -3216,6 +3855,22 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         return database["app_settings"]
 
+    def get_campaigns_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["campaigns"]
+
+    def get_campaign_payments_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["campaign_payments"]
+
     def _ensure_mongo_collections():
         (
             client,
@@ -3238,6 +3893,8 @@ def create_app(config=None, collection=None, correction_collection=None):
     app.get_public_otp_collection = get_public_otp_collection
     app.get_self_registrations_collection = get_self_registrations_collection
     app.get_settings_collection = get_settings_collection
+    app.get_campaigns_collection = get_campaigns_collection
+    app.get_campaign_payments_collection = get_campaign_payments_collection
     app.close_mongo = close_mongo
 
     return app
@@ -3695,9 +4352,40 @@ def is_pending_public_session():
     )
 
 
+def is_campaigner_session():
+    """Return True when the current session is a public session whose stored
+    accountType is "campaigner". Account type is read from the session value
+    set at login time (Requirement 11.4)."""
+    return (
+        is_public_session()
+        and session.get("accountType") == ACCOUNT_TYPE_CAMPAIGNER
+    )
+
+
+def require_campaigner(view):
+    """Decorator that restricts a view to campaigner sessions. Any non-campaigner
+    session (unauthenticated, staff, or registrant) receives a 403 JSON error
+    (Requirements 1.6, 11.1, 11.2)."""
+    @functools.wraps(view)
+    def wrapper(*args, **kwargs):
+        if not is_campaigner_session():
+            return jsonify({
+                "error": "Campaigner access required."
+            }), 403
+        return view(*args, **kwargs)
+
+    return wrapper
+
+
 def can_access_directory():
     if not require_auth():
         return False
+
+    # Campaigners get read-only access to the Member Directory tab of the
+    # campaign manager, even though their account status is not "approved"
+    # (Requirements 2.2, 11.1).
+    if is_campaigner_session():
+        return True
 
     if is_pending_public_session():
         return False
@@ -5171,6 +5859,28 @@ OTP_EXPIRY_MINUTES = 5
 OTP_RESEND_SECONDS = 30
 OTP_MAX_ATTEMPTS = 5
 
+# Settings key + default for the global "new mobile account" type. When a user
+# logs in via OTP for the first time (no existing public_account), the new
+# account is created with this account type. A super admin can toggle it
+# between "registrant" (self-registration) and "campaigner".
+PUBLIC_SIGNUP_SETTINGS_KEY = "public_signup_settings"
+
+
+def read_default_account_type(settings_collection):
+    """Return the configured default account type for new mobile signups.
+
+    Reads the PUBLIC_SIGNUP_SETTINGS_KEY document and normalizes the stored
+    value, defaulting to "registrant" when unset or unrecognized.
+    """
+    try:
+        doc = (
+            settings_collection.find_one({"key": PUBLIC_SIGNUP_SETTINGS_KEY})
+            or {}
+        )
+    except Exception:
+        doc = {}
+    return normalize_account_type(doc.get("defaultAccountType"))
+
 
 def default_otp_settings(test_mode=False):
     active_provider = (
@@ -5274,11 +5984,53 @@ def is_mobile_login_enabled(existing_settings, test_mode=False):
     return settings.get("activeProvider") != OTP_PROVIDER_DISABLED
 
 
+def find_public_account_by_mobile(public_accounts, mobile_10):
+    """Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+
+    Older accounts may have been stored with a "+91" / "91" / "0091" / leading
+    "0" prefixed mobile number. We try the canonical 10-digit form first, then
+    fall back to known legacy variants. When a match is found under a legacy
+    format, the stored mobileNumber is rewritten to the 10-digit form so future
+    lookups (and campaigner routing) are stable.
+
+    Returns the account document (with its mobileNumber normalized to 10 digits)
+    or None.
+    """
+    if not mobile_10:
+        return None
+
+    account = public_accounts.find_one({"mobileNumber": mobile_10})
+    if account:
+        return account
+
+    legacy_candidates = [
+        f"+91{mobile_10}",
+        f"91{mobile_10}",
+        f"0091{mobile_10}",
+        f"0{mobile_10}",
+    ]
+    account = public_accounts.find_one(
+        {"mobileNumber": {"$in": legacy_candidates}}
+    )
+    if account:
+        public_accounts.update_one(
+            {"_id": account["_id"]},
+            {"$set": {"mobileNumber": mobile_10}},
+        )
+        account["mobileNumber"] = mobile_10
+
+    return account
+
+
 def serialize_public_account(account):
     serialized = serialize_document(account)
     return {
         "id": serialized.get("_id", ""),
         "mobileNumber": serialized.get("mobileNumber", ""),
+        "accountType": serialized.get(
+            "accountType",
+            DEFAULT_ACCOUNT_TYPE,
+        ),
         "status": serialized.get("status", "pending"),
         "approvedRegistrationId": serialized.get(
             "approvedRegistrationId",
@@ -5417,6 +6169,9 @@ def build_public_session(account):
     session["public_account_id"] = str(account["_id"])
     session["public_mobile"] = account["mobileNumber"]
     session["public_status"] = account.get("status", "pending")
+    session["accountType"] = (
+        account.get("accountType") or DEFAULT_ACCOUNT_TYPE
+    )
     session["role"] = (
         "viewer"
         if account.get("status") == "approved"

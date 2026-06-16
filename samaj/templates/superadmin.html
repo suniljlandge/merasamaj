@@ -49,6 +49,79 @@
         </div>
       </section>
 
+      <!-- New mobile account default -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Access</p>
+            <h2>New account default</h2>
+            <p>
+              Choose what a brand-new mobile (OTP) login becomes by default.
+              When set to "Campaigner", anyone logging in for the first time is
+              created as a campaigner and routed to the Campaign Manager;
+              otherwise they become a self-registration user. Existing accounts
+              are unaffected — use the table below to change individual ones.
+            </p>
+          </div>
+        </div>
+
+        <div class="form-surface">
+          <label class="field" style="max-width:320px;">
+            <span>Default for new logins</span>
+            <select id="signup-default-type">
+              <option value="registrant">Self-registration user</option>
+              <option value="campaigner">Campaigner</option>
+            </select>
+          </label>
+          <div class="form-actions" style="margin-top:12px;">
+            <button class="button-primary" type="button" id="save-signup-default-btn">
+              Save default
+            </button>
+            <span id="signup-default-status" style="margin-left:12px;"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Public account types -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Access</p>
+            <h2>Public account types</h2>
+            <p>
+              Promote a member's mobile-login account to a "Campaigner" so they
+              are routed to the Campaign Manager on their next login, or switch
+              it back to a regular registrant. Accounts appear here after the
+              member logs in via OTP at least once.
+            </p>
+          </div>
+        </div>
+
+        <div class="form-surface">
+          <label class="field" style="max-width:320px;">
+            <span>Search by mobile number</span>
+            <input id="public-accounts-search" placeholder="e.g. 9876543210">
+          </label>
+        </div>
+
+        <div class="directory-table-wrapper">
+          <table class="directory-table" id="public-accounts-table">
+            <thead>
+              <tr>
+                <th>Mobile number</th>
+                <th>Account type</th>
+                <th>Status</th>
+                <th style="text-align:right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="public-accounts-body">
+              <tr><td colspan="4">Loading accounts...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <span id="public-accounts-status" style="margin-left:4px;"></span>
+      </section>
+
       <!-- Limits -->
       <section class="directory-search-card">
         <div class="directory-table-header">
@@ -58,7 +131,6 @@
             <p>Adjust system-wide limits applied across all roles.</p>
           </div>
         </div>
-
         <div class="form-surface">
           <div class="field-grid" id="limits-grid"></div>
           <div class="form-actions">

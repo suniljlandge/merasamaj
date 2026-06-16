@@ -20,6 +20,8 @@ function initialize() {
   loadRoleConfig();
   loadExportFilters();
   loadExportColumns();
+  loadPublicAccounts();
+  loadSignupDefault();
 
   if (saveConfigBtn) {
     saveConfigBtn.addEventListener("click", saveRoleConfig);
@@ -30,6 +32,18 @@ function initialize() {
   const saveExportColsBtn = document.querySelector("#save-export-cols-btn");
   if (saveExportColsBtn) {
     saveExportColsBtn.addEventListener("click", saveExportColumns);
+  }
+  const publicAccountsSearch = document.querySelector(
+    "#public-accounts-search"
+  );
+  if (publicAccountsSearch) {
+    publicAccountsSearch.addEventListener("input", renderPublicAccounts);
+  }
+  const saveSignupDefaultBtn = document.querySelector(
+    "#save-signup-default-btn"
+  );
+  if (saveSignupDefaultBtn) {
+    saveSignupDefaultBtn.addEventListener("click", saveSignupDefault);
   }
 }
 
@@ -446,4 +460,167 @@ function escapeHtml(value) {
 
 function escapeHtmlAttribute(value) {
   return escapeHtml(value).replace(/"/g, "&quot;");
+}
+
+// ---------------------------------------------------------------------------
+// Public account types (promote/demote campaigner accounts)
+// ---------------------------------------------------------------------------
+
+let publicAccountsState = [];
+
+// Parse a fetch response as JSON, raising a clear message when the server
+// returned HTML instead (e.g. a 404/redirect page when the route is missing
+// or the session expired) so callers never surface the cryptic
+// "Unexpected token '<'" JSON parse error.
+async function readJsonOrThrow(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Your session expired. Please sign in again.");
+    }
+    if (response.status === 404) {
+      throw new Error(
+        "Endpoint not found. The server may need to be restarted to load " +
+          "the latest changes."
+      );
+    }
+    throw new Error(`Unexpected server response (HTTP ${response.status}).`);
+  }
+  return response.json();
+}
+
+async function loadPublicAccounts() {
+  const body = document.querySelector("#public-accounts-body");
+  if (!body) return;
+  try {
+    const response = await fetch("/api/public-accounts");
+    const payload = await readJsonOrThrow(response);
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to load accounts.");
+    }
+    publicAccountsState = payload.accounts || [];
+    renderPublicAccounts();
+  } catch (error) {
+    body.innerHTML = `<tr><td colspan="4">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+
+function renderPublicAccounts() {
+  const body = document.querySelector("#public-accounts-body");
+  if (!body) return;
+
+  const searchInput = document.querySelector("#public-accounts-search");
+  const term = (searchInput ? searchInput.value : "").trim().toLowerCase();
+  const accounts = term
+    ? publicAccountsState.filter((account) =>
+        String(account.mobileNumber || "").toLowerCase().includes(term)
+      )
+    : publicAccountsState;
+
+  if (!accounts.length) {
+    body.innerHTML = `<tr><td colspan="4">No accounts found.</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = accounts
+    .map((account) => {
+      const isCampaigner = account.accountType === "campaigner";
+      const nextType = isCampaigner ? "registrant" : "campaigner";
+      const buttonLabel = isCampaigner
+        ? "Make registrant"
+        : "Make campaigner";
+      const typeLabel = isCampaigner ? "Campaigner" : "Registrant";
+      return `
+        <tr>
+          <td>${escapeHtml(account.mobileNumber)}</td>
+          <td>${escapeHtml(typeLabel)}</td>
+          <td>${escapeHtml(account.status || "")}</td>
+          <td style="text-align:right;">
+            <button
+              type="button"
+              class="button-ghost"
+              data-account-id="${escapeHtmlAttribute(account.id)}"
+              data-next-type="${escapeHtmlAttribute(nextType)}"
+            >
+              ${escapeHtml(buttonLabel)}
+            </button>
+          </td>
+        </tr>`;
+    })
+    .join("");
+
+  body.querySelectorAll("button[data-account-id]").forEach((button) => {
+    button.addEventListener("click", () =>
+      setAccountType(button.dataset.accountId, button.dataset.nextType)
+    );
+  });
+}
+
+async function setAccountType(accountId, accountType) {
+  const status = document.querySelector("#public-accounts-status");
+  if (status) status.textContent = "Updating...";
+  try {
+    const response = await fetch(
+      `/api/public-accounts/${accountId}/account-type`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountType }),
+      }
+    );
+    const payload = await readJsonOrThrow(response);
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to update account.");
+    }
+    const updated = payload.account;
+    publicAccountsState = publicAccountsState.map((account) =>
+      account.id === updated.id ? updated : account
+    );
+    renderPublicAccounts();
+    if (status) status.textContent = "Saved.";
+  } catch (error) {
+    if (status) status.textContent = error.message;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Global default account type for new mobile signups
+// ---------------------------------------------------------------------------
+
+async function loadSignupDefault() {
+  const select = document.querySelector("#signup-default-type");
+  if (!select) return;
+  try {
+    const response = await fetch("/api/public-signup-settings");
+    const payload = await readJsonOrThrow(response);
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to load setting.");
+    }
+    select.value = payload.defaultAccountType || "registrant";
+  } catch (error) {
+    const status = document.querySelector("#signup-default-status");
+    if (status) status.textContent = error.message;
+  }
+}
+
+async function saveSignupDefault() {
+  const select = document.querySelector("#signup-default-type");
+  const status = document.querySelector("#signup-default-status");
+  if (!select) return;
+  if (status) status.textContent = "Saving...";
+  try {
+    const response = await fetch("/api/public-signup-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ defaultAccountType: select.value }),
+    });
+    const payload = await readJsonOrThrow(response);
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to save setting.");
+    }
+    select.value = payload.defaultAccountType;
+    if (status) status.textContent = "Saved.";
+  } catch (error) {
+    if (status) status.textContent = error.message;
+  }
 }

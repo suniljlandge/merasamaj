@@ -419,6 +419,45 @@ def normalize_phone(value=""):
     return normalized
 
 
+def normalize_public_mobile(value=""):
+    """Normalize a public-account / OTP mobile number to a bare 10-digit form.
+
+    Public accounts and their OTP challenges are stored and looked up using a
+    plain 10-digit Indian mobile number (e.g. "9876543210"). This keeps the
+    OTP challenge, the account lookup, and account creation consistent with
+    each other so a campaigner account is always matched on login.
+
+    Unlike ``normalize_phone`` (used for registration data), this strips any
+    "+91", "91", "0091", or single leading "0" prefix and returns just the
+    10 digits. The shared registration phone handling is intentionally left
+    untouched.
+
+    Returns:
+        The 10-digit string when the input resolves to a valid Indian mobile
+        number (10 digits starting 6-9), otherwise the digit-stripped input
+        (which may be empty) so callers can still reject it.
+    """
+    digits = re.sub(r"\D", "", str(value or ""))
+
+    if not digits:
+        return ""
+
+    # Strip a "0091" / "91" country code prefix when it leaves 10 digits.
+    if len(digits) == 14 and digits.startswith("0091"):
+        digits = digits[4:]
+    elif len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+
+    if len(digits) == 10 and digits[0] in "6789":
+        return digits
+
+    # Not a recognizable Indian mobile number — return the bare digits so the
+    # caller's own validation can reject it.
+    return digits
+
+
 def _normalize_family_member(
     member=None,
     primary_household_id="household-primary",
@@ -636,3 +675,46 @@ def read_relation_value(value=None):
         )
 
     return clean_text(value)
+
+
+# Account type constants for public_accounts routing.
+ACCOUNT_TYPE_CAMPAIGNER = "campaigner"
+ACCOUNT_TYPE_REGISTRANT = "registrant"
+DEFAULT_ACCOUNT_TYPE = ACCOUNT_TYPE_REGISTRANT
+
+
+def normalize_account_type(value=None):
+    """Return a recognized account type, defaulting to "registrant"."""
+    account_type = clean_text(value).lower()
+
+    if account_type == ACCOUNT_TYPE_CAMPAIGNER:
+        return ACCOUNT_TYPE_CAMPAIGNER
+
+    return ACCOUNT_TYPE_REGISTRANT
+
+
+def get_redirect_for_account(account=None):
+    """Determine the post-OTP redirect target for a public_account.
+
+    Routing rules (deterministic for a given account document):
+      - campaigner account              -> "/campaign-manager"
+      - registrant + status "approved"  -> "/directory"
+      - registrant + any other status   -> "/self-register"
+
+    A missing or unrecognized ``accountType`` defaults to "registrant".
+    """
+    account = account or {}
+
+    account_type = normalize_account_type(
+        account.get("accountType")
+    )
+
+    if account_type == ACCOUNT_TYPE_CAMPAIGNER:
+        return "/campaign-manager"
+
+    status = clean_text(account.get("status")).lower()
+
+    if status == "approved":
+        return "/directory"
+
+    return "/self-register"

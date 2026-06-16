@@ -15,6 +15,48 @@ const otpStatusNote = document.querySelector("#otp-status-note");
 
 const MOBILE_PATTERN = /^[6-9]\d{9}$/;
 
+let resendCooldownTimer = null;
+
+/* Disable the Send/Resend buttons for `seconds` and show a live countdown on
+   the Resend button. Mirrors the server-side OTP rate limit so users can't
+   spam back-to-back requests. */
+function startResendCooldown(seconds) {
+  var remaining = Math.max(0, parseInt(seconds, 10) || 0);
+
+  if (resendCooldownTimer) {
+    clearInterval(resendCooldownTimer);
+    resendCooldownTimer = null;
+  }
+
+  function render() {
+    if (remaining > 0) {
+      if (requestOtpButton) requestOtpButton.disabled = true;
+      if (resendOtpButton) {
+        resendOtpButton.disabled = true;
+        resendOtpButton.textContent = "Resend OTP (" + remaining + "s)";
+      }
+    } else {
+      if (requestOtpButton) requestOtpButton.disabled = false;
+      if (resendOtpButton) {
+        resendOtpButton.disabled = false;
+        resendOtpButton.textContent = "Resend OTP";
+      }
+      if (resendCooldownTimer) {
+        clearInterval(resendCooldownTimer);
+        resendCooldownTimer = null;
+      }
+    }
+  }
+
+  render();
+  if (remaining > 0) {
+    resendCooldownTimer = setInterval(function () {
+      remaining -= 1;
+      render();
+    }, 1000);
+  }
+}
+
 if (loginButton) {
   loginButton.addEventListener("click", loginStaffUser);
 }
@@ -166,11 +208,20 @@ async function postOtpAction(url, successMessage) {
     const body = await response.json();
 
     if (!response.ok) {
+      /* On a rate-limit (429), start the cooldown so the buttons reflect the
+         server's retry window. */
+      if (response.status === 429 && body.retryAfterSeconds) {
+        startResendCooldown(body.retryAfterSeconds);
+      }
       throw new Error(body.error || "OTP request failed.");
     }
 
     mobileInput.value = mobileNumber;
     otpPanel.hidden = false;
+
+    /* Begin the resend cooldown using the server-provided window. */
+    startResendCooldown(body.resendAvailableInSeconds || 30);
+
     setOtpStatus(
       `${successMessage.replace(/\.$/, "")} to ${mobileNumber}.`
     );

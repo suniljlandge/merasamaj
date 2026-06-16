@@ -19,6 +19,37 @@ The app defaults to:
 
 Override with `MONGO_URI`, `MONGO_DB`, `MONGO_COLLECTION`, `MONGO_CORRECTIONS_COLLECTION`, or `PORT`.
 
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in the values. `.env` is gitignored.
+
+| Variable | Purpose |
+| --- | --- |
+| `MONGO_URI` | MongoDB connection string |
+| `MONGO_DB` | Database name (default `samaj`) |
+| `MONGO_COLLECTION` | Registrations collection (default `registrations`) |
+| `MONGO_CORRECTIONS_COLLECTION` | Transliteration corrections collection |
+| `OTP_TEST_MODE` | Enable OTP test mode with a fixed code |
+| `OTP_FIXED_CODE` | Fixed OTP code used in test mode |
+| `WA_TOKEN` | Meta WhatsApp access token (fallback) |
+| `WA_PHONE_ID` | Meta WhatsApp phone number id (fallback) |
+| `RAZORPAY_KEY_ID` | Razorpay API key id (Campaign Manager payments) |
+| `RAZORPAY_KEY_SECRET` | Razorpay API key secret |
+| `RAZORPAY_WEBHOOK_SECRET` | Secret for verifying Razorpay webhook signatures |
+| `PORT` | Dev server port |
+
+### Campaign Manager configuration
+
+The Campaign Manager payment flow requires the three `RAZORPAY_*` variables.
+They are loaded into the Flask app config at startup; the campaign module reads
+them from config first and falls back to the environment.
+
+WhatsApp delivery credentials for campaigns are loaded from the existing
+settings collection (`app_settings`, document `otp_settings.metaWhatsApp`),
+the same place the OTP integration reads them, and managed from the OTP
+settings page. The `WA_TOKEN` / `WA_PHONE_ID` env vars act as fallbacks when
+the stored values are blank.
+
 ## AI4Bharat IndicXlit Suggestions
 
 The Marathi suggestion dropdown works without extra packages, then uses the Adhikari-Ashutosh IndicXlit fork automatically when installed:
