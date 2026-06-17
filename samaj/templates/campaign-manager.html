@@ -29,6 +29,27 @@
     href="{{ url_for('static', filename='styles.css') }}"
   >
 
+  <!-- Tab button active/inactive styling driven by aria-selected -->
+  <style>
+    .cm-tab[aria-selected="true"] {
+      background: white;
+      color: #065f46;
+      box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    }
+    .cm-tab[aria-selected="false"] {
+      background: transparent;
+      color: #64748b;
+    }
+    .cm-tab[aria-selected="false"]:hover {
+      color: #334155;
+      background: rgb(241 245 249 / 0.7);
+    }
+    /* Logout tab gets a subtle red tone when hovered */
+    #cm-tab-logout[aria-selected="false"]:hover {
+      color: #dc2626;
+    }
+  </style>
+
   <script
     defer
     src="{{ url_for('static', filename='campaign-manager.js') }}"
@@ -72,10 +93,7 @@
         href="/campaign-manager"
         aria-label="SAMAJ Campaign Manager home"
       >
-        <span
-          class="inline-block w-7 h-7 rounded bg-emerald-600"
-          aria-hidden="true"
-        ></span>
+        <span class="brand-mark" aria-hidden="true"></span>
         <span>SAMAJ</span>
       </a>
 
@@ -93,8 +111,8 @@
     <!-- ========================================================== -->
     <nav
       class="
-        flex flex-wrap gap-2
-        border-b border-slate-200 mb-4
+        flex items-center gap-1 bg-slate-100 p-1 rounded-xl mb-6
+        w-fit
       "
       role="tablist"
       aria-label="Campaign manager sections"
@@ -102,7 +120,7 @@
     >
       <button
         type="button"
-        class="cm-tab px-4 py-2 -mb-px border-b-2 font-medium text-sm rounded-t"
+        class="cm-tab px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200"
         id="cm-tab-directory"
         role="tab"
         aria-selected="true"
@@ -114,7 +132,7 @@
 
       <button
         type="button"
-        class="cm-tab px-4 py-2 -mb-px border-b-2 font-medium text-sm rounded-t"
+        class="cm-tab px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200"
         id="cm-tab-campaign"
         role="tab"
         aria-selected="false"
@@ -126,7 +144,7 @@
 
       <button
         type="button"
-        class="cm-tab px-4 py-2 -mb-px border-b-2 font-medium text-sm rounded-t"
+        class="cm-tab px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200"
         id="cm-tab-logout"
         role="tab"
         aria-selected="false"
