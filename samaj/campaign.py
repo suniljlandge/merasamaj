@@ -154,13 +154,48 @@ def normalize_wa_number(mobile):
 # ---------------------------------------------------------------------------
 
 
+# Salutation options offered as a per-family toggle during recipient
+# selection. The toggle "answer" (one of these keys) is stored on each
+# recipient and resolved into the {salutation} template variable at send time.
+#   - "shri-sau"     -> addresses the head of family couple (Mr. & Mrs.)
+#   - "sah-parivaar" -> addresses the whole family ("and family")
+SALUTATION_SHRI_SAU = "shri-sau"
+SALUTATION_SAH_PARIVAAR = "sah-parivaar"
+
+_SALUTATION_TEXT = {
+    SALUTATION_SHRI_SAU: "श्री व सौ.",
+    SALUTATION_SAH_PARIVAAR: "सह परिवार",
+}
+
+# Default salutation used when a recipient has no explicit choice.
+DEFAULT_SALUTATION = SALUTATION_SHRI_SAU
+
+
+def salutation_text(salutation):
+    """Resolve a salutation toggle answer into its display text.
+
+    Accepts one of the SALUTATION_* keys (e.g. "shri-sau", "sah-parivaar").
+    Unknown/empty values fall back to the default salutation so the template
+    variable is never blank.
+
+    Args:
+        salutation: The stored toggle answer (key string) or None.
+
+    Returns:
+        The Marathi salutation text for the chosen option.
+    """
+    key = (salutation or DEFAULT_SALUTATION)
+    return _SALUTATION_TEXT.get(key, _SALUTATION_TEXT[DEFAULT_SALUTATION])
+
+
 def resolve_body_vars(template_vars, recipient):
     """
     Replace placeholders in template variables with recipient data.
 
     Recognized placeholders:
-        - {name}   -> recipient's name
-        - {mobile} -> recipient's normalized mobile number (91XXXXXXXXXX)
+        - {name}       -> recipient's name
+        - {salutation} -> recipient's salutation (श्री व सौ. / सह परिवार)
+        - {mobile}     -> recipient's normalized mobile number (91XXXXXXXXXX)
 
     Entries that are not recognized placeholders are passed through unchanged
     as literal values in the corresponding output position.
@@ -180,6 +215,8 @@ def resolve_body_vars(template_vars, recipient):
         if entry == "{name}":
             name = recipient.get("name") or ""
             result.append(name)
+        elif entry == "{salutation}":
+            result.append(salutation_text(recipient.get("salutation")))
         elif entry == "{mobile}":
             mobile_raw = recipient.get("mobileNumber") or ""
             if mobile_raw:
@@ -205,15 +242,26 @@ def resolve_body_vars(template_vars, recipient):
 AD_TEMPLATES = [
     {
         "name": "samaj_event_invite",
-        "language": "mr",
-        "bodyText": "नमस्कार {name}, आपल्या समाजाच्या आगामी कार्यक्रमासाठी "
-                    "आपणास सहर्ष निमंत्रण. अधिक माहितीसाठी संपर्क साधा.",
+        "language": "hi",
+        "bodyText": "नमस्कार {name} {salutation}, आपको अपने समाज के आगामी "
+                    "कार्यक्रम के लिए सहर्ष निमंत्रण. अधिक जानकारी के लिए "
+                    "संपर्क करें.",
     },
     {
         "name": "samaj_promo_offer",
         "language": "en_US",
-        "bodyText": "Hi {name}, a special offer from our samaj community is "
-                    "now available. Reply to this message on {mobile} to know more.",
+        "bodyText": "Hi {name} {salutation}, a special offer from our samaj "
+                    "community is now available. Reply to this message on "
+                    "{mobile} to know more.",
+    },
+    {
+        "name": "samaj_wedding_invite",
+        "language": "hi",
+        "bodyText": "नमस्कार {name}, हमारे परिवार में एक शुभ विवाह समारोह "
+                "का आयोजन हो रहा है. आपको {salutation} सादर आमंत्रित "
+                "किया जाता है. आपकी उपस्थिति हमारे लिए सौभाग्य की बात "
+                "होगी. समय और स्थान की जानकारी नीचे संलग्न निमंत्रण "
+                "पत्र में दी गई है.",
     },
 ]
 
@@ -333,19 +381,32 @@ def get_hof_by_area(filters, collection):
             "taluka": doc.get("taluka") or "",
             "surnameGroup": doc.get("surnameGroup") or "",
             "area": area,
+            "membersCount": _family_members_count(doc),
         })
 
     return results
 
 
-def resolve_recipients_by_ids(registration_ids, collection):
+def _family_members_count(doc):
+    """Return the total number of members in a family record.
+
+    A family's total is the head of family (the applicant) plus every entry in
+    the ``familyMembers`` array. Always at least 1 (the applicant), even when
+    no additional members are recorded.
+    """
+    family_members = doc.get("familyMembers")
+    extra = len(family_members) if isinstance(family_members, list) else 0
+    return extra + 1
+
+
+def resolve_recipients_by_ids(registration_ids, collection, salutations=None):
     """Resolve selected registration ids into recipient dicts server-side.
 
     Full mobile numbers are looked up from the registrations collection here so
     the browser never needs to receive or send them back. The campaign wizard
     sends only the selected registration ids; this function turns them into the
-    recipient records ({registrationId, name, mobileNumber}) that get stored on
-    the campaign for delivery.
+    recipient records ({registrationId, name, mobileNumber, salutation}) that
+    get stored on the campaign for delivery.
 
     Order of the input ids is preserved and recipients are deduplicated by
     mobile number (keeping the first occurrence), mirroring get_hof_by_area.
@@ -353,11 +414,16 @@ def resolve_recipients_by_ids(registration_ids, collection):
     Args:
         registration_ids: list of registration id strings (or ObjectId-likes).
         collection: MongoDB registrations collection.
+        salutations: optional dict mapping registration id -> salutation toggle
+            answer ("shri-sau" / "sah-parivaar"). Ids without an entry fall back
+            to the default salutation.
 
     Returns:
-        List of {registrationId (str), name (str), mobileNumber (str)} dicts.
+        List of {registrationId (str), name (str), mobileNumber (str),
+        salutation (str)} dicts.
     """
     registration_ids = registration_ids or []
+    salutations = salutations or {}
 
     raw_ids = []
     object_ids = []
@@ -392,10 +458,14 @@ def resolve_recipients_by_ids(registration_ids, collection):
             if mobile in seen_mobiles:
                 continue
             seen_mobiles.add(mobile)
+        chosen = salutations.get(rid) or DEFAULT_SALUTATION
+        if chosen not in _SALUTATION_TEXT:
+            chosen = DEFAULT_SALUTATION
         recipients.append({
             "registrationId": rid,
             "name": _hof_name(doc),
             "mobileNumber": mobile,
+            "salutation": chosen,
         })
 
     return recipients

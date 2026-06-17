@@ -51,6 +51,14 @@
     recipients: [],
     /* selectedIds: registration ids currently checked.          */
     selectedIds: new Set(),
+    /* selectedById: accumulated recipient objects keyed by id.   */
+    /* This persists across filter changes so selections made in  */
+    /* one area survive when the user applies a different filter   */
+    /* and are all included in the final campaign.               */
+    selectedById: {},
+    /* salutations: per-recipient toggle answers keyed by id      */
+    /* ("shri-sau" | "sah-parivaar"). Defaults to "shri-sau".     */
+    salutations: {},
     /* filters: the filter selection used for the last fetch.    */
     filters: {
       districts: [],
@@ -407,13 +415,12 @@
       })
       .then(function (data) {
         state.recipients = (data && data.recipients) || [];
-        /* A fresh audience invalidates the previous selection. */
-        state.selectedIds = new Set();
+        /* Keep selections made under previous filters so the user  */
+        /* can build an audience across multiple areas. Re-render    */
+        /* against the new list; already-selected rows stay checked. */
         renderRecipients();
         updateSelectedCount();
-        if (elSelectAll) {
-          elSelectAll.checked = false;
-        }
+        syncSelectAllState();
         if (elApplyStatus) {
           elApplyStatus.textContent =
             state.recipients.length +
@@ -448,6 +455,20 @@
     );
   }
 
+  /* Per-family salutation toggle answers. Defaults to "shri-sau"  */
+  /* so every selected recipient always carries a valid value.     */
+  var SALUTATION_SHRI_SAU = "shri-sau";
+  var SALUTATION_SAH_PARIVAAR = "sah-parivaar";
+  var SALUTATION_LABELS = {};
+  SALUTATION_LABELS[SALUTATION_SHRI_SAU] = "श्री व सौ.";
+  SALUTATION_LABELS[SALUTATION_SAH_PARIVAAR] = "सह परिवार";
+
+  function getSalutation(id) {
+    return state.salutations[id] === SALUTATION_SAH_PARIVAAR
+      ? SALUTATION_SAH_PARIVAAR
+      : SALUTATION_SHRI_SAU;
+  }
+
   function renderRecipients() {
     if (!elRecipients) {
       return;
@@ -466,6 +487,11 @@
         var place = [recipient.district, recipient.taluka]
           .filter(Boolean)
           .join(", ");
+        var members =
+          typeof recipient.membersCount === "number"
+            ? recipient.membersCount
+            : 1;
+        var salutation = getSalutation(id);
         return (
           '<label class="flex items-center gap-3 px-4 py-2.5 ' +
           'cursor-pointer hover:bg-slate-50">' +
@@ -484,6 +510,13 @@
           escapeHtml(place) +
           "</span>" +
           "</span>" +
+          '<span class="inline-flex items-center gap-1 text-xs ' +
+          'font-medium text-slate-600 bg-slate-100 rounded-full ' +
+          'px-2 py-0.5 whitespace-nowrap" title="Total members in family">' +
+          "\uD83D\uDC65 " +
+          escapeHtml(String(members)) +
+          "</span>" +
+          renderSalutationToggle(id, salutation) +
           '<span class="text-xs text-slate-500 whitespace-nowrap">' +
           escapeHtml(
             recipient.mobileMasked || maskMobile(recipient.mobileNumber || "")
@@ -502,15 +535,97 @@
         input.addEventListener("change", onRecipientToggle);
       }
     );
+
+    Array.prototype.forEach.call(
+      elRecipients.querySelectorAll(".cm-sal-btn"),
+      function (btn) {
+        btn.addEventListener("click", onSalutationToggle);
+      }
+    );
+  }
+
+  /* Build the two-state salutation toggle for a recipient row.    */
+  /* It is a real <button> (type="button") so clicking it does not */
+  /* toggle the surrounding row checkbox.                          */
+  function renderSalutationToggle(id, salutation) {
+    var isSahParivaar = salutation === SALUTATION_SAH_PARIVAAR;
+    var label = SALUTATION_LABELS[salutation];
+    var activeCls = isSahParivaar
+      ? "bg-indigo-100 text-indigo-700 border-indigo-300"
+      : "bg-emerald-100 text-emerald-700 border-emerald-300";
+    return (
+      '<button type="button" class="cm-sal-btn shrink-0 text-xs ' +
+      "font-medium border rounded-full px-2.5 py-0.5 whitespace-nowrap " +
+      'transition ' +
+      activeCls +
+      '" data-recipient-id="' +
+      escapeHtml(id) +
+      '" data-salutation="' +
+      escapeHtml(salutation) +
+      '" title="Tap to switch salutation (Shri-Sau / Sah-Parivaar)">' +
+      escapeHtml(label) +
+      "</button>"
+    );
+  }
+
+  /* Flip a recipient's salutation between the two options and      */
+  /* re-render just that button in place.                          */
+  function onSalutationToggle(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var btn = event.currentTarget;
+    var id = btn.getAttribute("data-recipient-id");
+    var next =
+      getSalutation(id) === SALUTATION_SHRI_SAU
+        ? SALUTATION_SAH_PARIVAAR
+        : SALUTATION_SHRI_SAU;
+    state.salutations[id] = next;
+
+    var isSahParivaar = next === SALUTATION_SAH_PARIVAAR;
+    btn.setAttribute("data-salutation", next);
+    btn.textContent = SALUTATION_LABELS[next];
+    btn.classList.toggle("bg-indigo-100", isSahParivaar);
+    btn.classList.toggle("text-indigo-700", isSahParivaar);
+    btn.classList.toggle("border-indigo-300", isSahParivaar);
+    btn.classList.toggle("bg-emerald-100", !isSahParivaar);
+    btn.classList.toggle("text-emerald-700", !isSahParivaar);
+    btn.classList.toggle("border-emerald-300", !isSahParivaar);
+  }
+
+  /* Find a recipient object (from the current preview list) by id. */
+  function findRecipientById(id) {
+    for (var i = 0; i < state.recipients.length; i++) {
+      if (recipientId(state.recipients[i]) === id) {
+        return state.recipients[i];
+      }
+    }
+    return null;
+  }
+
+  /* Mark a recipient selected, remembering its object so the choice */
+  /* survives later filter changes (and feeds the final campaign).   */
+  function selectRecipientId(id) {
+    state.selectedIds.add(id);
+    var recipient = findRecipientById(id);
+    if (recipient) {
+      state.selectedById[id] = recipient;
+    }
+  }
+
+  /* Drop a recipient from the selection and its remembered data. */
+  function deselectRecipientId(id) {
+    state.selectedIds.delete(id);
+    delete state.selectedById[id];
+    delete state.salutations[id];
   }
 
   function onRecipientToggle(event) {
     var input = event.target;
     var id = input.getAttribute("data-recipient-id");
     if (input.checked) {
-      state.selectedIds.add(id);
+      selectRecipientId(id);
     } else {
-      state.selectedIds.delete(id);
+      deselectRecipientId(id);
     }
     syncSelectAllState();
     updateSelectedCount();
@@ -530,9 +645,9 @@
       input.checked = check;
       var id = input.getAttribute("data-recipient-id");
       if (check) {
-        state.selectedIds.add(id);
+        selectRecipientId(id);
       } else {
-        state.selectedIds.delete(id);
+        deselectRecipientId(id);
       }
     });
     updateSelectedCount();
@@ -589,18 +704,30 @@
 
   /* Selected recipient objects (for later steps). Only the registration id
      and display name are kept — full mobile numbers are never received from
-     the server, so the campaign is created from ids alone. */
+     the server, so the campaign is created from ids alone. Selections are
+     read from the accumulated map so recipients chosen under earlier filters
+     are included even though they are no longer in the current preview list. */
   function getSelectedRecipients() {
-    return state.recipients
-      .filter(function (recipient) {
-        return state.selectedIds.has(recipientId(recipient));
-      })
-      .map(function (recipient) {
-        return {
-          registrationId: recipientId(recipient),
-          name: recipient.name || "",
-        };
+    var out = [];
+    state.selectedIds.forEach(function (id) {
+      var recipient = state.selectedById[id] || findRecipientById(id);
+      out.push({
+        registrationId: id,
+        name: recipient ? recipient.name || "" : "",
+        salutation: getSalutation(id),
       });
+    });
+    return out;
+  }
+
+  /* Build the {registrationId -> salutation} map for the current   */
+  /* selection, consumed by Step 3 when creating the campaign.      */
+  function getSelectedSalutations() {
+    var map = {};
+    state.selectedIds.forEach(function (id) {
+      map[id] = getSalutation(id);
+    });
+    return map;
   }
 
   function goToStep2() {
@@ -615,6 +742,7 @@
     var selected = getSelectedRecipients();
     state.selectedRecipients = selected;
     window.CampaignWizard.selectedRecipients = selected;
+    window.CampaignWizard.salutations = getSelectedSalutations();
     window.CampaignWizard.audienceFilters = state.filters;
 
     showStep(2);
@@ -1181,6 +1309,9 @@
       templateLanguage: window.CampaignWizard.templateLanguage || "",
       bodyVarsTemplate: window.CampaignWizard.bodyVarsTemplate || [],
       audienceFilters: window.CampaignWizard.audienceFilters || null,
+      /* Per-family salutation toggle answers (id -> shri-sau /
+         sah-parivaar), resolved into the {salutation} template var. */
+      salutations: window.CampaignWizard.salutations || {},
     };
 
     fetch("/api/campaigns/create-with-payment", {
@@ -1677,6 +1808,8 @@
     state.currentStep = 1;
     state.recipients = [];
     state.selectedIds = new Set();
+    state.selectedById = {};
+    state.salutations = {};
     state.filters = {
       districts: [],
       talukas: [],
@@ -1685,6 +1818,7 @@
     };
     state.selectedRecipients = [];
     window.CampaignWizard.selectedRecipients = [];
+    window.CampaignWizard.salutations = {};
     window.CampaignWizard.audienceFilters = null;
 
     /* Re-render filters to a pristine state. */

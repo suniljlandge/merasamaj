@@ -113,7 +113,7 @@
     currentPage = Number(page) || 1;
 
     tableBody.innerHTML =
-      '<tr><td colspan="6" class="px-4 py-10 text-center text-slate-500">' +
+      '<tr><td colspan="7" class="px-4 py-10 text-center text-slate-500">' +
       "Loading members..." +
       "</td></tr>";
 
@@ -138,7 +138,7 @@
       .catch(function (error) {
         console.error(error);
         tableBody.innerHTML =
-          '<tr><td colspan="6" class="px-4 py-10 text-center text-red-500">' +
+          '<tr><td colspan="7" class="px-4 py-10 text-center text-red-500">' +
           "Failed to load members" +
           "</td></tr>";
         if (paginationEl) {
@@ -160,7 +160,7 @@
 
     if (!items.length) {
       tableBody.innerHTML =
-        '<tr><td colspan="6" class="px-4 py-10 text-center text-slate-500">' +
+        '<tr><td colspan="7" class="px-4 py-10 text-center text-slate-500">' +
         "No members found" +
         "</td></tr>";
       renderPagination(total, pageNum, pageSize);
@@ -184,6 +184,7 @@
     var district = record.district || "-";
     var taluka = record.taluka || "-";
     var area = resolveArea(record);
+    var members = membersCount(record);
 
     return (
       '<tr class="hover:bg-slate-50 transition">' +
@@ -205,8 +206,24 @@
       '<td class="px-4 py-3">' +
       escapeHtml(area) +
       "</td>" +
+      '<td class="px-4 py-3 whitespace-nowrap">' +
+      '<span class="inline-flex items-center gap-1 text-xs font-medium ' +
+      'text-slate-600 bg-slate-100 rounded-full px-2 py-0.5">' +
+      "\uD83D\uDC65 " +
+      escapeHtml(String(members)) +
+      "</span>" +
+      "</td>" +
       "</tr>"
     );
+  }
+
+  // Total members in a family: the head of family (applicant) plus every
+  // entry in the familyMembers array. Always at least 1.
+  function membersCount(record) {
+    record = record || {};
+    var members = record.familyMembers;
+    var extra = Array.isArray(members) ? members.length : 0;
+    return extra + 1;
   }
 
   function renderPagination(totalCount, page, perPage) {

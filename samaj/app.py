@@ -3409,6 +3409,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "taluka": recipient.get("taluka", ""),
                 "surnameGroup": recipient.get("surnameGroup", ""),
                 "area": recipient.get("area", ""),
+                "membersCount": recipient.get("membersCount", 1),
             }
             for recipient in recipients
         ]
@@ -3533,10 +3534,17 @@ def create_app(config=None, collection=None, correction_collection=None):
         body_vars_template = payload.get("bodyVarsTemplate") or []
         audience_filters = payload.get("audienceFilters") or {}
 
+        # Per-family salutation toggle answers (registrationId -> "shri-sau" /
+        # "sah-parivaar"), resolved into the {salutation} template variable at
+        # send time.
+        salutations = payload.get("salutations")
+        if not isinstance(salutations, dict):
+            salutations = {}
+
         # Re-resolve full recipient records (incl. mobile numbers) server-side
         # from the selected registration ids.
         recipients = campaign.resolve_recipients_by_ids(
-            registration_ids, get_collection()
+            registration_ids, get_collection(), salutations=salutations
         )
 
         account_id = session.get("public_account_id", "")
