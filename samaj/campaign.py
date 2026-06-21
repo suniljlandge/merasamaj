@@ -4,9 +4,6 @@ Provides MongoDB collection accessors, status constants, and data model
 helpers for the WhatsApp Ads Campaign feature.
 """
 
-import hashlib
-import hmac
-import json
 import os
 import re
 from datetime import datetime, timezone
@@ -24,10 +21,11 @@ PAYMENT_VERIFIED = "payment_verified"
 SENDING = "sending"
 SENT = "sent"
 FAILED = "failed"
+REJECTED = "rejected"
 
 # Valid status transitions as a dict mapping current -> set of allowed targets.
 _VALID_TRANSITIONS = {
-    PENDING_PAYMENT: {PAYMENT_VERIFIED},
+    PENDING_PAYMENT: {PAYMENT_VERIFIED, REJECTED},
     PAYMENT_VERIFIED: {SENDING},
     SENDING: {SENT, FAILED},
 }
@@ -577,139 +575,80 @@ def get_distinct_surname_groups(filters, collection):
 
 
 # ---------------------------------------------------------------------------
-# Payment Service — Razorpay Signature Verification
+# Payment Service — UPI QR Code + Manual Verification
 # ---------------------------------------------------------------------------
 
 
-def _get_razorpay_key_secret():
-    """Return the configured Razorpay key secret.
+def _get_upi_id():
+    """Return the configured UPI ID (VPA) for receiving payments.
 
-    Reads from the Flask app config first (RAZORPAY_KEY_SECRET) and falls back
-    to the RAZORPAY_KEY_SECRET environment variable. Returns an empty string
-    when no secret is configured.
+    Reads from Flask app config first (UPI_ID), falls back to the UPI_ID
+    environment variable. Returns an empty string when not configured.
     """
-    secret = ""
+    upi_id = ""
     try:
-        secret = current_app.config.get("RAZORPAY_KEY_SECRET", "") or ""
+        upi_id = current_app.config.get("UPI_ID", "") or ""
     except RuntimeError:
-        # Outside of an application context — fall back to the environment.
-        secret = ""
-    if not secret:
-        secret = os.getenv("RAZORPAY_KEY_SECRET", "") or ""
-    return secret
+        upi_id = ""
+    if not upi_id:
+        upi_id = os.getenv("UPI_ID", "") or ""
+    return upi_id
 
 
-def razorpay_is_configured():
-    """Return True when both the Razorpay key id and secret are configured.
+def _get_upi_payee_name():
+    """Return the configured UPI payee display name.
 
-    Used to give a clear "payments not configured" error instead of letting an
-    empty-credential request reach Razorpay and fail with "Authentication
-    failed".
+    Reads from Flask app config first (UPI_PAYEE_NAME), falls back to the
+    UPI_PAYEE_NAME environment variable. Defaults to "SAMAJ".
     """
-    return bool(_get_razorpay_key_id()) and bool(_get_razorpay_key_secret())
+    name = ""
+    try:
+        name = current_app.config.get("UPI_PAYEE_NAME", "") or ""
+    except RuntimeError:
+        name = ""
+    if not name:
+        name = os.getenv("UPI_PAYEE_NAME", "") or "SAMAJ"
+    return name
 
 
-def verify_razorpay_signature(order_id, payment_id, signature, key_secret=None):
-    """
-    Verify a Razorpay payment signature using HMAC-SHA256.
+def upi_is_configured():
+    """Return True when a UPI ID is configured for receiving payments."""
+    return bool(_get_upi_id())
 
-    Razorpay signs the payment by computing
-    HMAC-SHA256("{order_id}|{payment_id}", key_secret) and returning the
-    hexadecimal digest as ``razorpay_signature``. This recomputes that digest
-    using the configured key secret and compares it against the provided
-    signature in constant time.
+
+def build_upi_link(amount_rupees, transaction_note):
+    """Build a UPI deep-link URL for the given amount and note.
+
+    Format: upi://pay?pa=<VPA>&pn=<Name>&am=<Amount>&cu=INR&tn=<Note>
 
     Args:
-        order_id: The Razorpay order id (e.g. "order_XXXX").
-        payment_id: The Razorpay payment id (e.g. "pay_XXXX").
-        signature: The signature returned by Razorpay Checkout to verify.
-        key_secret: Optional override for the Razorpay key secret. When omitted,
-            the secret is read from app config / environment.
+        amount_rupees: Payment amount in rupees (integer).
+        transaction_note: A short note to identify the payment (e.g.
+            "Campaign-abc123"). This helps the admin match the payment
+            in their UPI app.
 
     Returns:
-        True if the signature is valid, False otherwise.
+        The UPI deep-link string, or empty string if UPI is not configured.
     """
-    if key_secret is None:
-        key_secret = _get_razorpay_key_secret()
+    from urllib.parse import quote
 
-    if not order_id or not payment_id or not signature or not key_secret:
-        return False
+    upi_id = _get_upi_id()
+    if not upi_id:
+        return ""
 
-    message = f"{order_id}|{payment_id}"
-    expected = hmac.new(
-        key_secret.encode("utf-8"),
-        message.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
+    payee_name = _get_upi_payee_name()
 
-    return hmac.compare_digest(expected, str(signature))
-
-
-# ---------------------------------------------------------------------------
-# Payment Service — Razorpay Order Creation & Campaign Creation
-# ---------------------------------------------------------------------------
+    return (
+        f"upi://pay?"
+        f"pa={quote(upi_id)}"
+        f"&pn={quote(payee_name)}"
+        f"&am={amount_rupees}"
+        f"&cu=INR"
+        f"&tn={quote(str(transaction_note))}"
+    )
 
 
-def _get_razorpay_key_id():
-    """Return the configured Razorpay key id.
-
-    Reads from the Flask app config first (RAZORPAY_KEY_ID) and falls back to
-    the RAZORPAY_KEY_ID environment variable. Returns an empty string when no
-    key id is configured.
-    """
-    key_id = ""
-    try:
-        key_id = current_app.config.get("RAZORPAY_KEY_ID", "") or ""
-    except RuntimeError:
-        # Outside of an application context — fall back to the environment.
-        key_id = ""
-    if not key_id:
-        key_id = os.getenv("RAZORPAY_KEY_ID", "") or ""
-    return key_id
-
-
-def _get_razorpay_client():
-    """Build and return a Razorpay API client authenticated with the configured
-    key id / secret.
-
-    The razorpay SDK is imported lazily so the rest of the campaign module can
-    be used (and tested) without the dependency installed.
-    """
-    import razorpay
-
-    key_id = _get_razorpay_key_id()
-    key_secret = _get_razorpay_key_secret()
-    return razorpay.Client(auth=(key_id, key_secret))
-
-
-def create_razorpay_order(amount_paise, campaign_id):
-    """Create a Razorpay order for a campaign payment.
-
-    Args:
-        amount_paise: Order amount in paise (recipientCount × 100).
-        campaign_id: The campaign's ObjectId (or its string form), used to
-            build the order receipt and notes for reconciliation.
-
-    Returns:
-        The raw Razorpay order dict, which includes at least an ``id`` key
-        (e.g. "order_XXXX") and the ``amount``/``currency`` fields.
-
-    Raises:
-        Any exception raised by the Razorpay SDK (network/API failure) is
-        allowed to propagate so the caller can avoid persisting any records.
-    """
-    client = _get_razorpay_client()
-    return client.order.create({
-        "amount": amount_paise,
-        "currency": "INR",
-        "receipt": f"campaign_{campaign_id}",
-        "notes": {
-            "campaign_id": str(campaign_id),
-        },
-    })
-
-
-def create_campaign_with_payment(
+def create_campaign_with_upi(
     account_id,
     recipients,
     template_name,
@@ -718,12 +657,11 @@ def create_campaign_with_payment(
     audience_filters=None,
     name=None,
 ):
-    """Create a campaign and its associated Razorpay payment order.
+    """Create a campaign and generate a UPI payment link for it.
 
-    Validates the recipient list, creates the Razorpay order first (so a
-    network/API failure leaves no campaign or payment records behind), then
-    persists the campaign document (status "pending_payment") and the linked
-    campaign_payment record (status "created").
+    Validates the recipient list, persists the campaign document (status
+    "pending_payment") and the linked campaign_payment record (status
+    "awaiting_upi"), and returns the UPI deep-link for the user to pay.
 
     Args:
         account_id: The campaigner's public_account id (string or ObjectId).
@@ -738,40 +676,31 @@ def create_campaign_with_payment(
         name: Optional human-readable campaign name. Auto-generated when omitted.
 
     Returns:
-        dict with keys: campaignId (str), razorpayOrderId (str), amount (int,
-        paise), razorpayKey (str).
+        dict with keys: campaignId (str), upiLink (str), amount (int, rupees),
+        transactionNote (str).
 
     Raises:
-        ValueError: If the recipients list is empty (Requirement 9.4).
-        Exception: Propagated from create_razorpay_order on API/network failure.
-            No campaign or payment records are persisted in that case
-            (Requirement 14.1).
+        ValueError: If the recipients list is empty.
     """
     recipients = recipients or []
     recipient_count = len(recipients)
 
-    # Requirement 9.4: reject empty recipient lists before doing any work.
     if recipient_count == 0:
         raise ValueError("At least 1 recipient is required.")
 
-    # Requirements 5.2, 9.1, 9.2: ₹1 (100 paise) per recipient.
-    amount_paise = recipient_count * 100
+    # ₹1 per recipient.
+    amount_rupees = recipient_count
 
-    # Pre-generate the campaign id so it can be referenced in the Razorpay
-    # order receipt, and used to link the payment record, without persisting
-    # anything until the order is successfully created.
     campaign_id = ObjectId()
 
-    # Create the Razorpay order FIRST. If this raises (network/API failure),
-    # the exception propagates and no campaign/payment documents are written
-    # (Requirement 14.1).
-    razorpay_order = create_razorpay_order(amount_paise, campaign_id)
-    razorpay_order_id = razorpay_order["id"]
+    # Short transaction note for easy identification in the bank app.
+    short_id = str(campaign_id)[-8:]
+    transaction_note = f"Campaign-{short_id}"
+
+    upi_link = build_upi_link(amount_rupees, transaction_note)
 
     now = datetime.now(timezone.utc)
 
-    # Persist the account id as an ObjectId for consistency with the campaign
-    # listing endpoint, falling back to the raw value if it is not a valid id.
     try:
         account_object_id = ObjectId(str(account_id))
     except Exception:
@@ -779,7 +708,6 @@ def create_campaign_with_payment(
 
     campaign_name = name or f"Campaign {now.strftime('%d %b %Y %H:%M')}"
 
-    # Step: create the campaign document with status "pending_payment".
     campaign_doc = {
         "_id": campaign_id,
         "name": campaign_name,
@@ -805,26 +733,24 @@ def create_campaign_with_payment(
     campaigns = get_campaigns_collection()
     campaigns.insert_one(campaign_doc)
 
-    # Step: create the campaign_payment record with status "created".
     payment_doc = {
         "campaignId": campaign_id,
         "accountId": account_object_id,
-        "razorpayOrderId": razorpay_order_id,
-        "razorpayPaymentId": None,
-        "razorpaySignature": None,
-        "amount": amount_paise,
+        "upiLink": upi_link,
+        "transactionNote": transaction_note,
+        "upiTransactionRef": None,
+        "amount": amount_rupees * 100,  # Store in paise for consistency.
+        "amountRupees": amount_rupees,
         "currency": "INR",
         "recipientCount": recipient_count,
-        "status": "created",
-        "webhookEvent": None,
+        "status": "awaiting_upi",
         "createdAt": now,
-        "capturedAt": None,
+        "confirmedAt": None,
         "updatedAt": now,
     }
     payments = get_campaign_payments_collection()
     payment_result = payments.insert_one(payment_doc)
 
-    # Step: link the payment record back to the campaign.
     campaigns.update_one(
         {"_id": campaign_id},
         {"$set": {"paymentId": payment_result.inserted_id, "updatedAt": now}},
@@ -832,10 +758,177 @@ def create_campaign_with_payment(
 
     return {
         "campaignId": str(campaign_id),
-        "razorpayOrderId": razorpay_order_id,
-        "amount": amount_paise,
-        "razorpayKey": _get_razorpay_key_id(),
+        "upiLink": upi_link,
+        "amount": amount_rupees,
+        "transactionNote": transaction_note,
     }
+
+
+def submit_upi_reference(campaign_id, upi_ref):
+    """Record the user-submitted UPI transaction reference for a campaign.
+
+    After paying via UPI, the user enters their 12-digit UTR / UPI reference
+    number. This stores it on the payment record and keeps the campaign in
+    pending_payment status until an admin confirms.
+
+    Args:
+        campaign_id: The campaign ObjectId or its string form.
+        upi_ref: The UPI transaction reference string provided by the user.
+
+    Returns:
+        dict: {"ok": True} on success, {"ok": False, "error": str} on failure.
+    """
+    if not upi_ref or not str(upi_ref).strip():
+        return {"ok": False, "error": "UPI transaction reference is required."}
+
+    upi_ref = str(upi_ref).strip()
+
+    try:
+        cid = ObjectId(str(campaign_id))
+    except Exception:
+        return {"ok": False, "error": "Invalid campaign id."}
+
+    payments = get_campaign_payments_collection()
+    result = payments.update_one(
+        {"campaignId": cid},
+        {"$set": {
+            "upiTransactionRef": upi_ref,
+            "status": "submitted",
+            "updatedAt": datetime.now(timezone.utc),
+        }},
+    )
+
+    if result.matched_count == 0:
+        return {"ok": False, "error": "Payment record not found."}
+
+    return {"ok": True}
+
+
+def confirm_upi_payment(campaign_id):
+    """Admin action: confirm a UPI payment and trigger campaign sending.
+
+    Marks the payment as confirmed, transitions the campaign from
+    pending_payment → payment_verified, and triggers execute_campaign_send.
+
+    Args:
+        campaign_id: The campaign ObjectId or its string form.
+
+    Returns:
+        dict with "ok" (bool) and optional "error" or "reason" keys.
+    """
+    try:
+        cid = ObjectId(str(campaign_id))
+    except Exception:
+        return {"ok": False, "error": "Invalid campaign id."}
+
+    campaigns = get_campaigns_collection()
+    campaign_doc = campaigns.find_one({"_id": cid})
+
+    if campaign_doc is None:
+        return {"ok": False, "error": "Campaign not found."}
+
+    current_status = campaign_doc.get("status")
+    if current_status != PENDING_PAYMENT:
+        return {
+            "ok": False,
+            "error": f"Campaign is in '{current_status}' status, not pending_payment.",
+        }
+
+    now = datetime.now(timezone.utc)
+
+    # Mark payment as confirmed.
+    payments = get_campaign_payments_collection()
+    payments.update_one(
+        {"campaignId": cid},
+        {"$set": {
+            "status": "confirmed",
+            "confirmedAt": now,
+            "updatedAt": now,
+        }},
+    )
+
+    # Transition campaign to payment_verified.
+    transition = validate_campaign_status_transition(PENDING_PAYMENT, PAYMENT_VERIFIED)
+    if not transition["valid"]:
+        return {"ok": False, "error": transition["error"]}
+
+    campaigns.update_one(
+        {"_id": cid},
+        {"$set": {"status": PAYMENT_VERIFIED, "updatedAt": now}},
+    )
+
+    # Trigger campaign message delivery.
+    try:
+        execute_campaign_send(cid)
+    except Exception as exc:
+        return {"ok": True, "reason": "confirmed_send_error", "error": str(exc)}
+
+    return {"ok": True, "reason": "confirmed_and_sent"}
+
+
+def reject_upi_payment(campaign_id, reason=""):
+    """Admin action: reject a UPI payment submission.
+
+    Marks the payment as rejected with a reason, transitions the campaign
+    from pending_payment → rejected. The campaign will not be executed.
+
+    Args:
+        campaign_id: The campaign ObjectId or its string form.
+        reason: A human-readable reason for the rejection (e.g. "Fake UTR",
+            "Amount mismatch", "Payment not found in bank statement").
+
+    Returns:
+        dict with "ok" (bool) and optional "error" or "reason" keys.
+    """
+    reason = str(reason).strip() if reason else ""
+
+    try:
+        cid = ObjectId(str(campaign_id))
+    except Exception:
+        return {"ok": False, "error": "Invalid campaign id."}
+
+    campaigns = get_campaigns_collection()
+    campaign_doc = campaigns.find_one({"_id": cid})
+
+    if campaign_doc is None:
+        return {"ok": False, "error": "Campaign not found."}
+
+    current_status = campaign_doc.get("status")
+    if current_status != PENDING_PAYMENT:
+        return {
+            "ok": False,
+            "error": f"Campaign is in '{current_status}' status, not pending_payment.",
+        }
+
+    now = datetime.now(timezone.utc)
+
+    # Mark payment as rejected with reason.
+    payments = get_campaign_payments_collection()
+    payments.update_one(
+        {"campaignId": cid},
+        {"$set": {
+            "status": "rejected",
+            "rejectionReason": reason,
+            "rejectedAt": now,
+            "updatedAt": now,
+        }},
+    )
+
+    # Transition campaign to rejected.
+    transition = validate_campaign_status_transition(PENDING_PAYMENT, REJECTED)
+    if not transition["valid"]:
+        return {"ok": False, "error": transition["error"]}
+
+    campaigns.update_one(
+        {"_id": cid},
+        {"$set": {
+            "status": REJECTED,
+            "rejectionReason": reason,
+            "updatedAt": now,
+        }},
+    )
+
+    return {"ok": True, "reason": "rejected"}
 
 
 # ---------------------------------------------------------------------------
@@ -1026,7 +1119,7 @@ def _to_object_id(value):
 def execute_campaign_send(campaign):
     """Send a paid campaign's WhatsApp template messages to every recipient.
 
-    Called only after payment is confirmed (Razorpay webhook ``payment.captured``).
+    Called only after payment is confirmed (admin confirms UPI payment).
     The campaign status is moved to "sending", every recipient is processed
     exactly once (creating one ``campaign_message`` record each), and the
     campaign is finalized to "sent" (if at least one message succeeded) or
@@ -1191,190 +1284,6 @@ def execute_campaign_send(campaign):
             pass
 
     return {"sent": sent, "failed": failed, "total": total}
-
-
-# ---------------------------------------------------------------------------
-# Payment Service — Razorpay Webhook Handling (Task 7.1)
-# ---------------------------------------------------------------------------
-
-
-def _get_razorpay_webhook_secret():
-    """Return the configured Razorpay webhook secret.
-
-    Reads from the Flask app config first (RAZORPAY_WEBHOOK_SECRET) and falls
-    back to the RAZORPAY_WEBHOOK_SECRET environment variable. Returns an empty
-    string when no secret is configured.
-    """
-    secret = ""
-    try:
-        secret = current_app.config.get("RAZORPAY_WEBHOOK_SECRET", "") or ""
-    except RuntimeError:
-        # Outside of an application context — fall back to the environment.
-        secret = ""
-    if not secret:
-        secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "") or ""
-    return secret
-
-
-def verify_razorpay_webhook_signature(raw_body, signature, webhook_secret=None):
-    """
-    Verify a Razorpay webhook signature using HMAC-SHA256.
-
-    Razorpay signs each webhook delivery by computing
-    HMAC-SHA256(raw_request_body, webhook_secret) and sending the hexadecimal
-    digest in the ``X-Razorpay-Signature`` header. This recomputes that digest
-    over the exact raw request body and compares it against the provided
-    signature in constant time.
-
-    Args:
-        raw_body: The raw webhook request body, as ``bytes`` or ``str``. The
-            signature must be computed over the unmodified bytes Razorpay sent.
-        signature: The value of the ``X-Razorpay-Signature`` header.
-        webhook_secret: Optional override for the webhook secret. When omitted,
-            the secret is read from app config / environment.
-
-    Returns:
-        True if the signature is valid, False otherwise.
-    """
-    if webhook_secret is None:
-        webhook_secret = _get_razorpay_webhook_secret()
-
-    if not raw_body or not signature or not webhook_secret:
-        return False
-
-    body_bytes = raw_body.encode("utf-8") if isinstance(raw_body, str) else raw_body
-
-    expected = hmac.new(
-        webhook_secret.encode("utf-8"),
-        body_bytes,
-        hashlib.sha256,
-    ).hexdigest()
-
-    return hmac.compare_digest(expected, str(signature))
-
-
-def process_razorpay_webhook(raw_body, signature, webhook_secret=None):
-    """
-    Process a Razorpay webhook delivery and trigger campaign execution.
-
-    Verifies the webhook signature, parses ``payment.captured`` events,
-    locates the matching campaign_payment by ``razorpayOrderId``, marks it as
-    captured, transitions the linked campaign towards sending, and triggers
-    message delivery via ``execute_campaign_send``.
-
-    The behavior is idempotent: a duplicate webhook for a payment that is
-    already "captured" returns success without re-executing the campaign.
-
-    Args:
-        raw_body: The raw webhook request body (``bytes`` or ``str``). The
-            signature is verified against these exact bytes.
-        signature: The ``X-Razorpay-Signature`` header value.
-        webhook_secret: Optional override for the webhook secret. When omitted,
-            the secret is read from app config / environment.
-
-    Returns:
-        dict with keys:
-            "ok" (bool): True when the request was accepted (HTTP 200), False
-                only when the signature is invalid (HTTP 400).
-            "status" (int): The HTTP status code the endpoint should return.
-            "reason" (str): A short machine-readable reason for the outcome.
-
-    Requirements: 6.1, 6.2, 6.3, 6.6, 6.7.
-    """
-    # ---- Requirements 6.1, 6.2: verify the signature first ----
-    if not verify_razorpay_webhook_signature(raw_body, signature, webhook_secret):
-        # Invalid signature: reject with 400 and make no database changes.
-        return {"ok": False, "status": 400, "reason": "invalid_signature"}
-
-    # ---- Parse the JSON payload ----
-    try:
-        if isinstance(raw_body, bytes):
-            payload = json.loads(raw_body.decode("utf-8"))
-        elif isinstance(raw_body, str):
-            payload = json.loads(raw_body)
-        else:
-            # Already a parsed mapping (defensive — supports dict input).
-            payload = raw_body
-    except (ValueError, TypeError):
-        return {"ok": False, "status": 400, "reason": "invalid_payload"}
-
-    if not isinstance(payload, dict):
-        return {"ok": False, "status": 400, "reason": "invalid_payload"}
-
-    # ---- Only handle payment.captured events (Requirement 6.3) ----
-    if payload.get("event") != "payment.captured":
-        # Other events are acknowledged with 200 and ignored.
-        return {"ok": True, "status": 200, "reason": "ignored_event"}
-
-    entity = (
-        ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
-    )
-    order_id = entity.get("order_id")
-    payment_id = entity.get("id")
-
-    if not order_id:
-        # Malformed event without an order id — acknowledge, change nothing.
-        return {"ok": True, "status": 200, "reason": "missing_order_id"}
-
-    payments = get_campaign_payments_collection()
-    payment = payments.find_one({"razorpayOrderId": order_id})
-
-    # ---- Requirement 6.7: unknown order id — 200 OK, no DB changes ----
-    if payment is None:
-        return {"ok": True, "status": 200, "reason": "order_not_found"}
-
-    # ---- Requirement 6.6: idempotency for duplicate webhooks ----
-    if payment.get("status") == "captured":
-        return {"ok": True, "status": 200, "reason": "already_captured"}
-
-    now = datetime.now(timezone.utc)
-    campaign_id = payment.get("campaignId")
-
-    # ---- Requirement 6.3: mark the payment captured and link the payment ----
-    payments.update_one(
-        {"razorpayOrderId": order_id},
-        {"$set": {
-            "status": "captured",
-            "razorpayPaymentId": payment_id,
-            "webhookEvent": payload,
-            "capturedAt": now,
-            "updatedAt": now,
-        }},
-    )
-
-    # ---- Requirement 10.3: transition pending_payment -> payment_verified ----
-    # before the campaign can move to "sending". When the client-side verify
-    # step has already advanced the campaign to "payment_verified", this is a
-    # no-op and execution proceeds.
-    campaigns = get_campaigns_collection()
-    campaign_doc = campaigns.find_one({"_id": campaign_id})
-    if campaign_doc is not None and campaign_doc.get("status") == PENDING_PAYMENT:
-        transition = validate_campaign_status_transition(
-            PENDING_PAYMENT, PAYMENT_VERIFIED
-        )
-        if transition["valid"]:
-            campaigns.update_one(
-                {"_id": campaign_id},
-                {"$set": {"status": PAYMENT_VERIFIED, "updatedAt": now}},
-            )
-
-    # ---- Requirement 6.3/6.4: trigger campaign message sending ----
-    # Delivery (execute_campaign_send, task 7.2) handles its own status
-    # transitions and finalization. A failure during delivery must not cause
-    # the webhook to be re-delivered (the payment is already captured and the
-    # idempotency guard above protects against re-execution), so any error is
-    # swallowed and reported in the response reason.
-    try:
-        execute_campaign_send(campaign_id)
-    except Exception as exc:  # noqa: BLE001 — delivery errors must not 4xx/5xx
-        return {
-            "ok": True,
-            "status": 200,
-            "reason": "captured_send_error",
-            "error": str(exc),
-        }
-
-    return {"ok": True, "status": 200, "reason": "processed"}
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WhatsApp Web — SAMAJ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script defer src="{{ url_for('static', filename='whatsapp-web.js') }}"></script>
+  </head>
+  <body class="directory-body">
+    {% include "_topbar.html" %}
+
+    <main class="directory-layout">
+
+      <!-- Connection Section -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">WhatsApp Web</p>
+            <h2>Connect Your WhatsApp</h2>
+            <p>Link your WhatsApp account using a pairing code. Messages will be sent from your personal number for follow-ups.</p>
+          </div>
+          {% if can('manage_wa_web') %}
+          <div style="display:flex;gap:8px;">
+            <a href="/wa-backup-dashboard" class="button-secondary">Backup &amp; Contacts</a>
+            <a href="/wa-routing" class="button-secondary">Routing Config</a>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Status Indicator -->
+        <div id="connection-status-panel" class="form-surface" style="margin-bottom:20px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span id="status-dot" style="width:12px;height:12px;border-radius:50%;background:#c1ccd6;"></span>
+            <span id="status-text" style="font-weight:600;">Checking status...</span>
+          </div>
+          <p id="status-detail" style="margin:8px 0 0;color:var(--steel);font-size:14px;"></p>
+        </div>
+
+        <!-- Connect Form -->
+        <div id="connect-form-panel" class="form-surface">
+          <div class="field-grid">
+            <label class="field">
+              <span>Your phone number (with country code)</span>
+              <input type="tel" id="phone-input" placeholder="+91 98765 43210" autocomplete="tel">
+            </label>
+          </div>
+          <button type="button" id="connect-btn" class="button-primary" style="margin-top:16px;">
+            Get Pairing Code
+          </button>
+        </div>
+
+        <!-- Pairing Code Display -->
+        <div id="pairing-code-panel" class="form-surface" style="display:none;margin-top:20px;text-align:center;">
+          <p style="margin-bottom:8px;color:var(--steel);">Enter this code on your phone:</p>
+          <p style="font-size:2rem;font-weight:700;letter-spacing:4px;color:var(--brand-teal-deep);" id="pairing-code"></p>
+          <p style="font-size:13px;color:var(--steel);margin-top:12px;">
+            Open WhatsApp → Settings → Linked Devices → Link a Device → Enter code above
+          </p>
+          <p style="font-size:12px;color:var(--danger);margin-top:8px;">
+            ⚠ Code expires in ~20 seconds. Enter it quickly!
+          </p>
+        </div>
+
+        <!-- Connected Panel -->
+        <div id="connected-panel" class="form-surface" style="display:none;margin-top:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <p style="font-weight:600;color:var(--brand-green-dark);">✓ WhatsApp Connected</p>
+              <p style="font-size:14px;color:var(--steel);" id="connected-phone"></p>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button type="button" id="backup-now-btn" class="button-secondary">Backup Now</button>
+              <button type="button" id="disconnect-btn" class="button-ghost" style="color:var(--danger);">Disconnect</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Daily Stats -->
+      <section class="directory-search-card" id="stats-section" style="display:none;">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Today's Activity</p>
+            <h2>Message Stats</h2>
+          </div>
+        </div>
+        <div class="form-surface">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:center;">
+            <div>
+              <p style="font-size:2rem;font-weight:700;color:var(--brand-teal-deep);" id="stat-sent">0</p>
+              <p style="font-size:13px;color:var(--steel);">Sent via Web</p>
+            </div>
+            <div>
+              <p style="font-size:2rem;font-weight:700;color:var(--brand-teal-deep);" id="stat-limit">20</p>
+              <p style="font-size:13px;color:var(--steel);">Daily Limit</p>
+            </div>
+            <div>
+              <p style="font-size:2rem;font-weight:700;color:var(--brand-green-dark);" id="stat-remaining">20</p>
+              <p style="font-size:13px;color:var(--steel);">Remaining</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quick Send -->
+      <section class="directory-search-card" id="send-section" style="display:none;">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Personal Follow-up</p>
+            <h2>Send Message</h2>
+            <p>Send a one-on-one message via your WhatsApp. Only for existing contacts within daily limits.</p>
+          </div>
+        </div>
+        <div class="form-surface">
+          <div class="field-grid">
+            <label class="field">
+              <span>Recipient phone</span>
+              <input type="tel" id="send-phone" placeholder="91XXXXXXXXXX">
+            </label>
+            <label class="field" style="grid-column: 1 / -1;">
+              <span>Message</span>
+              <textarea id="send-text" rows="3" placeholder="Type your message..."></textarea>
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+            <button type="button" id="send-btn" class="button-primary">Send</button>
+            <span id="send-result" style="font-size:13px;"></span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

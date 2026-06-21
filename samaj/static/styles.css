@@ -1681,3 +1681,87 @@ input[readonly][lang="mr"] {
 @keyframes dt-spin {
   to { transform: rotate(360deg); }
 }
+
+
+/* =========================================================================
+   WhatsApp Web — Contact Cards & Status Badges
+   ========================================================================= */
+
+.contact-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  transition: box-shadow 0.15s ease;
+}
+
+.contact-card:hover {
+  box-shadow: var(--shadow-card);
+}
+
+.contact-pic {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--surface-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.contact-info {
+  min-width: 0;
+}
+
+.contact-name {
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contact-phone {
+  font-size: 13px;
+  color: var(--steel);
+  margin: 2px 0 0;
+}
+
+.contact-source {
+  font-size: 11px;
+  color: var(--hairline-strong);
+  margin: 2px 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.status-connected {
+  background: var(--success-bg);
+  color: var(--brand-green-dark);
+}
+
+.status-connecting,
+.status-reconnecting {
+  background: #fef7e0;
+  color: #92400e;
+}
+
+.status-disconnected {
+  background: var(--surface-soft);
+  color: var(--steel);
+}

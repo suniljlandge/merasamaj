@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WhatsApp Backup Dashboard — SAMAJ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script defer src="{{ url_for('static', filename='wa-backup-dashboard.js') }}"></script>
+  </head>
+  <body class="directory-body">
+    {% include "_topbar.html" %}
+
+    <main class="directory-layout">
+
+      <!-- Backup Overview -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Super Admin</p>
+            <h2>WhatsApp Backup Dashboard</h2>
+            <p>View all connected sessions, backed-up contacts, and manage backups across users.</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <a href="/whatsapp-web" class="button-secondary">← Connection</a>
+            <a href="/wa-routing" class="button-secondary">Routing Config →</a>
+          </div>
+        </div>
+
+        <!-- Sessions Overview -->
+        <div class="form-surface" style="margin-bottom:20px;">
+          <h3 style="margin:0 0 12px;">Connected Sessions</h3>
+          <div class="directory-table-wrapper">
+            <table class="directory-table" id="sessions-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th>Connected Since</th>
+                  <th>Last Active</th>
+                </tr>
+              </thead>
+              <tbody id="sessions-tbody">
+                <tr><td colspan="5" style="text-align:center;color:var(--steel);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Backup Stats -->
+        <div class="form-surface" style="margin-bottom:20px;">
+          <h3 style="margin:0 0 12px;">Backup Summary</h3>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center;" id="backup-stats">
+            <div>
+              <p style="font-size:2rem;font-weight:700;color:var(--brand-teal-deep);" id="bs-contacts">—</p>
+              <p style="font-size:13px;color:var(--steel);">Total Contacts</p>
+            </div>
+            <div>
+              <p style="font-size:2rem;font-weight:700;color:var(--brand-teal-deep);" id="bs-groups">—</p>
+              <p style="font-size:13px;color:var(--steel);">Total Groups</p>
+            </div>
+            <div>
+              <p style="font-size:2rem;font-weight:700;color:var(--brand-teal-deep);" id="bs-pics">—</p>
+              <p style="font-size:13px;color:var(--steel);">Profile Pics</p>
+            </div>
+            <div>
+              <p style="font-size:2rem;font-weight:700;color:var(--brand-teal-deep);" id="bs-last">—</p>
+              <p style="font-size:13px;color:var(--steel);">Last Backup</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Contact Viewer -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <h2>Contact Viewer</h2>
+            <p>Browse backed-up contacts with profile pictures. Select a user session to view their contacts.</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="user-select" style="padding:8px 12px;border:1px solid var(--hairline);border-radius:6px;">
+              <option value="">Select user...</option>
+            </select>
+            <button type="button" id="export-csv-btn" class="button-secondary" disabled>Export CSV</button>
+            <button type="button" id="export-json-btn" class="button-secondary" disabled>Export JSON</button>
+          </div>
+        </div>
+
+        <!-- Search -->
+        <div style="padding:0 24px 16px;">
+          <input type="search" id="contact-search" placeholder="Search contacts by phone or name..."
+                 style="width:100%;padding:10px 14px;border:1px solid var(--hairline);border-radius:8px;font-size:14px;">
+        </div>
+
+        <!-- Contact Grid -->
+        <div id="contact-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;padding:0 24px 24px;">
+          <p style="color:var(--steel);grid-column:1/-1;text-align:center;">Select a user session above to view contacts.</p>
+        </div>
+
+        <!-- Pagination -->
+        <div id="contact-pagination" style="display:flex;justify-content:center;gap:8px;padding:0 24px 24px;display:none;">
+          <button type="button" id="prev-page-btn" class="button-ghost">← Prev</button>
+          <span id="page-info" style="align-self:center;font-size:14px;color:var(--steel);"></span>
+          <button type="button" id="next-page-btn" class="button-ghost">Next →</button>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

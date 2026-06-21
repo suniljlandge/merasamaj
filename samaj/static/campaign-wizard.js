@@ -92,16 +92,12 @@
   /* on window.CampaignWizard for Steps 4 and 5).                  */
   state.campaignId = null;
   var paying = false;
-  /* The Razorpay checkout.js loader is shared/cached across pays.  */
-  var razorpayScriptPromise = null;
 
   /* Step 4 (confirmation / execution status) DOM references.      */
   var elCStatus;
   /* Handle for the active status poll so it can be cancelled when  */
-  /* leaving Step 4 or on wizard reset. POLL_INTERVAL_MS controls   */
-  /* the cadence of the GET /api/campaigns/<id> status checks.      */
+  /* leaving Step 4 or on wizard reset.                            */
   var confirmationPollTimer = null;
-  var POLL_INTERVAL_MS = 4000;
 
   /* Step 5 (delivery report) DOM references + state.              */
   var elRepStatus, elRepTotal, elRepSent, elRepFailed, elRepPending;
@@ -1061,21 +1057,15 @@
   }
 
   /* ========================================================== */
-  /* STEP 3 — Payment via Razorpay (Requirement 5, 14)          */
+  /* STEP 3 — Payment via UPI QR Code                           */
   /* ---------------------------------------------------------- */
   /* On entry the payment summary is computed from the selected  */
-  /* recipient count: "N recipients x Rs.1 = Rs.N total"         */
-  /* (Req 5.1). The Pay button POSTs to                          */
-  /* /api/campaigns/create-with-payment to create the campaign + */
-  /* Razorpay order (Req 5.4), then opens the Razorpay Checkout  */
-  /* modal with the returned order details. On checkout success  */
-  /* the payment id/order id/signature are POSTed to             */
-  /* /api/campaigns/<id>/verify-payment (Req 5.5); a verified     */
-  /* payment advances to Step 4. Order-creation errors           */
-  /* (Req 14.1) and payment failure / abandonment (Req 14.2) are */
-  /* surfaced to the user while the campaign stays pending.      */
-  /* The created campaignId is stored on window.CampaignWizard    */
-  /* so Steps 4 and 5 can read it.                               */
+  /* recipient count: "N recipients x Rs.1 = Rs.N total".        */
+  /* The Pay button POSTs to /api/campaigns/create-with-payment  */
+  /* to create the campaign and get a UPI deep-link back. A QR   */
+  /* code is rendered from the link. The user pays via any UPI   */
+  /* app, enters their UTR, and submits it. The campaign then    */
+  /* awaits admin confirmation before messages are sent.         */
   /* ========================================================== */
 
   /* ₹ amount equals the selected recipient count (₹1 each). */
@@ -1103,7 +1093,6 @@
     }
     if (elPPay) {
       elPPay.textContent = "Pay \u20B9" + count;
-      /* Req 5.x / 9.4: cannot pay for zero recipients. */
       elPPay.disabled = paying || count < 1;
     }
   }
@@ -1133,154 +1122,131 @@
     showPaymentError("");
   }
 
-  /* Re-enable the Pay button after a flow ends (success path     */
-  /* leaves it disabled since we advance to Step 4).             */
   function endPaying() {
     paying = false;
     renderPaymentSummary();
   }
 
-  /* Req 5.1: refresh the summary every time Step 3 is shown.    */
   function onEnterPayment() {
     clearPaymentError();
     setPaymentStatus("");
     renderPaymentSummary();
   }
 
-  /* Dynamically load Razorpay's checkout.js on demand. Cached    */
-  /* after the first load so repeated attempts reuse the script.  */
-  function loadRazorpayCheckout() {
-    if (window.Razorpay) {
-      return Promise.resolve();
+  /* Render a QR code for the UPI deep-link into #cm-p-qr. */
+  function renderUpiQr(upiLink) {
+    var container = document.getElementById("cm-p-qr");
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (typeof QRCode === "undefined") {
+      /* Retry after a short delay in case the CDN script hasn't loaded yet. */
+      setTimeout(function () {
+        if (typeof QRCode !== "undefined") {
+          container.innerHTML = "";
+          new QRCode(container, {
+            text: upiLink,
+            width: 200,
+            height: 200,
+            correctLevel: QRCode.CorrectLevel.M,
+          });
+        } else {
+          container.textContent = "QR library not loaded. Use the link below.";
+        }
+      }, 1500);
+      container.textContent = "Loading QR code...";
+      return;
     }
-    if (razorpayScriptPromise) {
-      return razorpayScriptPromise;
-    }
-    razorpayScriptPromise = new Promise(function (resolve, reject) {
-      var existing = document.querySelector(
-        'script[data-razorpay-checkout="true"]'
-      );
-      if (existing) {
-        existing.addEventListener("load", function () {
-          resolve();
-        });
-        existing.addEventListener("error", function () {
-          reject(new Error("razorpay-load-failed"));
-        });
-        return;
-      }
-      var script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.async = true;
-      script.setAttribute("data-razorpay-checkout", "true");
-      script.onload = function () {
-        resolve();
-      };
-      script.onerror = function () {
-        /* Allow a later retry by clearing the cached promise. */
-        razorpayScriptPromise = null;
-        reject(new Error("razorpay-load-failed"));
-      };
-      document.head.appendChild(script);
+
+    new QRCode(container, {
+      text: upiLink,
+      width: 200,
+      height: 200,
+      correctLevel: QRCode.CorrectLevel.M,
     });
-    return razorpayScriptPromise;
   }
 
-  /* Req 5.5: server-side verification of the completed payment. */
-  function verifyPayment(campaignId, response) {
-    setPaymentStatus("Verifying payment...");
+  /* Show the UPI section with QR + link after campaign creation. */
+  function showUpiPayment(data) {
+    var section = document.getElementById("cm-p-upi-section");
+    if (section) section.classList.remove("hidden");
+
+    var linkEl = document.getElementById("cm-p-upi-link");
+    if (linkEl) {
+      linkEl.href = data.upiLink;
+    }
+
+    var noteEl = document.getElementById("cm-p-txn-note");
+    if (noteEl) {
+      noteEl.textContent =
+        "Transaction note: " + data.transactionNote +
+        " \u2014 Amount: \u20B9" + data.amount;
+    }
+
+    renderUpiQr(data.upiLink);
+
+    /* Hide the Pay button once QR is shown; show UTR input instead. */
+    if (elPPay) elPPay.classList.add("hidden");
+  }
+
+  /* Submit UTR reference to the server. */
+  function submitUtr() {
+    var utrInput = document.getElementById("cm-p-utr");
+    var utr = utrInput ? utrInput.value.trim() : "";
+
+    if (!utr) {
+      showPaymentError("Please enter the UPI transaction reference number.");
+      return;
+    }
+
+    var campaignId = state.campaignId;
+    if (!campaignId) {
+      showPaymentError("No campaign found. Please try again.");
+      return;
+    }
+
+    var submitBtn = document.getElementById("cm-p-submit-utr");
+    if (submitBtn) submitBtn.disabled = true;
+    setPaymentStatus("Submitting transaction reference...");
+    clearPaymentError();
+
     fetch(
-      "/api/campaigns/" +
-        encodeURIComponent(campaignId) +
-        "/verify-payment",
+      "/api/campaigns/" + encodeURIComponent(campaignId) + "/submit-upi-ref",
       {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_signature: response.razorpay_signature,
-        }),
+        body: JSON.stringify({ upiTransactionRef: utr }),
       }
     )
       .then(function (res) {
         if (!res.ok) {
-          throw new Error("verify-payment " + res.status);
+          return res.json().catch(function () { return {}; }).then(function (d) {
+            throw new Error((d && d.error) || "submit-upi-ref " + res.status);
+          });
         }
         return res.json();
       })
       .then(function () {
-        /* Verified — campaign is now payment_verified. Advance to  */
-        /* Step 4 (confirmation / execution status).               */
-        setPaymentStatus("Payment verified.");
+        setPaymentStatus(
+          "Payment reference submitted! Your campaign will start once " +
+          "the payment is confirmed by an admin."
+        );
         endPaying();
+        /* Advance to Step 4 (confirmation / waiting). */
         showStep(4);
       })
-      .catch(function () {
-        /* Req 14.5 mirror: verification failed — campaign stays    */
-        /* pending, surface a clear message so the user can retry.  */
+      .catch(function (err) {
         showPaymentError(
-          "We could not verify your payment. If money was deducted it " +
-            "will be confirmed automatically, otherwise please try again."
+          (err && err.message) ||
+          "Could not submit payment reference. Please try again."
         );
         setPaymentStatus("");
-        endPaying();
+        if (submitBtn) submitBtn.disabled = false;
       });
   }
 
-  /* Open the Razorpay Checkout modal with the created order.    */
-  /* Req 5.4 (open modal), Req 5.5 (verify on success),           */
-  /* Req 14.2 (graceful failure / abandonment).                  */
-  function openCheckout(order) {
-    var options = {
-      key: order.razorpayKey,
-      order_id: order.razorpayOrderId,
-      amount: order.amount,
-      currency: "INR",
-      name: "SAMAJ",
-      description: "WhatsApp ad campaign",
-      handler: function (response) {
-        verifyPayment(order.campaignId, response);
-      },
-      modal: {
-        ondismiss: function () {
-          /* Req 14.2: user abandoned checkout. Campaign remains in  */
-          /* pending_payment; let them retry.                       */
-          setPaymentStatus("");
-          showPaymentError(
-            "Payment was not completed. Your campaign is saved — " +
-              "you can try paying again."
-          );
-          endPaying();
-        },
-      },
-    };
-
-    try {
-      var rzp = new window.Razorpay(options);
-      if (typeof rzp.on === "function") {
-        rzp.on("payment.failed", function () {
-          /* Req 14.2: payment failed at the gateway. */
-          setPaymentStatus("");
-          showPaymentError(
-            "Payment failed. Your campaign is saved — please try again."
-          );
-          endPaying();
-        });
-      }
-      setPaymentStatus("Opening secure payment...");
-      rzp.open();
-    } catch (err) {
-      showPaymentError(
-        "Could not open the payment window. Please try again."
-      );
-      setPaymentStatus("");
-      endPaying();
-    }
-  }
-
-  /* Pay button — create the campaign + order, then open checkout. */
+  /* Pay button — create the campaign, then show UPI QR. */
   function startPayment() {
     if (paying) {
       return;
@@ -1300,8 +1266,6 @@
 
     var selectedRecipients = window.CampaignWizard.selectedRecipients || [];
     var body = {
-      /* Privacy hardening: send only the selected registration ids; the
-         server re-resolves full mobile numbers. */
       registrationIds: selectedRecipients.map(function (recipient) {
         return recipient.registrationId;
       }),
@@ -1309,8 +1273,6 @@
       templateLanguage: window.CampaignWizard.templateLanguage || "",
       bodyVarsTemplate: window.CampaignWizard.bodyVarsTemplate || [],
       audienceFilters: window.CampaignWizard.audienceFilters || null,
-      /* Per-family salutation toggle answers (id -> shri-sau /
-         sah-parivaar), resolved into the {salutation} template var. */
       salutations: window.CampaignWizard.salutations || {},
     };
 
@@ -1322,8 +1284,6 @@
     })
       .then(function (res) {
         if (!res.ok) {
-          /* Surface the server's specific error message when available
-             (e.g. "Payments are not configured") instead of a generic one. */
           return res
             .json()
             .catch(function () {
@@ -1338,25 +1298,22 @@
         return res.json();
       })
       .then(function (data) {
-        var order = data || {};
-        if (!order.campaignId || !order.razorpayOrderId) {
+        var result = data || {};
+        if (!result.campaignId || !result.upiLink) {
           throw new Error("create-with-payment malformed");
         }
         /* Persist the campaign id for Steps 4 and 5. */
-        state.campaignId = order.campaignId;
-        window.CampaignWizard.campaignId = order.campaignId;
+        state.campaignId = result.campaignId;
+        window.CampaignWizard.campaignId = result.campaignId;
 
-        setPaymentStatus("Loading secure payment...");
-        return loadRazorpayCheckout().then(function () {
-          openCheckout(order);
-        });
+        setPaymentStatus("Campaign created! Please complete UPI payment below.");
+        showUpiPayment(result);
+        endPaying();
       })
       .catch(function (error) {
-        /* Req 14.1: order creation (or checkout load) failed. No    */
-        /* messages are sent; allow the user to retry.              */
         showPaymentError(
           (error && error.serverMessage) ||
-            "We could not start the payment. Please check your connection " +
+            "We could not create the campaign. Please check your connection " +
               "and try again."
         );
         setPaymentStatus("");
@@ -1364,7 +1321,7 @@
       });
   }
 
-  /* Reset Step 3 state (Req 2.5 / 14.2 — wizard reset). */
+  /* Reset Step 3 state (wizard reset). */
   function resetPaymentState() {
     paying = false;
     state.campaignId = null;
@@ -1372,21 +1329,20 @@
     clearPaymentError();
     setPaymentStatus("");
     renderPaymentSummary();
+    /* Hide UPI section on reset. */
+    var section = document.getElementById("cm-p-upi-section");
+    if (section) section.classList.add("hidden");
+    if (elPPay) elPPay.classList.remove("hidden");
   }
 
   /* ========================================================== */
-  /* STEP 4 — Confirmation & execution status (Requirement 6)   */
+  /* STEP 4 — Confirmation & awaiting admin approval            */
   /* ---------------------------------------------------------- */
-  /* When the user reaches Step 4 their payment has been         */
-  /* verified, so we show a "Payment confirmed" indicator and a  */
-  /* "Campaign is being sent..." progress state (Req 6.4). The   */
-  /* webhook-driven backend transitions the campaign through      */
-  /* "sending" -> "sent"/"failed"; we poll                       */
-  /* GET /api/campaigns/<id> on a fixed cadence and, once the    */
-  /* status reaches a terminal value, stop polling and auto-      */
-  /* advance to Step 5 (delivery report) (Req 6.5). Polling is    */
-  /* cancelled when leaving Step 4 and on wizard reset so no       */
-  /* stray timers outlive the step.                              */
+  /* With UPI manual payments, the admin may take hours to       */
+  /* confirm. Step 4 shows a "submitted, awaiting confirmation"  */
+  /* message. The user can safely close the page. If they stay,  */
+  /* we do a gentle poll (every 30s) and auto-advance to Step 5  */
+  /* if the campaign reaches a terminal state while they watch.  */
   /* ========================================================== */
 
   /* Terminal campaign states — reaching either ends the poll.   */
@@ -1408,10 +1364,12 @@
     }
   }
 
-  /* Schedule the next status check (unless one is already due).  */
+  /* Schedule the next status check — gentle interval (30s).     */
+  var GENTLE_POLL_MS = 30000;
+
   function scheduleConfirmationPoll() {
     stopConfirmationPoll();
-    confirmationPollTimer = setTimeout(pollCampaignStatus, POLL_INTERVAL_MS);
+    confirmationPollTimer = setTimeout(pollCampaignStatus, GENTLE_POLL_MS);
   }
 
   /* One status check: GET the campaign, inspect its status, and  */
@@ -1421,12 +1379,9 @@
 
     var campaignId = window.CampaignWizard.campaignId;
     if (!campaignId) {
-      /* Nothing to poll — leave the progress state as-is. */
       return;
     }
 
-    /* Capture which campaign this poll is for so a late response   */
-    /* after a reset/restart is ignored.                           */
     var pollCampaignId = campaignId;
 
     fetch("/api/campaigns/" + encodeURIComponent(campaignId), {
@@ -1439,7 +1394,6 @@
         return res.json();
       })
       .then(function (data) {
-        /* Ignore stale responses if the wizard moved on/reset.     */
         if (
           state.currentStep !== 4 ||
           window.CampaignWizard.campaignId !== pollCampaignId
@@ -1451,23 +1405,28 @@
         var status = campaign.status || "";
 
         if (isTerminalCampaignStatus(status)) {
-          /* Req 6.5: sending complete — stop and show the report.  */
           stopConfirmationPoll();
           setConfirmationStatus(
             status === "sent"
-              ? "Campaign sent. Loading delivery report\u2026"
+              ? "Campaign sent! Loading delivery report\u2026"
               : "Sending finished. Loading delivery report\u2026"
           );
           showStep(5);
           return;
         }
 
-        /* Still pending/sending — keep the progress state and poll. */
-        setConfirmationStatus("Campaign is being sent\u2026");
+        if (status === "sending" || status === "payment_verified") {
+          setConfirmationStatus("Campaign is being sent\u2026");
+        } else {
+          setConfirmationStatus(
+            "Awaiting payment confirmation by admin."
+          );
+        }
+
+        /* Keep a gentle background poll. */
         scheduleConfirmationPoll();
       })
       .catch(function () {
-        /* Transient error — keep trying while we remain on Step 4. */
         if (
           state.currentStep === 4 &&
           window.CampaignWizard.campaignId === pollCampaignId
@@ -1477,21 +1436,16 @@
       });
   }
 
-  /* Req 6.4: entering Step 4 shows the confirmed/progress state  */
-  /* and kicks off polling. Handles the case where the campaign   */
-  /* is already terminal on the very first check.                */
   function onEnterConfirmation() {
     stopConfirmationPoll();
-    setConfirmationStatus("Campaign is being sent\u2026");
-    /* Poll immediately so an already sent/failed campaign advances */
-    /* without waiting a full interval.                            */
+    setConfirmationStatus("Awaiting payment confirmation by admin.");
+    /* Do an immediate check in case the campaign is already done. */
     pollCampaignStatus();
   }
 
-  /* Reset Step 4 state (Req 2.5 — wizard reset). */
   function resetConfirmationState() {
     stopConfirmationPoll();
-    setConfirmationStatus("Campaign is being sent\u2026");
+    setConfirmationStatus("Awaiting payment confirmation by admin.");
   }
 
   /* ========================================================== */
@@ -1955,6 +1909,10 @@
         setPaymentStatus("");
         showStep(2);
       });
+    }
+    var elPSubmitUtr = document.getElementById("cm-p-submit-utr");
+    if (elPSubmitUtr) {
+      elPSubmitUtr.addEventListener("click", submitUtr);
     }
 
     /* Step 5 (delivery report) wiring — manual retry. */

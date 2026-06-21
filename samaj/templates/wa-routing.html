@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Routing Engine — SAMAJ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script defer src="{{ url_for('static', filename='wa-routing.js') }}"></script>
+  </head>
+  <body class="directory-body">
+    {% include "_topbar.html" %}
+
+    <main class="directory-layout">
+
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Super Admin</p>
+            <h2>Message Routing Engine</h2>
+            <p>Control how messages are routed between WhatsApp Web sessions and Cloud API. Changes apply immediately to all users.</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <a href="/whatsapp-web" class="button-secondary">← Connection</a>
+            <a href="/wa-backup-dashboard" class="button-secondary">Backup Dashboard →</a>
+          </div>
+        </div>
+
+        <form id="routing-form" class="form-surface" novalidate>
+
+          <!-- Master Toggle -->
+          <div style="display:flex;align-items:center;gap:12px;padding:16px;background:var(--surface-soft);border-radius:8px;margin-bottom:24px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="routing-enabled" style="width:18px;height:18px;">
+              <span style="font-weight:600;">Hybrid Routing Enabled</span>
+            </label>
+            <span style="font-size:13px;color:var(--steel);">When disabled, all messages go through Cloud API only.</span>
+          </div>
+
+          <!-- Routing Rules -->
+          <h3>Routing Rules</h3>
+          <p style="color:var(--steel);font-size:14px;margin-bottom:16px;">These rules determine when a message is forced to Cloud API vs allowed via WhatsApp Web.</p>
+
+          <div class="field-grid" style="gap:16px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="rule-first-contact" style="width:16px;height:16px;">
+              <span>Force Cloud API for first contact (never chatted before)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="rule-multi-recipient" style="width:16px;height:16px;">
+              <span>Force Cloud API for multiple recipients (bulk sends)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="rule-campaign" style="width:16px;height:16px;">
+              <span>Force Cloud API for campaign/broadcast messages</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="rule-personal" style="width:16px;height:16px;">
+              <span>Allow Web session for personal follow-ups (when within limits)</span>
+            </label>
+          </div>
+
+          <!-- Rate Limits -->
+          <h3 style="margin-top:32px;">Rate Limits</h3>
+          <p style="color:var(--steel);font-size:14px;margin-bottom:16px;">Safety controls to prevent account bans from aggressive usage.</p>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>Max daily messages per user (via Web)</span>
+              <input type="number" id="max-daily-sends" min="1" max="100" value="20">
+              <span style="font-size:12px;color:var(--steel);">Recommended: 15-20. Higher values increase ban risk.</span>
+            </label>
+            <label class="field">
+              <span>Profile pic fetch delay (ms)</span>
+              <input type="number" id="pic-fetch-delay" min="1000" max="10000" value="2500">
+              <span style="font-size:12px;color:var(--steel);">Delay between each profile picture download during backup.</span>
+            </label>
+          </div>
+
+          <!-- Backup Settings -->
+          <h3 style="margin-top:32px;">Auto Backup</h3>
+          <p style="color:var(--steel);font-size:14px;margin-bottom:16px;">Configure when contact backups run automatically.</p>
+
+          <div class="field-grid">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="auto-backup-on-connect" style="width:16px;height:16px;">
+              <span>Run backup immediately on first connect</span>
+            </label>
+            <label class="field">
+              <span>Auto backup schedule</span>
+              <select id="backup-schedule">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="off">Off (manual only)</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- Cooldown -->
+          <h3 style="margin-top:32px;">Ban Cooldown</h3>
+          <p style="color:var(--steel);font-size:14px;margin-bottom:16px;">If WhatsApp issues a warning or temporary ban, disable web sends for a cooldown period.</p>
+
+          <div class="field-grid">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="cooldown-enabled" style="width:16px;height:16px;">
+              <span>Enable cooldown after warnings</span>
+            </label>
+            <label class="field">
+              <span>Cooldown duration (hours)</span>
+              <input type="number" id="cooldown-hours" min="1" max="168" value="72">
+              <span style="font-size:12px;color:var(--steel);">How long to disable web sends after a warning. Default: 72 hours.</span>
+            </label>
+          </div>
+
+          <!-- Save -->
+          <div style="margin-top:32px;display:flex;align-items:center;gap:12px;">
+            <button type="submit" class="button-primary">Save Configuration</button>
+            <span id="save-result" style="font-size:14px;"></span>
+          </div>
+        </form>
+      </section>
+
+      <!-- Route Tester -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <h2>Route Tester</h2>
+            <p>Test how a message would be routed with current settings.</p>
+          </div>
+        </div>
+        <div class="form-surface">
+          <div class="field-grid">
+            <label class="field">
+              <span>Recipient phone</span>
+              <input type="tel" id="test-phone" placeholder="919876543210">
+            </label>
+            <label class="field">
+              <span>Message type</span>
+              <select id="test-type">
+                <option value="personal">Personal follow-up</option>
+                <option value="campaign">Campaign</option>
+                <option value="broadcast">Broadcast</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Recipient count</span>
+              <input type="number" id="test-count" value="1" min="1">
+            </label>
+          </div>
+          <button type="button" id="test-route-btn" class="button-secondary" style="margin-top:16px;">Test Route</button>
+          <div id="test-result" style="margin-top:12px;padding:12px;border-radius:8px;display:none;"></div>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

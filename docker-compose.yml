@@ -1,0 +1,43 @@
+# Docker Compose for SAMAJ + WhatsApp Web sidecar
+# Usage: docker compose up -d
+
+version: "3.8"
+
+services:
+  # Main SAMAJ Flask app
+  app:
+    build: .
+    ports:
+      - "5000:8080"
+    env_file: .env
+    environment:
+      - WA_WEB_SERVICE_URL=http://whatsapp-web:3001
+    depends_on:
+      - mongo
+      - whatsapp-web
+
+  # WhatsApp Web sidecar (Node.js + Baileys)
+  whatsapp-web:
+    build: ./whatsapp-web
+    ports:
+      - "3001:3001"
+    env_file: .env
+    environment:
+      - PORT=3001
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB=samaj
+    volumes:
+      # Persist auth sessions across container restarts
+      - wa-sessions:/app/auth-sessions
+
+  # MongoDB
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
+  wa-sessions:

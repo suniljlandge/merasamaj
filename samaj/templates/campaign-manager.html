@@ -67,6 +67,15 @@
     src="{{ url_for('static', filename='campaign-wizard.js') }}"
   ></script>
 
+  <!-- QR code generation for UPI payments (davidshimjs/qrcodejs) -->
+  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+
+  <!-- WhatsApp tab logic -->
+  <script
+    defer
+    src="{{ url_for('static', filename='campaign-whatsapp.js') }}"
+  ></script>
+
 </head>
 
 <body class="bg-slate-100 text-slate-900 overflow-x-hidden">
@@ -140,6 +149,30 @@
         data-tab="campaign"
       >
         WhatsApp Ads Campaign
+      </button>
+
+      <button
+        type="button"
+        class="cm-tab px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200"
+        id="cm-tab-history"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cm-panel-history"
+        data-tab="history"
+      >
+        My Campaigns
+      </button>
+
+      <button
+        type="button"
+        class="cm-tab px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200"
+        id="cm-tab-whatsapp"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cm-panel-whatsapp"
+        data-tab="whatsapp"
+      >
+        WhatsApp
       </button>
 
       <button
@@ -656,17 +689,14 @@
           </div>
         </div>
 
-        <!-- STEP 3: Payment via Razorpay (task 11.1) -->
+        <!-- STEP 3: Payment via UPI -->
         <!-- ================================================== -->
         <!-- Shows the payment summary (N recipients x Rs.1 =   -->
-        <!-- Rs.N total, Req 5.1). The "Pay" button creates the -->
-        <!-- campaign + Razorpay order via                      -->
-        <!-- /api/campaigns/create-with-payment (Req 5.4), opens -->
-        <!-- the Razorpay Checkout modal, then verifies the      -->
-        <!-- payment via /api/campaigns/<id>/verify-payment      -->
-        <!-- (Req 5.5). Order-creation errors (Req 14.1) and     -->
-        <!-- payment failure / abandonment (Req 14.2) are shown  -->
-        <!-- gracefully while the campaign stays pending.        -->
+        <!-- Rs.N total). The "Pay" button creates the campaign  -->
+        <!-- via /api/campaigns/create-with-payment, then shows  -->
+        <!-- a UPI QR code and deep-link. The user pays via any  -->
+        <!-- UPI app, enters their UTR, and submits. An admin    -->
+        <!-- then confirms the payment to trigger sending.       -->
         <!-- ================================================== -->
         <div
           class="cm-wizard-step hidden"
@@ -689,7 +719,7 @@
               </h2>
             </div>
 
-            <!-- PAYMENT SUMMARY (Req 5.1) -->
+            <!-- PAYMENT SUMMARY -->
             <div class="p-4 md:p-6">
               <dl class="space-y-3 max-w-sm">
                 <div class="flex items-center justify-between gap-3">
@@ -724,10 +754,65 @@
               >
                 0 recipients &times; &#8377;1 = &#8377;0 total
               </p>
+
+              <!-- UPI QR Code + Link (shown after campaign creation) -->
+              <div id="cm-p-upi-section" class="mt-6 hidden">
+                <div class="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                  <p class="text-sm font-medium text-slate-700 mb-3">
+                    Scan QR code or tap the button below to pay via UPI:
+                  </p>
+                  <div class="flex flex-col items-center gap-4">
+                    <div id="cm-p-qr" class="bg-white p-3 rounded-lg border border-slate-200"></div>
+                    <a
+                      id="cm-p-upi-link"
+                      href="#"
+                      class="
+                        inline-flex items-center gap-2 h-11 rounded-xl
+                        bg-indigo-500 hover:bg-indigo-600 transition
+                        font-semibold text-white text-sm px-6
+                      "
+                    >
+                      Open UPI App
+                    </a>
+                    <p id="cm-p-txn-note" class="text-xs text-slate-500"></p>
+                  </div>
+                </div>
+
+                <!-- UTR / Transaction Reference Input -->
+                <div class="mt-4">
+                  <label for="cm-p-utr" class="block text-sm font-medium text-slate-700 mb-1">
+                    UPI Transaction Reference (UTR)
+                  </label>
+                  <p class="text-xs text-slate-500 mb-2">
+                    After paying, enter the transaction reference number from your UPI app.
+                  </p>
+                  <input
+                    id="cm-p-utr"
+                    type="text"
+                    placeholder="e.g. 412345678901"
+                    class="
+                      w-full h-11 rounded-xl border border-slate-300
+                      px-4 text-sm text-slate-800
+                      focus:outline-none focus:ring-2 focus:ring-emerald-400
+                    "
+                  />
+                  <button
+                    id="cm-p-submit-utr"
+                    type="button"
+                    class="
+                      mt-3 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600
+                      transition font-semibold text-white text-sm px-6
+                      disabled:opacity-60 disabled:cursor-not-allowed
+                    "
+                  >
+                    Submit &amp; Confirm Payment
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- STATUS + NAV (Req 14.1, 14.2) -->
+          <!-- STATUS + NAV -->
           <div class="mt-4 flex flex-col gap-3">
             <p
               id="cm-p-status"
@@ -787,7 +872,7 @@
             </div>
 
             <div class="p-4 md:p-6">
-              <!-- PAYMENT CONFIRMED INDICATOR (Req 6.4) -->
+              <!-- PAYMENT SUBMITTED INDICATOR -->
               <div
                 id="cm-c-payment-confirmed"
                 class="
@@ -803,36 +888,29 @@
                   aria-hidden="true"
                 >&#10003;</span>
                 <span class="text-sm font-semibold text-emerald-800">
-                  Payment confirmed
+                  Payment reference submitted
                 </span>
               </div>
 
-              <!-- SENDING PROGRESS STATE (Req 6.4) -->
+              <!-- STATUS -->
               <div
                 id="cm-c-progress"
-                class="mt-5 flex items-center gap-3"
+                class="mt-5"
                 role="status"
                 aria-live="polite"
               >
                 <span
-                  id="cm-c-spinner"
-                  class="
-                    h-5 w-5 rounded-full border-2 border-slate-300
-                    border-t-emerald-500 animate-spin
-                  "
-                  aria-hidden="true"
-                ></span>
-                <span
                   id="cm-c-status"
                   class="text-sm font-medium text-slate-700"
                 >
-                  Campaign is being sent&hellip;
+                  Your campaign is awaiting payment confirmation by an admin.
                 </span>
               </div>
 
-              <p class="mt-3 text-xs text-slate-500">
-                Please keep this page open. You&rsquo;ll be taken to the
-                delivery report automatically once sending is complete.
+              <p class="mt-3 text-sm text-slate-600">
+                You can safely close this page. Once the admin confirms your
+                payment, your campaign will be sent automatically. You'll
+                receive the messages once delivery is complete.
               </p>
             </div>
           </div>
@@ -983,7 +1061,347 @@
       </div>
     </section>
 
+    <!-- ========================================================== -->
+    <!-- TAB PANEL: MY CAMPAIGNS (campaign history + reports)       -->
+    <!-- ========================================================== -->
+    <section
+      id="cm-panel-history"
+      class="cm-panel hidden"
+      role="tabpanel"
+      aria-labelledby="cm-tab-history"
+    >
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-4 md:px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-700">My Campaigns</h2>
+          <button
+            id="cm-history-refresh"
+            type="button"
+            class="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+          >Refresh</button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th class="px-4 py-3">Campaign</th>
+                <th class="px-4 py-3">Recipients</th>
+                <th class="px-4 py-3">Status</th>
+                <th class="px-4 py-3">Created</th>
+                <th class="px-4 py-3">Action</th>
+              </tr>
+            </thead>
+            <tbody id="cm-history-body" class="divide-y divide-slate-100">
+              <tr>
+                <td colspan="5" class="px-4 py-8 text-center text-slate-400">
+                  Loading campaigns&hellip;
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p id="cm-history-empty" class="hidden px-4 py-8 text-center text-sm text-slate-400">
+          No campaigns yet. Create your first campaign from the WhatsApp Ads Campaign tab.
+        </p>
+      </div>
+    </section>
+
+    <!-- ========================================================== -->
+    <!-- TAB PANEL: WHATSAPP CONNECTION                            -->
+    <!-- ========================================================== -->
+    <section
+      id="cm-panel-whatsapp"
+      class="cm-panel hidden"
+      role="tabpanel"
+      aria-labelledby="cm-tab-whatsapp"
+    >
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
+        <!-- Status -->
+        <div id="wa-status-bar" class="flex items-center gap-3 mb-5 p-3 bg-slate-50 rounded-xl">
+          <span id="wa-dot" class="w-3 h-3 rounded-full bg-slate-300 flex-shrink-0"></span>
+          <span id="wa-status-label" class="text-sm font-semibold text-slate-700">Checking...</span>
+          <span id="wa-status-msg" class="text-xs text-slate-500 ml-auto"></span>
+        </div>
+
+        <!-- Connect Form -->
+        <div id="wa-connect-form">
+          <h3 class="text-base font-semibold text-slate-800 mb-2">Connect Your WhatsApp</h3>
+          <p class="text-sm text-slate-500 mb-4">
+            Link your personal WhatsApp to send follow-up messages directly. You'll receive a pairing code to enter on your phone.
+          </p>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <input
+              type="tel"
+              id="wa-phone-input"
+              class="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="+91 98765 43210"
+            >
+            <button
+              type="button"
+              id="wa-connect-btn"
+              class="px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
+            >
+              Get Pairing Code
+            </button>
+          </div>
+        </div>
+
+        <!-- Pairing Code -->
+        <div id="wa-pairing-panel" class="hidden text-center mt-5 p-5 bg-emerald-50 rounded-xl">
+          <p class="text-sm text-slate-600 mb-2">Enter this code on your phone:</p>
+          <p id="wa-pairing-code" class="text-3xl font-bold tracking-widest text-emerald-800 my-3"></p>
+          <p class="text-xs text-slate-500">
+            WhatsApp → Settings → Linked Devices → Link a Device → Enter code
+          </p>
+          <p class="text-xs text-red-500 mt-2">⚠ Code expires in ~20 seconds</p>
+        </div>
+
+        <!-- Connected State -->
+        <div id="wa-connected-panel" class="hidden mt-5">
+          <div class="flex items-center justify-between p-4 bg-emerald-50 rounded-xl">
+            <div>
+              <p class="text-sm font-semibold text-emerald-800">✓ WhatsApp Connected</p>
+              <p id="wa-connected-phone" class="text-xs text-slate-600 mt-0.5"></p>
+            </div>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                id="wa-disconnect-btn"
+                class="px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50"
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
+
+          <!-- Daily stats -->
+          <div class="grid grid-cols-3 gap-4 mt-4 text-center">
+            <div class="p-3 bg-slate-50 rounded-lg">
+              <p id="wa-stat-sent" class="text-xl font-bold text-slate-800">0</p>
+              <p class="text-xs text-slate-500">Sent Today</p>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-lg">
+              <p id="wa-stat-limit" class="text-xl font-bold text-slate-800">20</p>
+              <p class="text-xs text-slate-500">Daily Limit</p>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-lg">
+              <p id="wa-stat-remaining" class="text-xl font-bold text-emerald-700">20</p>
+              <p class="text-xs text-slate-500">Remaining</p>
+            </div>
+          </div>
+
+          <!-- Quick Send -->
+          <div class="mt-5 pt-5 border-t border-slate-200">
+            <h4 class="text-sm font-semibold text-slate-700 mb-3">Send Personal Follow-up</h4>
+            <div class="flex flex-col gap-3">
+              <input
+                type="tel"
+                id="wa-send-phone"
+                class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Recipient phone (91XXXXXXXXXX)"
+              >
+              <textarea
+                id="wa-send-text"
+                rows="2"
+                class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Type your message..."
+              ></textarea>
+              <div class="flex items-center gap-3">
+                <button
+                  type="button"
+                  id="wa-send-btn"
+                  class="px-5 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
+                >
+                  Send
+                </button>
+                <span id="wa-send-result" class="text-xs"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
   </main>
+
+  <script>
+  (function () {
+    "use strict";
+
+    var tbody = document.getElementById("cm-history-body");
+    var emptyMsg = document.getElementById("cm-history-empty");
+    var refreshBtn = document.getElementById("cm-history-refresh");
+    var loaded = false;
+
+    function statusBadge(status) {
+      var colors = {
+        pending_payment: "bg-yellow-100 text-yellow-800",
+        payment_verified: "bg-blue-100 text-blue-800",
+        sending: "bg-indigo-100 text-indigo-800",
+        sent: "bg-emerald-100 text-emerald-800",
+        failed: "bg-red-100 text-red-800",
+        rejected: "bg-red-100 text-red-800",
+      };
+      var labels = {
+        pending_payment: "Awaiting Confirmation",
+        payment_verified: "Payment Verified",
+        sending: "Sending...",
+        sent: "Sent",
+        failed: "Failed",
+        rejected: "Rejected",
+      };
+      var cls = colors[status] || "bg-slate-100 text-slate-700";
+      var label = labels[status] || status;
+      return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium ' + cls + '">' + esc(label) + '</span>';
+    }
+
+    function loadCampaigns() {
+      tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-slate-400">Loading&hellip;</td></tr>';
+      if (emptyMsg) emptyMsg.classList.add("hidden");
+
+      fetch("/api/campaigns", { credentials: "same-origin" })
+        .then(function (res) {
+          if (!res.ok) throw new Error("Failed: " + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          var campaigns = data.campaigns || [];
+          if (campaigns.length === 0) {
+            tbody.innerHTML = "";
+            if (emptyMsg) emptyMsg.classList.remove("hidden");
+            return;
+          }
+          if (emptyMsg) emptyMsg.classList.add("hidden");
+          tbody.innerHTML = "";
+
+          campaigns.forEach(function (c) {
+            var tr = document.createElement("tr");
+            tr.className = "hover:bg-slate-50";
+
+            var actionHtml = "";
+            if (c.status === "sent" || c.status === "failed") {
+              actionHtml = '<button class="view-report-btn text-xs font-medium text-indigo-600 hover:text-indigo-800" data-id="' + esc(c._id) + '">View Report</button>';
+            } else if (c.status === "rejected") {
+              var reason = c.rejectionReason || "No reason provided";
+              actionHtml = '<span class="text-xs text-red-600" title="' + esc(reason) + '">Rejected: ' + esc(reason.length > 30 ? reason.slice(0, 30) + "..." : reason) + '</span>';
+            } else {
+              actionHtml = '<span class="text-xs text-slate-400">—</span>';
+            }
+
+            tr.innerHTML =
+              '<td class="px-4 py-3 font-medium text-slate-800">' + esc(c.name || "Unnamed") + '</td>' +
+              '<td class="px-4 py-3 text-slate-600">' + (c.recipientCount || 0) + '</td>' +
+              '<td class="px-4 py-3">' + statusBadge(c.status) + '</td>' +
+              '<td class="px-4 py-3 text-slate-500 whitespace-nowrap">' + formatDate(c.createdAt) + '</td>' +
+              '<td class="px-4 py-3">' + actionHtml + '</td>';
+            tbody.appendChild(tr);
+          });
+
+          // Wire up report buttons.
+          tbody.querySelectorAll(".view-report-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              showReport(btn.getAttribute("data-id"));
+            });
+          });
+
+          loaded = true;
+        })
+        .catch(function () {
+          tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-red-500">Error loading campaigns.</td></tr>';
+        });
+    }
+
+    function showReport(campaignId) {
+      // Open a simple modal/overlay with the delivery report.
+      fetch("/api/campaigns/" + encodeURIComponent(campaignId) + "/report", {
+        credentials: "same-origin",
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error("Failed: " + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          var stats = data.stats || {};
+          var recipients = data.recipients || [];
+
+          var html = '<div style="position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;" id="cm-report-overlay">';
+          html += '<div style="background:#fff;border-radius:1rem;max-width:600px;width:100%;max-height:80vh;overflow:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.2);">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">';
+          html += '<h3 style="font-size:1rem;font-weight:700;color:#1e293b;">Delivery Report</h3>';
+          html += '<button id="cm-report-close" style="font-size:1.25rem;background:none;border:none;cursor:pointer;color:#64748b;">&times;</button>';
+          html += '</div>';
+
+          html += '<div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">';
+          html += '<div style="background:#f0fdf4;padding:0.5rem 1rem;border-radius:0.5rem;"><strong style="color:#166534;">' + (stats.sent || 0) + '</strong> <span style="color:#166534;font-size:0.8rem;">Sent</span></div>';
+          html += '<div style="background:#fef2f2;padding:0.5rem 1rem;border-radius:0.5rem;"><strong style="color:#991b1b;">' + (stats.failed || 0) + '</strong> <span style="color:#991b1b;font-size:0.8rem;">Failed</span></div>';
+          html += '<div style="background:#f8fafc;padding:0.5rem 1rem;border-radius:0.5rem;"><strong style="color:#475569;">' + (stats.total || 0) + '</strong> <span style="color:#475569;font-size:0.8rem;">Total</span></div>';
+          html += '</div>';
+
+          html += '<table style="width:100%;font-size:0.8rem;border-collapse:collapse;">';
+          html += '<thead><tr style="background:#f8fafc;"><th style="padding:0.5rem;text-align:left;">Name</th><th style="padding:0.5rem;text-align:left;">Mobile</th><th style="padding:0.5rem;text-align:left;">Status</th></tr></thead>';
+          html += '<tbody>';
+          recipients.forEach(function (r) {
+            var color = r.status === "sent" ? "#166534" : "#991b1b";
+            html += '<tr style="border-top:1px solid #f1f5f9;">';
+            html += '<td style="padding:0.4rem 0.5rem;">' + esc(r.name || "—") + '</td>';
+            html += '<td style="padding:0.4rem 0.5rem;font-family:monospace;">' + esc(r.mobile || "—") + '</td>';
+            html += '<td style="padding:0.4rem 0.5rem;color:' + color + ';font-weight:600;">' + esc(r.status || "—") + '</td>';
+            html += '</tr>';
+          });
+          html += '</tbody></table>';
+          html += '</div></div>';
+
+          var overlay = document.createElement("div");
+          overlay.innerHTML = html;
+          document.body.appendChild(overlay.firstChild);
+
+          document.getElementById("cm-report-close").addEventListener("click", function () {
+            var el = document.getElementById("cm-report-overlay");
+            if (el) el.remove();
+          });
+          document.getElementById("cm-report-overlay").addEventListener("click", function (e) {
+            if (e.target === this) this.remove();
+          });
+        })
+        .catch(function () {
+          alert("Could not load the delivery report.");
+        });
+    }
+
+    function esc(str) {
+      var div = document.createElement("div");
+      div.textContent = str || "";
+      return div.innerHTML;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return "\u2014";
+      try {
+        var d = new Date(dateStr.$date || dateStr);
+        return d.toLocaleDateString("en-IN", {
+          day: "2-digit", month: "short", year: "numeric",
+          hour: "2-digit", minute: "2-digit",
+        });
+      } catch (e) {
+        return String(dateStr);
+      }
+    }
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", loadCampaigns);
+    }
+
+    // Load campaigns when the "My Campaigns" tab becomes active.
+    document.addEventListener("cm:tab-changed", function (e) {
+      if (e.detail && e.detail.tab === "history" && !loaded) {
+        loadCampaigns();
+      }
+    });
+  })();
+  </script>
 
 </body>
 

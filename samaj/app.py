@@ -41,7 +41,6 @@ from .campaign import (
     get_areas_with_counts,
     get_distinct_surname_groups,
     get_ad_templates,
-    verify_razorpay_signature,
     validate_campaign_status_transition,
     PAYMENT_VERIFIED,
 )
@@ -194,13 +193,11 @@ def create_app(config=None, collection=None, correction_collection=None):
         ),
         OTP_TEST_MODE=env_flag("OTP_TEST_MODE"),
         OTP_FIXED_CODE=os.getenv("OTP_FIXED_CODE", "").strip(),
-        # Razorpay credentials for the Campaign Manager payment flow. Loaded
-        # from the environment at startup so the campaign module can read them
-        # from app config (with an env fallback). Overridable via the `config`
-        # argument for tests (Requirements 5.2, 6.1).
-        RAZORPAY_KEY_ID=os.getenv("RAZORPAY_KEY_ID", "").strip(),
-        RAZORPAY_KEY_SECRET=os.getenv("RAZORPAY_KEY_SECRET", "").strip(),
-        RAZORPAY_WEBHOOK_SECRET=os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip(),
+        # UPI payment config for the Campaign Manager. Loaded from the
+        # environment at startup so the campaign module can read them from
+        # app config (with an env fallback).
+        UPI_ID=os.getenv("UPI_ID", "").strip(),
+        UPI_PAYEE_NAME=os.getenv("UPI_PAYEE_NAME", "SAMAJ").strip(),
     )
 
     if config:
@@ -209,6 +206,10 @@ def create_app(config=None, collection=None, correction_collection=None):
     app.extensions["mongo_client"] = None
     app.extensions["mongo_collection"] = collection
     app.extensions["mongo_correction_collection"] = correction_collection
+
+    # --- WhatsApp Web integration (hybrid messaging) ---
+    from .whatsapp_web_routes import wa_web_bp
+    app.register_blueprint(wa_web_bp)
 
     @app.context_processor
     def inject_nav_capabilities():
@@ -405,6 +406,48 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         return render_template(
             "superadmin.html",
+            current_role=current_role(),
+        )
+
+    @app.route("/whatsapp-web")
+    def whatsapp_web_page():
+        """WhatsApp Web connection page — available to users with manage_wa_web."""
+        if not role_can("manage_wa_web"):
+            return redirect("/directory")
+        return render_template(
+            "whatsapp-web.html",
+            current_role=current_role(),
+        )
+
+    @app.route("/wa-backup-dashboard")
+    def wa_backup_dashboard_page():
+        """Backup dashboard + contact viewer — super admin only."""
+        if not role_can("manage_wa_web"):
+            return redirect("/directory")
+        return render_template(
+            "wa-backup-dashboard.html",
+            current_role=current_role(),
+        )
+
+    @app.route("/wa-routing")
+    def wa_routing_page():
+        """Routing engine control panel — super admin only."""
+        if not role_can("manage_wa_routing"):
+            return redirect("/directory")
+        return render_template(
+            "wa-routing.html",
+            current_role=current_role(),
+        )
+
+    @app.route("/campaign-payments")
+    def campaign_payments_page():
+        """Dedicated page for confirming pending UPI campaign payments."""
+
+        if not is_staff_session() or not role_can("confirm_campaign_payments"):
+            return redirect("/directory")
+
+        return render_template(
+            "campaign-payments.html",
             current_role=current_role(),
         )
 
@@ -3494,13 +3537,13 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.post("/api/campaigns/create-with-payment")
     @require_campaigner
     def create_campaign_with_payment_route():
-        """Create a campaign and its Razorpay order in one step for Step 3 of
+        """Create a campaign and generate its UPI payment link for Step 3 of
         the campaign wizard.
 
         Parses the selected recipient registration ids, template selection,
         body variable template, and the audience filters used during selection
         from the JSON body, then delegates to
-        campaign.create_campaign_with_payment() using the authenticated
+        campaign.create_campaign_with_upi() using the authenticated
         campaigner's account id from the session.
 
         Privacy hardening: the browser sends only registration ids
@@ -3509,12 +3552,9 @@ def create_app(config=None, collection=None, correction_collection=None):
         leave the server. A legacy "recipients" array is still accepted (ids
         are extracted from it) for backward compatibility.
 
-        On success returns {campaignId, razorpayOrderId, amount, razorpayKey}.
-        An empty recipients list yields a 400 (Requirement 9.4). A Razorpay
-        API/network failure yields a 500 without leaving a campaign or payment
-        record behind (Requirement 14.1).
-
-        Requirements: 5.2, 14.1
+        On success returns {campaignId, upiLink, amount, transactionNote}.
+        An empty recipients list yields a 400. A configuration failure
+        (no UPI_ID) yields a 503.
         """
         payload = request.get_json(silent=True) or {}
 
@@ -3549,22 +3589,20 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         account_id = session.get("public_account_id", "")
 
-        # Clear, actionable error when Razorpay keys are not configured, rather
-        # than a generic 500 from an "Authentication failed" SDK error.
-        if not campaign.razorpay_is_configured():
+        # Clear, actionable error when UPI ID is not configured.
+        if not campaign.upi_is_configured():
             current_app.logger.error(
-                "Razorpay credentials are not configured "
-                "(RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)."
+                "UPI_ID is not configured for campaign payments."
             )
             return jsonify({
                 "error": (
                     "Payments are not configured on the server. Please set the "
-                    "Razorpay API keys and try again."
+                    "UPI_ID in the environment and try again."
                 )
             }), 503
 
         try:
-            result = campaign.create_campaign_with_payment(
+            result = campaign.create_campaign_with_upi(
                 account_id=account_id,
                 recipients=recipients,
                 template_name=template_name,
@@ -3573,16 +3611,14 @@ def create_app(config=None, collection=None, correction_collection=None):
                 audience_filters=audience_filters,
             )
         except ValueError as exc:
-            # Validation failure, e.g. empty recipients list (Requirement 9.4).
+            # Validation failure, e.g. empty recipients list.
             return jsonify({"error": str(exc)}), 400
         except Exception:
-            # Razorpay order creation failed due to a network or API error.
-            # No campaign document or payment record is created (Requirement 14.1).
             current_app.logger.exception(
-                "create_campaign_with_payment failed for account %s", account_id
+                "create_campaign_with_upi failed for account %s", account_id
             )
             return jsonify({
-                "error": "Unable to initialize payment. Please try again."
+                "error": "Unable to create campaign. Please try again."
             }), 500
 
         return jsonify(result)
@@ -3638,17 +3674,14 @@ def create_app(config=None, collection=None, correction_collection=None):
             "campaign": serialize_document(campaign),
         })
 
-    @app.post("/api/campaigns/<campaign_id>/verify-payment")
+    @app.post("/api/campaigns/<campaign_id>/submit-upi-ref")
     @require_campaigner
-    def verify_payment(campaign_id):
-        """Verify a Razorpay payment signature for the given campaign (Step 3 of
-        the campaign wizard).
+    def submit_upi_ref(campaign_id):
+        """Record the UPI transaction reference submitted by the campaigner.
 
-        Expects a JSON body with razorpay_payment_id, razorpay_order_id, and
-        razorpay_signature. On a valid signature the campaign transitions
-        pending_payment -> payment_verified and the linked payment record is
-        marked "attempted". On an invalid signature the campaign is left in
-        pending_payment and a 400 is returned (Requirements 5.5, 5.6, 5.7, 14.5).
+        After paying via UPI, the user enters their UTR / UPI reference
+        number. This stores it on the payment record. The campaign stays
+        in pending_payment until an admin confirms.
         """
 
         account_object_id = ensure_object_id(
@@ -3660,70 +3693,88 @@ def create_app(config=None, collection=None, correction_collection=None):
             return jsonify({"error": "Campaign not found."}), 404
 
         campaigns = get_campaigns_collection()
-        campaign = campaigns.find_one({
+        camp = campaigns.find_one({
             "_id": campaign_object_id,
             "accountId": account_object_id,
         })
 
-        if campaign is None:
+        if camp is None:
             return jsonify({"error": "Campaign not found."}), 404
 
         payload = request.get_json(silent=True) or {}
-        payment_id = (payload.get("razorpay_payment_id") or "").strip()
-        order_id = (payload.get("razorpay_order_id") or "").strip()
-        signature = (payload.get("razorpay_signature") or "").strip()
+        upi_ref = (payload.get("upiTransactionRef") or "").strip()
 
-        is_valid = verify_razorpay_signature(order_id, payment_id, signature)
+        result = campaign.submit_upi_reference(campaign_id, upi_ref)
 
-        if not is_valid:
-            # Keep the campaign in pending_payment and log the failure.
-            app.logger.warning(
-                "Razorpay signature verification failed for campaign %s "
-                "(order_id=%s)",
-                campaign_id,
-                order_id or "<missing>",
-            )
-            return jsonify({
-                "verified": False,
-                "error": "Payment signature verification failed.",
-            }), 400
+        if not result.get("ok"):
+            return jsonify({"error": result.get("error")}), 400
 
-        # Enforce the campaign state machine for the status change.
-        current_status = campaign.get("status")
-        transition = validate_campaign_status_transition(
-            current_status, PAYMENT_VERIFIED
-        )
-        if not transition["valid"]:
-            return jsonify({
-                "verified": False,
-                "error": transition["error"],
-            }), 400
+        return jsonify({"ok": True, "message": "UPI reference submitted. Awaiting admin confirmation."})
 
-        now = now_utc()
+    @app.get("/api/campaigns/pending-payments")
+    def pending_payments():
+        """Return campaigns with pending UPI payments awaiting admin confirmation.
 
-        campaigns.update_one(
-            {"_id": campaign_object_id},
-            {"$set": {"status": PAYMENT_VERIFIED, "updatedAt": now}},
-        )
+        Restricted to staff with the confirm_campaign_payments capability.
+        """
+        if not is_staff_session() or not role_can("confirm_campaign_payments"):
+            return jsonify({"error": "Access denied."}), 403
 
-        # Mark the linked payment record as "attempted" and persist the
-        # Razorpay identifiers from the client-side verification. The payment
-        # record is linked to the campaign via its campaignId field.
         payments = get_campaign_payments_collection()
-        payments.update_one(
-            {"campaignId": campaign_object_id},
-            {"$set": {
-                "status": "attempted",
-                "razorpayPaymentId": payment_id,
-                "razorpaySignature": signature,
-                "updatedAt": now,
-            }},
-        )
+        pending = list(payments.find({"status": "submitted"}).sort("updatedAt", -1))
 
-        return jsonify({
-            "verified": True,
-            "status": PAYMENT_VERIFIED,
-        })
+        # Enrich with campaign name for display.
+        campaigns_col = get_campaigns_collection()
+        results = []
+        for p in pending:
+            camp = campaigns_col.find_one({"_id": p.get("campaignId")})
+            results.append({
+                "campaignId": str(p.get("campaignId")),
+                "campaignName": camp.get("name") if camp else "Unknown",
+                "amount": p.get("amountRupees", p.get("amount", 0)),
+                "transactionNote": p.get("transactionNote", ""),
+                "upiTransactionRef": p.get("upiTransactionRef", ""),
+                "recipientCount": p.get("recipientCount", 0),
+                "createdAt": str(p.get("createdAt", "")),
+            })
+
+        return jsonify({"payments": results})
+
+    @app.post("/api/campaigns/<campaign_id>/confirm-payment")
+    def confirm_payment(campaign_id):
+        """Admin endpoint: confirm a UPI payment and trigger campaign sending.
+
+        Restricted to staff with the confirm_campaign_payments capability.
+        """
+        if not is_staff_session() or not role_can("confirm_campaign_payments"):
+            return jsonify({"error": "Access denied."}), 403
+
+        result = campaign.confirm_upi_payment(campaign_id)
+
+        if not result.get("ok"):
+            return jsonify({"error": result.get("error")}), 400
+
+        return jsonify({"ok": True, "reason": result.get("reason")})
+
+    @app.post("/api/campaigns/<campaign_id>/reject-payment")
+    def reject_payment(campaign_id):
+        """Admin endpoint: reject a UPI payment with a reason.
+
+        Restricted to staff with the confirm_campaign_payments capability.
+        Marks the campaign as rejected so messages are never sent.
+        """
+        if not is_staff_session() or not role_can("confirm_campaign_payments"):
+            return jsonify({"error": "Access denied."}), 403
+
+        payload = request.get_json(silent=True) or {}
+        reason = (payload.get("reason") or "").strip()
+
+        result = campaign.reject_upi_payment(campaign_id, reason)
+
+        if not result.get("ok"):
+            return jsonify({"error": result.get("error")}), 400
+
+        return jsonify({"ok": True, "reason": result.get("reason")})
 
     @app.get("/api/campaigns/<campaign_id>/report")
     @require_campaigner
@@ -3767,34 +3818,6 @@ def create_app(config=None, collection=None, correction_collection=None):
             "stats": report["stats"],
             "recipients": report["recipients"],
         })
-
-    @app.post("/api/webhooks/razorpay")
-    def razorpay_webhook():
-        """Razorpay payment webhook endpoint.
-
-        This endpoint is intentionally public: Razorpay calls it directly, so
-        it has no session protection. Authenticity is established by verifying
-        the X-Razorpay-Signature header against the raw request body using the
-        configured webhook secret inside process_razorpay_webhook.
-
-        The raw request body bytes must be passed through unmodified because the
-        HMAC-SHA256 signature is computed over those exact bytes. The handler
-        returns 200 on success (including idempotent/ignored events and unknown
-        order ids) and 400 only when the signature is invalid
-        (Requirements 6.1, 6.2, 6.3).
-        """
-
-        raw_body = request.get_data()
-        signature = request.headers.get("X-Razorpay-Signature", "")
-
-        result = campaign.process_razorpay_webhook(raw_body, signature)
-
-        status_code = result.get("status", 200 if result.get("ok") else 400)
-
-        return jsonify({
-            "ok": result.get("ok", False),
-            "reason": result.get("reason"),
-        }), status_code
 
     def close_mongo():
         client = app.extensions.get("mongo_client")
@@ -6467,6 +6490,21 @@ ROLE_CAPABILITIES = [
         "label": "Export address-area CSV",
         "description": "Download the grouped address CSV from the address area tool.",
     },
+    {
+        "key": "confirm_campaign_payments",
+        "label": "Confirm campaign payments",
+        "description": "View pending UPI payments and confirm them to trigger campaign delivery.",
+    },
+    {
+        "key": "manage_wa_web",
+        "label": "Manage WhatsApp Web",
+        "description": "Connect WhatsApp, view backups, manage contacts, and control message routing.",
+    },
+    {
+        "key": "manage_wa_routing",
+        "label": "Control message routing",
+        "description": "Configure the hybrid routing engine (Web session vs Cloud API rules).",
+    },
 ]
 
 ROLE_LIMITS = [
@@ -6518,6 +6556,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "manage_transliteration": True,
         "manage_address_areas": True,
         "export_address_areas": True,
+        "confirm_campaign_payments": True,
+        "manage_wa_web": False,
+        "manage_wa_routing": False,
     },
     "operator": {
         "access_directory": True,
@@ -6537,6 +6578,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "manage_transliteration": False,
         "manage_address_areas": False,
         "export_address_areas": False,
+        "confirm_campaign_payments": False,
+        "manage_wa_web": False,
+        "manage_wa_routing": False,
     },
     "viewer": {
         "access_directory": True,
@@ -6556,6 +6600,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "manage_transliteration": False,
         "manage_address_areas": False,
         "export_address_areas": False,
+        "confirm_campaign_payments": False,
+        "manage_wa_web": False,
+        "manage_wa_routing": False,
     },
 }
 

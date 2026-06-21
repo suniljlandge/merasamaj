@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>Campaign Payments</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    >
+  </head>
+  <body class="directory-body">
+    {% include "_topbar.html" %}
+
+    <main class="directory-layout">
+
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Campaign Manager</p>
+            <h2 class="directory-title">Pending UPI Payments</h2>
+            <p class="directory-subtitle">
+              Campaigns awaiting payment confirmation. Verify the UTR in your
+              bank/UPI app, then click Confirm to trigger message delivery.
+            </p>
+          </div>
+          <button
+            id="pending-payments-refresh"
+            class="directory-export-btn"
+            style="white-space:nowrap"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <div class="directory-table-wrapper">
+          <table class="directory-table" id="pending-payments-table">
+            <thead>
+              <tr>
+                <th>Campaign</th>
+                <th>Amount</th>
+                <th>Recipients</th>
+                <th>UPI Ref (UTR)</th>
+                <th>Txn Note</th>
+                <th>Created</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="pending-payments-body">
+              <tr><td colspan="7">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <span id="pending-payments-status" style="margin-left:4px;margin-top:8px;display:inline-block;font-size:0.85rem;color:#64748b;"></span>
+      </section>
+
+    </main>
+
+    <script>
+    (function () {
+      "use strict";
+
+      var tbody = document.getElementById("pending-payments-body");
+      var statusEl = document.getElementById("pending-payments-status");
+      var refreshBtn = document.getElementById("pending-payments-refresh");
+
+      function setStatus(msg) {
+        if (statusEl) statusEl.textContent = msg || "";
+      }
+
+      function loadPendingPayments() {
+        setStatus("Loading...");
+        fetch("/api/campaigns/pending-payments", { credentials: "same-origin" })
+          .then(function (res) {
+            if (!res.ok) throw new Error("Failed: " + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            var payments = data.payments || [];
+            if (payments.length === 0) {
+              tbody.innerHTML =
+                '<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:#64748b;">No pending payments. All clear!</td></tr>';
+              setStatus("");
+              return;
+            }
+            tbody.innerHTML = "";
+            payments.forEach(function (p) {
+              var tr = document.createElement("tr");
+              tr.innerHTML =
+                "<td>" + esc(p.campaignName) + "</td>" +
+                "<td><strong>\u20B9" + (p.amount || 0) + "</strong></td>" +
+                "<td>" + (p.recipientCount || 0) + "</td>" +
+                "<td><code style='font-size:0.85rem;background:#f1f5f9;padding:2px 6px;border-radius:4px;'>" + esc(p.upiTransactionRef || "\u2014") + "</code></td>" +
+                "<td><code style='font-size:0.85rem;background:#f1f5f9;padding:2px 6px;border-radius:4px;'>" + esc(p.transactionNote || "") + "</code></td>" +
+                "<td style='white-space:nowrap;'>" + esc(formatDate(p.createdAt)) + "</td>" +
+                '<td style="white-space:nowrap;">' +
+                '<button class="confirm-btn" data-id="' + esc(p.campaignId) + '" style="background:#10b981;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:600;cursor:pointer;margin-right:6px;">Confirm</button>' +
+                '<button class="reject-btn" data-id="' + esc(p.campaignId) + '" style="background:#ef4444;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:600;cursor:pointer;">Reject</button>' +
+                '</td>';
+              tbody.appendChild(tr);
+            });
+            setStatus(payments.length + " payment" + (payments.length === 1 ? "" : "s") + " pending");
+
+            tbody.querySelectorAll(".confirm-btn").forEach(function (btn) {
+              btn.addEventListener("click", function () {
+                confirmPayment(btn.getAttribute("data-id"), btn);
+              });
+            });
+            tbody.querySelectorAll(".reject-btn").forEach(function (btn) {
+              btn.addEventListener("click", function () {
+                rejectPayment(btn.getAttribute("data-id"), btn);
+              });
+            });
+          })
+          .catch(function (err) {
+            tbody.innerHTML =
+              '<tr><td colspan="7" style="color:#ef4444;">Error loading payments.</td></tr>';
+            setStatus(err.message || "Error");
+          });
+      }
+
+      function confirmPayment(campaignId, btn) {
+        if (!confirm("Confirm this payment and trigger campaign sending?\n\nThis will send WhatsApp messages to all recipients immediately.")) return;
+        btn.disabled = true;
+        btn.textContent = "Confirming...";
+        btn.style.opacity = "0.6";
+
+        fetch("/api/campaigns/" + encodeURIComponent(campaignId) + "/confirm-payment", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+        })
+          .then(function (res) {
+            if (!res.ok) {
+              return res.json().catch(function () { return {}; }).then(function (d) {
+                throw new Error((d && d.error) || "Failed: " + res.status);
+              });
+            }
+            return res.json();
+          })
+          .then(function () {
+            btn.textContent = "Confirmed \u2713";
+            btn.style.background = "#059669";
+            btn.style.opacity = "1";
+            setStatus("Payment confirmed. Campaign sending triggered.");
+            setTimeout(loadPendingPayments, 2000);
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            btn.textContent = "Confirm";
+            btn.style.opacity = "1";
+            alert("Error: " + (err.message || "Unknown error"));
+            setStatus("Error: " + (err.message || "Unknown error"));
+          });
+      }
+
+      function rejectPayment(campaignId, btn) {
+        var reason = prompt(
+          "Reject this payment?\n\nEnter the reason (e.g. Fake UTR, Amount not received, Payment not found):"
+        );
+        if (reason === null) return; // User cancelled
+        if (!reason.trim()) {
+          alert("Please provide a reason for rejection.");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Rejecting...";
+        btn.style.opacity = "0.6";
+
+        fetch("/api/campaigns/" + encodeURIComponent(campaignId) + "/reject-payment", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: reason.trim() }),
+        })
+          .then(function (res) {
+            if (!res.ok) {
+              return res.json().catch(function () { return {}; }).then(function (d) {
+                throw new Error((d && d.error) || "Failed: " + res.status);
+              });
+            }
+            return res.json();
+          })
+          .then(function () {
+            btn.textContent = "Rejected \u2717";
+            btn.style.background = "#991b1b";
+            btn.style.opacity = "1";
+            setStatus("Payment rejected. Campaign will not be sent.");
+            setTimeout(loadPendingPayments, 2000);
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            btn.textContent = "Reject";
+            btn.style.opacity = "1";
+            alert("Error: " + (err.message || "Unknown error"));
+            setStatus("Error: " + (err.message || "Unknown error"));
+          });
+      }
+
+      function esc(str) {
+        var div = document.createElement("div");
+        div.textContent = str || "";
+        return div.innerHTML;
+      }
+
+      function formatDate(dateStr) {
+        if (!dateStr) return "\u2014";
+        try {
+          var d = new Date(dateStr);
+          return d.toLocaleDateString("en-IN", {
+            day: "2-digit", month: "short", year: "numeric",
+            hour: "2-digit", minute: "2-digit",
+          });
+        } catch (e) {
+          return dateStr;
+        }
+      }
+
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", loadPendingPayments);
+      }
+
+      loadPendingPayments();
+    })();
+    </script>
+  </body>
+</html>
