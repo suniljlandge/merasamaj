@@ -32,6 +32,9 @@
     unavailable: "#b42318",
   };
 
+  // Flag to prevent status poller from hiding pairing code
+  let isPairingInProgress = false;
+
   // =========================================================================
   // Status Polling
   // =========================================================================
@@ -40,9 +43,11 @@
     try {
       const resp = await fetch(`${API}/status`);
       const data = await resp.json();
+      // Don't override UI while user is entering pairing code
+      if (isPairingInProgress && data.status !== "connected") return;
       updateStatusUI(data.status || "disconnected");
     } catch {
-      updateStatusUI("unavailable");
+      if (!isPairingInProgress) updateStatusUI("unavailable");
     }
   }
 
@@ -115,6 +120,7 @@
         pairingCodeEl.textContent = data.pairingCode;
         pairingCodePanel.style.display = "block";
         connectFormPanel.style.display = "none";
+        isPairingInProgress = true;
 
         // Poll for connection
         pollForConnection();
@@ -135,8 +141,10 @@
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
-      if (attempts > 30) {
+      if (attempts > 60) {
+        // 2 minutes total — give up
         clearInterval(interval);
+        isPairingInProgress = false;
         pairingCodePanel.style.display = "none";
         connectFormPanel.style.display = "block";
         statusDetail.textContent = "Pairing timed out. Try again.";
@@ -148,12 +156,24 @@
         const data = await resp.json();
         if (data.status === "connected") {
           clearInterval(interval);
+          isPairingInProgress = false;
           updateStatusUI("connected");
           connectedPhone.textContent = phoneInput.value.trim();
           pairingCodePanel.style.display = "none";
         }
       } catch {}
     }, 2000);
+  }
+
+  // Retry pairing — get a new code
+  const retryBtn = document.getElementById("retry-pairing-btn");
+  if (retryBtn) {
+    retryBtn.addEventListener("click", () => {
+      isPairingInProgress = false;
+      pairingCodePanel.style.display = "none";
+      connectFormPanel.style.display = "block";
+      connectBtn.click();
+    });
   }
 
   // =========================================================================
