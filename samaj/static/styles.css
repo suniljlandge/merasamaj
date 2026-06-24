@@ -1765,3 +1765,31 @@ input[readonly][lang="mr"] {
   background: var(--surface-soft);
   color: var(--steel);
 }
+
+
+/* =========================================
+   SITE FOOTER
+========================================= */
+
+.site-footer {
+  text-align: center;
+  padding: 20px 16px;
+  margin-top: 32px;
+  border-top: 1px solid var(--hairline);
+  color: var(--steel);
+  font-size: 13px;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.site-footer a {
+  color: var(--brand-green-dark);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
