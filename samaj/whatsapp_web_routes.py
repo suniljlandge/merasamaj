@@ -359,7 +359,7 @@ def save_routing_config():
 @wa_web_bp.route("/sessions", methods=["GET"])
 @_require_auth
 def all_sessions():
-    """Get all WA web sessions (super admin view)."""
+    """Get all WA web sessions with backup stats (super admin view)."""
     from samaj.app import role_can
     if not role_can("manage_wa_web"):
         return jsonify({"error": "Forbidden"}), 403
@@ -373,4 +373,21 @@ def all_sessions():
             {"_id": 0, "userId": 1, "phoneNumber": 1, "status": 1, "connectedAt": 1, "lastActiveAt": 1}
         )
     )
+
+    # Enrich with backup stats per session
+    for s in sessions:
+        uid = s.get("userId")
+        s["backupStats"] = {
+            "contacts": db["wa_contact_backups"].count_documents({"userId": uid}),
+            "groups": db["wa_group_backups"].count_documents({"userId": uid}),
+        }
+        last_log = db["wa_backup_log"].find_one(
+            {"userId": uid}, sort=[("createdAt", -1)]
+        )
+        if last_log:
+            s["backupStats"]["lastBackup"] = last_log.get("createdAt")
+            s["backupStats"]["lastResults"] = last_log.get("results")
+        else:
+            s["backupStats"]["lastBackup"] = None
+
     return jsonify({"sessions": sessions, "total": len(sessions)})

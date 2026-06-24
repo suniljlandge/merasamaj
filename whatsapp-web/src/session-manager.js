@@ -176,8 +176,21 @@ function createSessionManager(db, logger, { onConnected } = {}) {
         connectionStatus.set(userId, "connected");
         await sessionsCollection.updateOne(
           { userId },
-          { $set: { status: "connected", lastActiveAt: new Date() } }
+          {
+            $set: {
+              userId,
+              phoneNumber: phoneNumber || "",
+              status: "connected",
+              connectedAt: new Date(),
+              lastActiveAt: new Date(),
+            },
+          },
+          { upsert: true }
         );
+        logger.info({ userId }, "Session reconnected and saved to DB");
+
+        // Trigger auto-backup on reconnect too
+        if (onConnected) onConnected(userId, sock);
       }
       if (connection === "close") {
         const statusCode =
@@ -194,6 +207,10 @@ function createSessionManager(db, logger, { onConnected } = {}) {
             { userId },
             { $set: { status: "disconnected", disconnectedAt: new Date() } }
           );
+        } else {
+          // Auto-reconnect on transient failures
+          connectionStatus.set(userId, "reconnecting");
+          setTimeout(() => reconnect(userId, phoneNumber), 5000);
         }
       }
     });

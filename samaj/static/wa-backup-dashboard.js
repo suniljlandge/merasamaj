@@ -34,7 +34,10 @@
         return;
       }
 
-      tbody.innerHTML = sessions.map((s) => `
+      tbody.innerHTML = sessions.map((s) => {
+        const bs = s.backupStats || {};
+        const lastBackup = bs.lastBackup ? formatDate(bs.lastBackup) : "Never";
+        return `
         <tr>
           <td>${escHtml(s.userId)}</td>
           <td>${escHtml(s.phoneNumber || "—")}</td>
@@ -42,13 +45,119 @@
           <td>${s.connectedAt ? formatDate(s.connectedAt) : "—"}</td>
           <td>${s.lastActiveAt ? formatDate(s.lastActiveAt) : "—"}</td>
         </tr>
-      `).join("");
+        <tr class="backup-status-row">
+          <td colspan="5" style="padding:8px 16px 16px;border-bottom:2px solid var(--hairline);">
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+              <span style="font-size:12px;color:var(--steel);font-weight:600;">BACKUP:</span>
+              <span style="font-size:13px;">📇 ${bs.contacts || 0} contacts</span>
+              <span style="font-size:13px;">👥 ${bs.groups || 0} groups</span>
+              <span style="font-size:13px;">🕐 Last: ${lastBackup}</span>
+              <button type="button" class="backup-trigger-btn" data-user-id="${escHtml(s.userId)}"
+                style="margin-left:auto;padding:4px 12px;font-size:12px;font-weight:600;border:1px solid var(--hairline-strong);border-radius:6px;background:var(--canvas);cursor:pointer;">
+                Run Backup
+              </button>
+            </div>
+            <div class="backup-progress-bar" data-user-id="${escHtml(s.userId)}" style="display:none;margin-top:8px;">
+              <div style="height:4px;background:var(--hairline);border-radius:2px;overflow:hidden;">
+                <div class="backup-progress-fill" style="height:100%;width:0%;background:var(--brand-green);transition:width 0.5s ease;"></div>
+              </div>
+              <span class="backup-progress-text" style="font-size:11px;color:var(--steel);margin-top:4px;display:block;"></span>
+            </div>
+          </td>
+        </tr>`;
+      }).join("");
+
+      // Wire up backup trigger buttons
+      tbody.querySelectorAll(".backup-trigger-btn").forEach((btn) => {
+        btn.addEventListener("click", () => triggerBackup(btn.dataset.userId, btn));
+      });
+
+      // Update summary stats from first session
+      if (sessions.length > 0) {
+        let totalContacts = 0, totalGroups = 0;
+        sessions.forEach((s) => {
+          totalContacts += (s.backupStats?.contacts || 0);
+          totalGroups += (s.backupStats?.groups || 0);
+        });
+        document.getElementById("bs-contacts").textContent = totalContacts;
+        document.getElementById("bs-groups").textContent = totalGroups;
+      }
 
       // Populate user select
       userSelect.innerHTML = '<option value="">Select user...</option>' +
         sessions.map((s) => `<option value="${escHtml(s.userId)}">${escHtml(s.userId)} (${s.status})</option>`).join("");
     } catch (err) {
       tbody.innerHTML = `<tr><td colspan="5" style="color:var(--danger);">Failed to load sessions: ${err.message}</td></tr>`;
+    }
+  }
+
+  // =========================================================================
+  // Trigger Backup for a specific user
+  // =========================================================================
+
+  async function triggerBackup(userId, btn) {
+    btn.disabled = true;
+    btn.textContent = "Starting...";
+
+    const progressBar = document.querySelector(`.backup-progress-bar[data-user-id="${userId}"]`);
+    const progressFill = progressBar?.querySelector(".backup-progress-fill");
+    const progressText = progressBar?.querySelector(".backup-progress-text");
+
+    if (progressBar) {
+      progressBar.style.display = "block";
+      progressFill.style.width = "10%";
+      progressText.textContent = "Starting backup...";
+    }
+
+    try {
+      const resp = await fetch(`${API}/backup/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: userId, includeProfilePics: true }),
+      });
+      const data = await resp.json();
+
+      if (data.success) {
+        btn.textContent = "✓ Running";
+        if (progressFill) progressFill.style.width = "50%";
+        if (progressText) progressText.textContent = "Backup running in background...";
+
+        // Poll for completion
+        let checks = 0;
+        const pollInterval = setInterval(async () => {
+          checks++;
+          if (checks > 30) {
+            clearInterval(pollInterval);
+            btn.textContent = "Run Backup";
+            btn.disabled = false;
+            if (progressFill) progressFill.style.width = "100%";
+            if (progressText) progressText.textContent = "Backup completed (or timed out). Refresh to see results.";
+            setTimeout(() => loadSessions(), 2000);
+            return;
+          }
+
+          try {
+            const statusResp = await fetch(`${API}/backup/status?userId=${userId}`);
+            const statusData = await statusResp.json();
+            if (statusData.lastBackup) {
+              clearInterval(pollInterval);
+              if (progressFill) progressFill.style.width = "100%";
+              if (progressText) progressText.textContent = `✓ Done — ${statusData.totalContacts} contacts, ${statusData.totalGroups} groups`;
+              btn.textContent = "Run Backup";
+              btn.disabled = false;
+              setTimeout(() => loadSessions(), 1000);
+            }
+          } catch {}
+        }, 3000);
+      } else {
+        btn.textContent = "Failed";
+        if (progressText) progressText.textContent = data.error || "Backup failed";
+        setTimeout(() => { btn.textContent = "Run Backup"; btn.disabled = false; }, 3000);
+      }
+    } catch (err) {
+      btn.textContent = "Error";
+      if (progressText) progressText.textContent = err.message;
+      setTimeout(() => { btn.textContent = "Run Backup"; btn.disabled = false; }, 3000);
     }
   }
 

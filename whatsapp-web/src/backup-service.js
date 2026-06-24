@@ -213,16 +213,20 @@ function createBackupService(db, r2, logger) {
     }
 
     // --- 3. Log the backup ---
-    const duration = Date.now() - startTime;
-    await backupLogCol.insertOne({
-      userId,
-      backupType,
-      results,
-      durationMs: duration,
-      createdAt: new Date(),
-    });
+    try {
+      const duration = Date.now() - startTime;
+      await backupLogCol.insertOne({
+        userId,
+        backupType,
+        results,
+        durationMs: duration,
+        createdAt: new Date(),
+      });
+      logger.info({ userId, results, durationMs: duration }, "Backup completed");
+    } catch (logErr) {
+      logger.error({ userId, err: logErr.message }, "Failed to write backup log");
+    }
 
-    logger.info({ userId, results, durationMs: duration }, "Backup completed");
     return results;
   }
 
