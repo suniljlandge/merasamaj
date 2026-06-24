@@ -48,7 +48,18 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       activeSockets.delete(userId);
     }
 
+    // Clear old auth state to force fresh pairing
     const authDir = getAuthDir(userId);
+    const credsFile = path.join(authDir, "creds.json");
+    if (fs.existsSync(credsFile)) {
+      // Remove all auth files to start fresh
+      const files = fs.readdirSync(authDir);
+      for (const file of files) {
+        fs.unlinkSync(path.join(authDir, file));
+      }
+      logger.info({ userId }, "Cleared old auth state for fresh pairing");
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -121,10 +132,14 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     // Request pairing code (OTP-based login)
     let pairingCode = null;
     if (!sock.authState.creds.registered) {
-      // Clean phone number: remove +, spaces, dashes
+      // Wait for socket to be ready before requesting code
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      
+      // Clean phone number: remove +, spaces, dashes — must be digits with country code
       const cleanNumber = phoneNumber.replace(/[^0-9]/g, "");
+      logger.info({ userId, cleanNumber }, "Requesting pairing code");
       pairingCode = await sock.requestPairingCode(cleanNumber);
-      logger.info({ userId }, "Pairing code generated");
+      logger.info({ userId, pairingCode }, "Pairing code generated");
     } else {
       connectionStatus.set(userId, "connected");
     }
