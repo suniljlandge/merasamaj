@@ -12,6 +12,9 @@ usermanagement.py
 google_Transliteration.py
 *.json
 *.jsonl
+# But keep package.json files for the WhatsApp Web sidecar
+!whatsapp-web/package.json
+!whatsapp-web/package-lock.json
 .omx/
 .omx/
 *.log
