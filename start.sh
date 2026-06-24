@@ -4,8 +4,8 @@ cd /app/whatsapp-web
 node src/index.js &
 SIDECAR_PID=$!
 
-# Give the sidecar a moment to start
-sleep 2
+# Give the sidecar time to start and connect to MongoDB
+sleep 4
 
 # Start the Flask app (Gunicorn) in the foreground
 cd /app

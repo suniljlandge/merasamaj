@@ -42,12 +42,19 @@ def _url(path: str) -> str:
 
 
 def is_service_available() -> bool:
-    """Check if the WhatsApp Web sidecar service is running."""
-    try:
-        resp = requests.get(f"{WA_WEB_BASE_URL}/health", timeout=5)
-        return resp.ok and resp.json().get("status") == "ok"
-    except (requests.ConnectionError, requests.Timeout):
-        return False
+    """Check if the WhatsApp Web sidecar service is running.
+    Retries briefly on cold start since the sidecar may still be booting."""
+    for attempt in range(3):
+        try:
+            resp = requests.get(f"{WA_WEB_BASE_URL}/health", timeout=5)
+            if resp.ok and resp.json().get("status") in ("ok", "starting"):
+                return True
+        except (requests.ConnectionError, requests.Timeout):
+            pass
+        if attempt < 2:
+            import time
+            time.sleep(2)
+    return False
 
 
 # ===========================================================================
