@@ -289,17 +289,23 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
       }
 
       // Rule 5: First contact check — if never interacted, use Cloud API
-      const contactsCol = db.collection("wa_contact_backups");
-      const knownContact = await contactsCol.findOne({
-        userId,
-        phone: recipientPhone?.replace(/[^0-9]/g, ""),
-      });
-
-      if (!knownContact) {
-        return res.json({
-          channel: "cloud_api",
-          reason: "First contact — use Cloud API for initial outreach",
+      // Only enforce if routing config says so
+      const routingConfig = await db.collection("app_settings").findOne({ key: "wa_routing_config" });
+      const enforceFirstContact = routingConfig?.rules?.forceCloudApiForFirstContact !== false;
+      
+      if (enforceFirstContact) {
+        const contactsCol = db.collection("wa_contact_backups");
+        const knownContact = await contactsCol.findOne({
+          userId,
+          phone: recipientPhone?.replace(/[^0-9]/g, ""),
         });
+
+        if (!knownContact) {
+          return res.json({
+            channel: "cloud_api",
+            reason: "First contact — use Cloud API for initial outreach",
+          });
+        }
       }
 
       // Default: use web session for personal follow-up

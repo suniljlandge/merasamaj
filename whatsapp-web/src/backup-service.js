@@ -48,45 +48,77 @@ function createBackupService(db, r2, logger) {
 
     // --- 1. Backup contacts from chats ---
     try {
-      const store = sock.store;
-      const chats = await sock.groupFetchAllParticipating();
-
-      // Get contacts from chat list (people user has messaged)
-      // Baileys stores contacts in sock.store.contacts if store is enabled
-      // Fallback: extract from groups
       const contactPhones = new Set();
 
-      // Extract from groups
-      for (const [groupJid, group] of Object.entries(chats)) {
-        // Save group
-        await groupsCol.updateOne(
-          { userId, groupJid },
-          {
-            $set: {
-              userId,
-              groupJid,
-              groupName: group.subject || "Unknown Group",
-              participantCount: group.participants?.length || 0,
-              participants: (group.participants || []).map((p) => ({
-                phone: p.id.replace("@s.whatsapp.net", ""),
-                isAdmin:
-                  p.admin === "admin" || p.admin === "superadmin",
-              })),
-              backedUpAt: new Date(),
+      // Method 1: Get all chats (individual + group conversations)
+      try {
+        const chats = await sock.groupFetchAllParticipating();
+        
+        // Extract from groups
+        for (const [groupJid, group] of Object.entries(chats)) {
+          // Save group
+          await groupsCol.updateOne(
+            { userId, groupJid },
+            {
+              $set: {
+                userId,
+                groupJid,
+                groupName: group.subject || "Unknown Group",
+                participantCount: group.participants?.length || 0,
+                participants: (group.participants || []).map((p) => ({
+                  phone: p.id.replace("@s.whatsapp.net", ""),
+                  isAdmin:
+                    p.admin === "admin" || p.admin === "superadmin",
+                })),
+                backedUpAt: new Date(),
+              },
             },
-          },
-          { upsert: true }
-        );
-        results.groups.added++;
+            { upsert: true }
+          );
+          results.groups.added++;
 
-        // Collect participant phones
-        for (const p of group.participants || []) {
-          const phone = p.id.replace("@s.whatsapp.net", "");
-          if (phone && !phone.includes("-")) {
-            contactPhones.add(phone);
+          // Collect participant phones
+          for (const p of group.participants || []) {
+            const phone = p.id.replace("@s.whatsapp.net", "");
+            if (phone && !phone.includes("-")) {
+              contactPhones.add(phone);
+            }
           }
         }
+      } catch (groupErr) {
+        logger.error({ userId, err: groupErr.message }, "Error fetching groups");
       }
+
+      // Method 2: Get contacts from the socket store (individual chats)
+      try {
+        const store = sock.store;
+        if (store && store.chats) {
+          const allChats = store.chats.all ? store.chats.all() : [];
+          for (const chat of allChats) {
+            if (chat.id && chat.id.endsWith("@s.whatsapp.net")) {
+              const phone = chat.id.replace("@s.whatsapp.net", "");
+              if (phone && !phone.includes("-")) {
+                contactPhones.add(phone);
+              }
+            }
+          }
+        }
+        // Also try sock.contacts if available
+        if (sock.contacts) {
+          for (const [jid, contact] of Object.entries(sock.contacts)) {
+            if (jid.endsWith("@s.whatsapp.net")) {
+              const phone = jid.replace("@s.whatsapp.net", "");
+              if (phone && !phone.includes("-")) {
+                contactPhones.add(phone);
+              }
+            }
+          }
+        }
+      } catch (chatErr) {
+        logger.error({ userId, err: chatErr.message }, "Error fetching chat contacts");
+      }
+
+      logger.info({ userId, contactCount: contactPhones.size }, "Contacts collected");
 
       // Save each contact
       for (const phone of contactPhones) {
