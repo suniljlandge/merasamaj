@@ -77,10 +77,13 @@ function createBackupService(db, r2, logger) {
           );
           results.groups.added++;
 
-          // Collect participant phones
+          // Collect participant phones (skip LIDs and group JIDs)
           for (const p of group.participants || []) {
-            const phone = p.id.replace("@s.whatsapp.net", "");
-            if (phone && !phone.includes("-")) {
+            const jid = p.id || "";
+            // Only collect real phone numbers (@s.whatsapp.net), skip @lid and @g.us
+            if (!jid.endsWith("@s.whatsapp.net")) continue;
+            const phone = jid.replace("@s.whatsapp.net", "");
+            if (phone && !phone.includes("-") && /^\d+$/.test(phone)) {
               contactPhones.add(phone);
             }
           }
@@ -93,11 +96,10 @@ function createBackupService(db, r2, logger) {
       try {
         if (sock.contacts) {
           for (const [jid, contact] of Object.entries(sock.contacts)) {
-            if (jid.endsWith("@s.whatsapp.net")) {
-              const phone = jid.replace("@s.whatsapp.net", "");
-              if (phone && !phone.includes("-")) {
-                contactPhones.add(phone);
-              }
+            if (!jid.endsWith("@s.whatsapp.net")) continue;
+            const phone = jid.replace("@s.whatsapp.net", "");
+            if (phone && !phone.includes("-") && /^\d+$/.test(phone)) {
+              contactPhones.add(phone);
             }
           }
         }
