@@ -10,7 +10,6 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  makeInMemoryStore,
 } = require("@whiskeysockets/baileys");
 const { Boom } = require("@hapi/boom");
 const path = require("path");
@@ -64,23 +63,12 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     const { version } = await fetchLatestBaileysVersion();
 
-    // Create in-memory store to track chats and contacts
-    const store = makeInMemoryStore({
-      logger: logger.child({ module: "store", userId }),
-    });
-
     const sock = makeWASocket({
       version,
       auth: state,
       printQRInTerminal: false,
       logger: logger.child({ module: "baileys", userId }),
     });
-
-    // Bind store to socket events
-    store.bind(sock.ev);
-
-    // Attach store to socket for backup service access
-    sock.store = store;
 
     // Store socket
     activeSockets.set(userId, sock);

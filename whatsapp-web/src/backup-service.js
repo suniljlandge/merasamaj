@@ -89,21 +89,8 @@ function createBackupService(db, r2, logger) {
         logger.error({ userId, err: groupErr.message }, "Error fetching groups");
       }
 
-      // Method 2: Get contacts from the socket store (individual chats)
+      // Method 2: Get contacts from incoming/outgoing messages via sock.contacts
       try {
-        const store = sock.store;
-        if (store && store.chats) {
-          const allChats = store.chats.all ? store.chats.all() : [];
-          for (const chat of allChats) {
-            if (chat.id && chat.id.endsWith("@s.whatsapp.net")) {
-              const phone = chat.id.replace("@s.whatsapp.net", "");
-              if (phone && !phone.includes("-")) {
-                contactPhones.add(phone);
-              }
-            }
-          }
-        }
-        // Also try sock.contacts if available
         if (sock.contacts) {
           for (const [jid, contact] of Object.entries(sock.contacts)) {
             if (jid.endsWith("@s.whatsapp.net")) {
