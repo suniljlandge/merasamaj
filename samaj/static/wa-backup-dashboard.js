@@ -168,7 +168,7 @@
   async function loadBackupStats() {
     if (!selectedUserId) return;
     try {
-      const resp = await fetch(`${API}/backup/status`);
+      const resp = await fetch(`${API}/backup/status?userId=${selectedUserId}`);
       const data = await resp.json();
       document.getElementById("bs-contacts").textContent = data.totalContacts || 0;
       document.getElementById("bs-groups").textContent = data.totalGroups || 0;
@@ -177,6 +177,9 @@
         document.getElementById("bs-last").textContent = formatDate(data.lastBackup.completedAt);
         const picCount = data.lastBackup.results?.profilePics?.uploaded || "—";
         document.getElementById("bs-pics").textContent = picCount;
+      } else {
+        document.getElementById("bs-last").textContent = "Never";
+        document.getElementById("bs-pics").textContent = "—";
       }
     } catch {}
   }
@@ -206,7 +209,7 @@
     grid.innerHTML = '<p style="color:var(--steel);grid-column:1/-1;text-align:center;">Loading contacts...</p>';
 
     try {
-      const resp = await fetch(`${API}/backup/export?format=json`);
+      const resp = await fetch(`${API}/backup/export?format=json&userId=${selectedUserId}`);
       const data = await resp.json();
       allContacts = data.contacts || [];
       currentPage = 1;
@@ -270,7 +273,7 @@
 
   async function loadProfilePic(phone) {
     try {
-      const resp = await fetch(`${API}/backup/profile-pic/${phone}`);
+      const resp = await fetch(`${API}/backup/profile-pic/${phone}?userId=${selectedUserId}`);
       if (!resp.ok) return;
       const data = await resp.json();
       if (data.url) {
@@ -303,12 +306,12 @@
 
   document.getElementById("export-csv-btn").addEventListener("click", () => {
     if (!selectedUserId) return;
-    window.open(`${API}/backup/export?format=csv`, "_blank");
+    window.open(`${API}/backup/export?format=csv&userId=${selectedUserId}`, "_blank");
   });
 
   document.getElementById("export-json-btn").addEventListener("click", () => {
     if (!selectedUserId) return;
-    window.open(`${API}/backup/export?format=json`, "_blank");
+    window.open(`${API}/backup/export?format=json&userId=${selectedUserId}`, "_blank");
   });
 
   // =========================================================================
