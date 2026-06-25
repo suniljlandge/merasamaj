@@ -49,6 +49,42 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
   });
 
   /**
+   * POST /api/session/connect-qr
+   * Start QR-code-based WhatsApp login.
+   * Body: { userId }
+   * Returns: { qr (base64 QR string or null), status }
+   */
+  app.post("/api/session/connect-qr", async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      const result = await sessionManager.connectWithQR(userId);
+      res.json({
+        qr: result.qr,
+        status: result.status,
+        message: result.qr
+          ? "Scan this QR code with WhatsApp on your phone"
+          : "Waiting for QR code...",
+      });
+    } catch (err) {
+      logger.error({ err: err.message }, "QR connect error");
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * GET /api/session/qr/:userId
+   * Poll for the latest QR code string (for rendering on frontend).
+   */
+  app.get("/api/session/qr/:userId", (req, res) => {
+    const qr = sessionManager.getQR(req.params.userId);
+    const status = sessionManager.getStatus(req.params.userId);
+    res.json({ qr, status });
+  });
+
+  /**
    * POST /api/session/disconnect
    * Disconnect and log out a user's WhatsApp session.
    * Body: { userId }

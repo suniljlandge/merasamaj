@@ -6,6 +6,7 @@ These proxy requests to the Node.js sidecar service via the whatsapp_web module.
 """
 
 from flask import Blueprint, request, jsonify, session
+import requests as http_requests
 from . import whatsapp_web as wa
 
 wa_web_bp = Blueprint("wa_web", __name__, url_prefix="/api/wa-web")
@@ -75,6 +76,41 @@ def connect():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@wa_web_bp.route("/connect-qr", methods=["POST"])
+@_require_auth
+def connect_qr():
+    """Start QR-code-based WhatsApp login."""
+    user_id = _get_user_id()
+    try:
+        resp = http_requests.post(
+            wa._url("/api/session/connect-qr"),
+            headers=wa._headers(),
+            json={"userId": user_id},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@wa_web_bp.route("/qr", methods=["GET"])
+@_require_auth
+def get_qr():
+    """Poll for latest QR code."""
+    user_id = _get_user_id()
+    try:
+        resp = http_requests.get(
+            wa._url(f"/api/session/qr/{user_id}"),
+            headers=wa._headers(),
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e), "qr": None, "status": "unavailable"}), 200
 
 
 @wa_web_bp.route("/status", methods=["GET"])

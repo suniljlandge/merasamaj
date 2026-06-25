@@ -3589,6 +3589,64 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         account_id = session.get("public_account_id", "")
 
+        # --- Check if user wants to send via WhatsApp Web (free, no payment) ---
+        send_via_web = payload.get("sendViaWeb", False)
+        if send_via_web:
+            from . import whatsapp_web as wa_web
+            try:
+                # Check if session is connected
+                status = wa_web.get_session_status(account_id)
+                if status.get("status") != "connected":
+                    return jsonify({
+                        "error": "WhatsApp Web is not connected. Connect first or use Cloud API."
+                    }), 400
+
+                # Send messages via web session (no payment required)
+                sent = 0
+                failed = 0
+                errors = []
+                for recipient in recipients:
+                    phone = recipient.get("mobileNumber", "").replace("+", "")
+                    if not phone:
+                        failed += 1
+                        continue
+                    # Resolve message text from template vars
+                    body_vars = campaign.resolve_body_vars(
+                        body_vars_template, recipient
+                    )
+                    message_text = " ".join(str(v) for v in body_vars if v)
+                    if not message_text:
+                        message_text = f"Hello {recipient.get('name', '')}"
+
+                    try:
+                        result = wa_web.send_personal_message(account_id, phone, message_text)
+                        if result.get("fallbackToCloudAPI"):
+                            errors.append(f"{phone}: Daily limit reached")
+                            failed += 1
+                        else:
+                            sent += 1
+                    except Exception as send_err:
+                        errors.append(f"{phone}: {str(send_err)[:100]}")
+                        failed += 1
+
+                    # Small delay between messages to avoid detection
+                    import time
+                    time.sleep(2)
+
+                return jsonify({
+                    "success": True,
+                    "channel": "web",
+                    "sent": sent,
+                    "failed": failed,
+                    "total": len(recipients),
+                    "errors": errors[:10],  # Only first 10 errors
+                    "message": f"Sent {sent}/{len(recipients)} messages via WhatsApp Web (free)"
+                })
+            except Exception as exc:
+                return jsonify({"error": f"Web send failed: {str(exc)}"}), 500
+
+        # --- Standard Cloud API flow (with payment) ---
+
         # Clear, actionable error when UPI ID is not configured.
         if not campaign.upi_is_configured():
             current_app.logger.error(

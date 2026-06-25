@@ -28,6 +28,10 @@
     var disconnectBtn = document.getElementById("wa-disconnect-btn");
     var sendBtn = document.getElementById("wa-send-btn");
     var sendResult = document.getElementById("wa-send-result");
+    var qrBtn = document.getElementById("wa-qr-btn");
+    var qrPanel = document.getElementById("wa-qr-panel");
+    var qrImage = document.getElementById("wa-qr-image");
+    var retryCodeBtn = document.getElementById("wa-retry-code-btn");
 
     // If elements don't exist (tab not visible yet), bail
     if (!dot) return;
@@ -36,9 +40,13 @@
       connected: "#10b981",
       connecting: "#f59e0b",
       reconnecting: "#f59e0b",
+      waiting_qr: "#f59e0b",
       disconnected: "#94a3b8",
       unavailable: "#ef4444",
     };
+
+    var qrInstance = null;
+    var qrPollInterval = null;
 
     // Pre-fill phone from session mobile if available
     var publicMobile = window.CURRENT_PUBLIC_MOBILE || "";
@@ -67,6 +75,7 @@
         connected: "Connected",
         connecting: "Connecting...",
         reconnecting: "Reconnecting...",
+        waiting_qr: "Scan QR Code...",
         disconnected: "Not connected",
         unavailable: "Service unavailable",
       };
@@ -75,27 +84,121 @@
       if (status === "connected") {
         connectForm.classList.add("hidden");
         pairingPanel.classList.add("hidden");
+        if (qrPanel) qrPanel.classList.add("hidden");
         connectedPanel.classList.remove("hidden");
         statusMsg.textContent = "";
+        if (qrPollInterval) { clearInterval(qrPollInterval); qrPollInterval = null; }
         loadStats();
-      } else if (status === "connecting" || status === "reconnecting") {
+      } else if (status === "connecting" || status === "reconnecting" || status === "waiting_qr") {
         statusMsg.textContent = "Waiting for confirmation...";
       } else {
         connectForm.classList.remove("hidden");
         connectedPanel.classList.add("hidden");
         pairingPanel.classList.add("hidden");
+        if (qrPanel) qrPanel.classList.add("hidden");
         if (status === "unavailable") {
           statusMsg.textContent = "WhatsApp service is offline.";
           connectBtn.disabled = true;
+          if (qrBtn) qrBtn.disabled = true;
         } else {
           statusMsg.textContent = "";
           connectBtn.disabled = false;
+          if (qrBtn) qrBtn.disabled = false;
         }
       }
     }
 
     // ===================================================================
-    // Connect
+    // Connect via QR Code
+    // ===================================================================
+
+    if (qrBtn) {
+      qrBtn.addEventListener("click", function () {
+        qrBtn.disabled = true;
+        qrBtn.textContent = "Generating QR...";
+
+        fetch(API + "/connect-qr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.error) {
+              alert("Error: " + data.error);
+              qrBtn.disabled = false;
+              qrBtn.textContent = "Connect with QR Code (Recommended)";
+              return;
+            }
+
+            // Show QR panel
+            if (qrPanel) qrPanel.classList.remove("hidden");
+            connectForm.querySelector("details")?.removeAttribute("open");
+
+            // Render QR if available
+            if (data.qr) {
+              renderQR(data.qr);
+            }
+
+            // Start polling for QR updates and connection
+            startQRPolling();
+            qrBtn.textContent = "Waiting for scan...";
+          })
+          .catch(function (err) {
+            alert("Failed: " + err.message);
+            qrBtn.disabled = false;
+            qrBtn.textContent = "Connect with QR Code (Recommended)";
+          });
+      });
+    }
+
+    function renderQR(qrString) {
+      if (!qrImage) return;
+      qrImage.innerHTML = "";
+      qrInstance = new QRCode(qrImage, {
+        text: qrString,
+        width: 200,
+        height: 200,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    }
+
+    function startQRPolling() {
+      if (qrPollInterval) clearInterval(qrPollInterval);
+      var attempts = 0;
+      qrPollInterval = setInterval(function () {
+        attempts++;
+        if (attempts > 60) { // 2 minutes
+          clearInterval(qrPollInterval);
+          qrPollInterval = null;
+          if (qrPanel) qrPanel.classList.add("hidden");
+          if (qrBtn) { qrBtn.disabled = false; qrBtn.textContent = "Connect with QR Code (Recommended)"; }
+          statusMsg.textContent = "QR expired. Try again.";
+          return;
+        }
+
+        fetch(API + "/qr", { credentials: "same-origin" })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.status === "connected") {
+              clearInterval(qrPollInterval);
+              qrPollInterval = null;
+              updateUI("connected");
+              return;
+            }
+            // Update QR if changed
+            if (data.qr) {
+              renderQR(data.qr);
+            }
+          })
+          .catch(function () {});
+      }, 2000);
+    }
+
+    // ===================================================================
+    // Connect via Pairing Code
     // ===================================================================
 
     connectBtn.addEventListener("click", function () {
@@ -159,6 +262,14 @@
           })
           .catch(function () {});
       }, 2000);
+    }
+
+    // Retry pairing code button
+    if (retryCodeBtn) {
+      retryCodeBtn.addEventListener("click", function () {
+        pairingPanel.classList.add("hidden");
+        connectBtn.click();
+      });
     }
 
     // ===================================================================

@@ -148,6 +148,115 @@ function createSessionManager(db, logger, { onConnected } = {}) {
   }
 
   /**
+   * Connect a user's WhatsApp session using QR code.
+   * Returns immediately; QR data is emitted via connection.update events.
+   * Poll /api/session/qr/:userId to get the latest QR string.
+   */
+  const pendingQRs = new Map(); // userId -> latest QR string
+
+  async function connectWithQR(userId) {
+    // Disconnect existing socket if any
+    if (activeSockets.has(userId)) {
+      const existing = activeSockets.get(userId);
+      existing.end();
+      activeSockets.delete(userId);
+    }
+
+    // Clear old auth state for fresh QR
+    const authDir = getAuthDir(userId);
+    const credsFile = path.join(authDir, "creds.json");
+    if (fs.existsSync(credsFile)) {
+      const files = fs.readdirSync(authDir);
+      for (const file of files) {
+        fs.unlinkSync(path.join(authDir, file));
+      }
+      logger.info({ userId }, "Cleared old auth state for QR pairing");
+    }
+
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { version } = await fetchLatestBaileysVersion();
+
+    const sock = makeWASocket({
+      version,
+      auth: state,
+      printQRInTerminal: false,
+      logger: logger.child({ module: "baileys", userId }),
+    });
+
+    activeSockets.set(userId, sock);
+    connectionStatus.set(userId, "waiting_qr");
+
+    sock.ev.on("creds.update", saveCreds);
+
+    sock.ev.on("connection.update", async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      // QR code received — store it for polling
+      if (qr) {
+        pendingQRs.set(userId, qr);
+        connectionStatus.set(userId, "waiting_qr");
+        logger.info({ userId }, "QR code generated");
+      }
+
+      if (connection === "open") {
+        pendingQRs.delete(userId);
+        connectionStatus.set(userId, "connected");
+        await sessionsCollection.updateOne(
+          { userId },
+          {
+            $set: {
+              userId,
+              phoneNumber: "",
+              status: "connected",
+              connectedAt: new Date(),
+              lastActiveAt: new Date(),
+            },
+          },
+          { upsert: true }
+        );
+        logger.info({ userId }, "WhatsApp session connected via QR");
+        if (onConnected) onConnected(userId, sock);
+      }
+
+      if (connection === "close") {
+        pendingQRs.delete(userId);
+        const statusCode =
+          lastDisconnect?.error instanceof Boom
+            ? lastDisconnect.error.output.statusCode
+            : null;
+
+        if (
+          statusCode === DisconnectReason.loggedOut ||
+          statusCode === DisconnectReason.forbidden
+        ) {
+          connectionStatus.set(userId, "disconnected");
+          activeSockets.delete(userId);
+          await sessionsCollection.updateOne(
+            { userId },
+            { $set: { status: "disconnected", disconnectedAt: new Date() } }
+          );
+        } else {
+          connectionStatus.set(userId, "reconnecting");
+          setTimeout(() => reconnect(userId, ""), 3000);
+        }
+      }
+    });
+
+    // Wait briefly for first QR to be generated
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const qr = pendingQRs.get(userId) || null;
+
+    return { qr, status: connectionStatus.get(userId) };
+  }
+
+  /**
+   * Get the latest QR code string for a user (for polling).
+   */
+  function getQR(userId) {
+    return pendingQRs.get(userId) || null;
+  }
+
+  /**
    * Reconnect an existing session (no OTP needed if auth state exists).
    */
   async function reconnect(userId, phoneNumber) {
@@ -322,6 +431,8 @@ function createSessionManager(db, logger, { onConnected } = {}) {
 
   return {
     connectWithOTP,
+    connectWithQR,
+    getQR,
     reconnect,
     disconnect,
     getSocket,
