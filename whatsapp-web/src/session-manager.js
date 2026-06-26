@@ -7,15 +7,11 @@
 
 const {
   default: makeWASocket,
-  useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
 } = require("@whiskeysockets/baileys");
 const { Boom } = require("@hapi/boom");
-const path = require("path");
-const fs = require("fs");
-
-const AUTH_DIR = path.join(__dirname, "..", "auth-sessions");
+const { useMongoDBAuthState, hasAuthState, clearAuthState } = require("./mongo-auth-state");
 
 function createSessionManager(db, logger, { onConnected } = {}) {
   // Active sockets keyed by userId
@@ -24,17 +20,7 @@ function createSessionManager(db, logger, { onConnected } = {}) {
   const connectionStatus = new Map();
 
   const sessionsCollection = db.collection("wa_web_sessions");
-
-  /**
-   * Get or create auth state directory for a user.
-   */
-  function getAuthDir(userId) {
-    const dir = path.join(AUTH_DIR, userId);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    return dir;
-  }
+  const authCollection = db.collection("wa_auth_state");
 
   /**
    * Connect a user's WhatsApp session using OTP pairing code.
@@ -48,19 +34,15 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       activeSockets.delete(userId);
     }
 
-    // Clear old auth state to force fresh pairing
-    const authDir = getAuthDir(userId);
-    const credsFile = path.join(authDir, "creds.json");
-    if (fs.existsSync(credsFile)) {
-      // Remove all auth files to start fresh
-      const files = fs.readdirSync(authDir);
-      for (const file of files) {
-        fs.unlinkSync(path.join(authDir, file));
-      }
-      logger.info({ userId }, "Cleared old auth state for fresh pairing");
-    }
+    // Clear old auth state for fresh pairing
+    await clearAuthState(authCollection, userId);
+    logger.info({ userId }, "Cleared old auth state for fresh pairing");
 
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    // Clear old auth state for fresh pairing
+    await clearAuthState(authCollection, userId);
+    logger.info({ userId }, "Cleared old auth state for fresh pairing");
+
+    const { state, saveCreds } = await useMongoDBAuthState(authCollection, userId);
     const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
@@ -163,17 +145,10 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     }
 
     // Clear old auth state for fresh QR
-    const authDir = getAuthDir(userId);
-    const credsFile = path.join(authDir, "creds.json");
-    if (fs.existsSync(credsFile)) {
-      const files = fs.readdirSync(authDir);
-      for (const file of files) {
-        fs.unlinkSync(path.join(authDir, file));
-      }
-      logger.info({ userId }, "Cleared old auth state for QR pairing");
-    }
+    await clearAuthState(authCollection, userId);
+    logger.info({ userId }, "Cleared old auth state for QR pairing");
 
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { state, saveCreds } = await useMongoDBAuthState(authCollection, userId);
     const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
@@ -260,13 +235,14 @@ function createSessionManager(db, logger, { onConnected } = {}) {
    * Reconnect an existing session (no OTP needed if auth state exists).
    */
   async function reconnect(userId, phoneNumber) {
-    const authDir = getAuthDir(userId);
-    if (!fs.existsSync(path.join(authDir, "creds.json"))) {
+    // Check if auth state exists in MongoDB
+    const hasAuth = await hasAuthState(authCollection, userId);
+    if (!hasAuth) {
       connectionStatus.set(userId, "disconnected");
       return;
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { state, saveCreds } = await useMongoDBAuthState(authCollection, userId);
     const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
