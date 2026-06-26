@@ -1095,6 +1095,105 @@
       elPPay.textContent = "Pay \u20B9" + count;
       elPPay.disabled = paying || count < 1;
     }
+
+    // Check if WhatsApp Web is connected — show free send option
+    checkWebSendOption(count);
+  }
+
+  function checkWebSendOption(count) {
+    var existingBtn = document.getElementById("cm-p-web-send");
+    var existingInfo = document.getElementById("cm-p-web-info");
+
+    fetch("/api/wa-web/status", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.status === "connected") {
+          // Show "Send Free via WhatsApp" option
+          if (!existingBtn) {
+            var container = elPPay ? elPPay.parentElement : null;
+            if (container) {
+              var infoDiv = document.createElement("div");
+              infoDiv.id = "cm-p-web-info";
+              infoDiv.className = "mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl";
+              infoDiv.innerHTML =
+                '<p class="text-sm font-semibold text-emerald-800 mb-2">' +
+                '✓ WhatsApp Web Connected — Send for Free!</p>' +
+                '<p class="text-xs text-slate-600 mb-3">' +
+                'Your WhatsApp is linked. Send messages directly from your number at no cost. ' +
+                'Daily limit applies (' + count + ' recipients).</p>' +
+                '<button type="button" id="cm-p-web-send" class="' +
+                'h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition ' +
+                'font-semibold text-white text-sm px-6">' +
+                'Send Free via WhatsApp Web (' + count + ' recipients)</button>';
+              container.insertBefore(infoDiv, elPPay.nextSibling);
+
+              // Wire up the button
+              document.getElementById("cm-p-web-send").addEventListener("click", startWebSend);
+            }
+          } else {
+            existingBtn.textContent = "Send Free via WhatsApp Web (" + count + " recipients)";
+          }
+        } else {
+          // Not connected — remove free option if it exists
+          if (existingBtn) existingBtn.remove();
+          if (existingInfo) existingInfo.remove();
+        }
+      })
+      .catch(function () {
+        // Service unavailable — hide free option
+        if (existingBtn) existingBtn.remove();
+        if (existingInfo) existingInfo.remove();
+      });
+  }
+
+  /* Send messages via WhatsApp Web (free, no payment) */
+  function startWebSend() {
+    var btn = document.getElementById("cm-p-web-send");
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = "Sending...";
+    clearPaymentError();
+    setPaymentStatus("Sending messages via WhatsApp Web...");
+
+    var selectedRecipients = window.CampaignWizard.selectedRecipients || [];
+    var body = {
+      registrationIds: selectedRecipients.map(function (r) { return r.registrationId; }),
+      templateName: window.CampaignWizard.templateName || "",
+      templateLanguage: window.CampaignWizard.templateLanguage || "",
+      bodyVarsTemplate: window.CampaignWizard.bodyVarsTemplate || [],
+      audienceFilters: window.CampaignWizard.audienceFilters || null,
+      salutations: window.CampaignWizard.salutations || {},
+      sendViaWeb: true,
+    };
+
+    fetch("/api/campaigns/create-with-payment", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) {
+          showPaymentError(data.error);
+          btn.disabled = false;
+          btn.textContent = "Send Free via WhatsApp Web";
+          setPaymentStatus("");
+          return;
+        }
+        // Success! Show results
+        setPaymentStatus(data.message || ("Sent " + data.sent + "/" + data.total + " messages"));
+        btn.textContent = "\u2713 Sent " + data.sent + "/" + data.total;
+        if (data.failed > 0) {
+          showPaymentError("Failed: " + data.failed + " messages. " + (data.errors || []).join(", "));
+        }
+      })
+      .catch(function (err) {
+        showPaymentError("Send failed: " + err.message);
+        btn.disabled = false;
+        btn.textContent = "Send Free via WhatsApp Web";
+        setPaymentStatus("");
+      });
   }
 
   function setPaymentStatus(message) {
