@@ -669,29 +669,124 @@
               <option value="">— None (use standard template above) —</option>
             </select>
             <p id="cm-custom-tpl-preview" class="text-xs text-slate-500 mt-2 hidden"></p>
+
+            <!-- Create New Template (inline) -->
+            <details class="mt-4 border border-slate-200 rounded-xl overflow-hidden">
+              <summary class="px-4 py-3 text-sm font-medium text-indigo-700 cursor-pointer hover:bg-indigo-50 transition-colors">
+                + Create a new template (submit for approval)
+              </summary>
+              <div class="px-4 pb-4 pt-2 bg-slate-50">
+                <p class="text-xs text-slate-500 mb-3">
+                  Create a reusable template. Use <code class="bg-white px-1 rounded">{name}</code>,
+                  <code class="bg-white px-1 rounded">{salutation}</code>,
+                  <code class="bg-white px-1 rounded">{mobile}</code> as placeholders.
+                  Templates need admin approval before they can be used.
+                </p>
+                <div class="flex flex-col gap-3">
+                  <input
+                    type="text"
+                    id="cm-new-tpl-name"
+                    class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    placeholder="Template name (e.g. diwali-greeting)"
+                  >
+                  <textarea
+                    id="cm-new-tpl-body"
+                    rows="3"
+                    class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    placeholder="नमस्कार {name} {salutation}, आपको हमारे कार्यक्रम में..."
+                  ></textarea>
+                  <div class="grid grid-cols-3 gap-3">
+                    <select id="cm-new-tpl-lang" class="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+                      <option value="hi">Hindi</option>
+                      <option value="mr">Marathi</option>
+                      <option value="en_US">English</option>
+                    </select>
+                    <select id="cm-new-tpl-media-type" class="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+                      <option value="">No Media</option>
+                      <option value="image">Image</option>
+                      <option value="video">Video</option>
+                      <option value="document">Document</option>
+                    </select>
+                    <input
+                      type="url"
+                      id="cm-new-tpl-media-url"
+                      class="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white hidden"
+                      placeholder="Media URL"
+                    >
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <button
+                      type="button"
+                      id="cm-new-tpl-submit"
+                      class="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      Submit for Approval
+                    </button>
+                    <span id="cm-new-tpl-result" class="text-xs"></span>
+                  </div>
+                </div>
+
+                <!-- My pending/recent templates -->
+                <div id="cm-new-tpl-list" class="mt-4 space-y-2"></div>
+              </div>
+            </details>
           </div>
 
           <!-- Attach Media -->
           <div class="mt-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
             <h3 class="text-sm font-semibold text-slate-700 mb-2">Attach Media (optional)</h3>
-            <p class="text-xs text-slate-500 mb-3">Attach an image, video, or document to the campaign message.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <p class="text-xs text-slate-500 mb-3">
+              Upload an image, video, or PDF document (max 32 MB) to send with your message.
+            </p>
+
+            <!-- File Upload -->
+            <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:border-emerald-400 transition-colors"
+                 id="cm-media-drop-zone">
               <input
-                type="url"
-                id="cm-media-url"
-                class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="Paste publicly accessible media URL"
+                type="file"
+                id="cm-media-file"
+                class="hidden"
+                accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
               >
-              <select
-                id="cm-media-type"
-                class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">None</option>
-                <option value="image">Image</option>
-                <option value="video">Video</option>
-                <option value="document">Document</option>
-              </select>
+              <div id="cm-media-placeholder">
+                <p class="text-sm text-slate-500 mb-2">📎 Drop file here or click to browse</p>
+                <button type="button" id="cm-media-browse-btn"
+                  class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors">
+                  Choose File
+                </button>
+                <p class="text-[11px] text-slate-400 mt-2">Supported: Images, Videos, PDF, Documents (max 32 MB)</p>
+              </div>
+
+              <!-- Upload progress -->
+              <div id="cm-media-progress" class="hidden">
+                <div class="flex items-center gap-3 mb-2">
+                  <span id="cm-media-filename" class="text-sm font-medium text-slate-700 truncate"></span>
+                  <span id="cm-media-filesize" class="text-xs text-slate-400 flex-shrink-0"></span>
+                </div>
+                <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div id="cm-media-progress-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-300" style="width:0%"></div>
+                </div>
+                <div class="flex items-center justify-between mt-2">
+                  <span id="cm-media-progress-text" class="text-xs text-slate-500">0%</span>
+                  <button type="button" id="cm-media-cancel" class="text-xs text-red-500 font-medium hover:text-red-700">Cancel</button>
+                </div>
+              </div>
+
+              <!-- Upload complete -->
+              <div id="cm-media-done" class="hidden">
+                <div class="flex items-center gap-3">
+                  <span class="text-emerald-600 text-lg">✓</span>
+                  <span id="cm-media-done-name" class="text-sm font-medium text-slate-700 truncate"></span>
+                  <span id="cm-media-done-size" class="text-xs text-slate-400"></span>
+                  <button type="button" id="cm-media-remove" class="ml-auto text-xs text-red-500 font-medium hover:text-red-700">Remove</button>
+                </div>
+              </div>
             </div>
+
+            <!-- Hidden fields for storing upload result -->
+            <input type="hidden" id="cm-media-url" value="">
+            <input type="hidden" id="cm-media-type" value="">
+            <p id="cm-media-error" class="text-xs text-red-500 mt-2 hidden"></p>
           </div>
 
           <!-- NAV ERROR + BACK/NEXT (Req 4.4) -->

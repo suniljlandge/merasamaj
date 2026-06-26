@@ -31,3 +31,6 @@ USERLIST.pdf
 # WhatsApp Web sidecar
 whatsapp-web/auth-sessions/
 whatsapp-web/node_modules/
+
+# Media uploads (temporary)
+uploads/

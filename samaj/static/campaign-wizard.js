@@ -1085,6 +1085,186 @@
     select.innerHTML = opts;
   }
 
+  /* ========================================================== */
+  /* Media File Upload with Progress                            */
+  /* ========================================================== */
+
+  var mediaUploadXHR = null; // For cancellation
+
+  function initMediaUpload() {
+    var fileInput = document.getElementById("cm-media-file");
+    var browseBtn = document.getElementById("cm-media-browse-btn");
+    var dropZone = document.getElementById("cm-media-drop-zone");
+    var placeholder = document.getElementById("cm-media-placeholder");
+    var progressDiv = document.getElementById("cm-media-progress");
+    var progressBar = document.getElementById("cm-media-progress-bar");
+    var progressText = document.getElementById("cm-media-progress-text");
+    var filenameEl = document.getElementById("cm-media-filename");
+    var filesizeEl = document.getElementById("cm-media-filesize");
+    var cancelBtn = document.getElementById("cm-media-cancel");
+    var doneDiv = document.getElementById("cm-media-done");
+    var doneNameEl = document.getElementById("cm-media-done-name");
+    var doneSizeEl = document.getElementById("cm-media-done-size");
+    var removeBtn = document.getElementById("cm-media-remove");
+    var errorEl = document.getElementById("cm-media-error");
+    var mediaUrlHidden = document.getElementById("cm-media-url");
+    var mediaTypeHidden = document.getElementById("cm-media-type");
+
+    if (!fileInput || !browseBtn) return;
+
+    var MAX_SIZE = 32 * 1024 * 1024; // 32 MB
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    }
+
+    function showError(msg) {
+      if (errorEl) { errorEl.textContent = msg; errorEl.classList.remove("hidden"); }
+    }
+    function hideError() {
+      if (errorEl) { errorEl.textContent = ""; errorEl.classList.add("hidden"); }
+    }
+
+    function resetUpload() {
+      if (placeholder) placeholder.classList.remove("hidden");
+      if (progressDiv) progressDiv.classList.add("hidden");
+      if (doneDiv) doneDiv.classList.add("hidden");
+      if (progressBar) progressBar.style.width = "0%";
+      if (progressText) progressText.textContent = "0%";
+      if (mediaUrlHidden) { mediaUrlHidden.value = ""; window.CampaignWizard.mediaUrl = ""; }
+      if (mediaTypeHidden) { mediaTypeHidden.value = ""; window.CampaignWizard.mediaType = ""; }
+      fileInput.value = "";
+      hideError();
+    }
+
+    function uploadFile(file) {
+      hideError();
+
+      // Validate size
+      if (file.size > MAX_SIZE) {
+        showError("File too large (" + formatSize(file.size) + "). Maximum is 32 MB.");
+        return;
+      }
+
+      // Show progress
+      if (placeholder) placeholder.classList.add("hidden");
+      if (doneDiv) doneDiv.classList.add("hidden");
+      if (progressDiv) progressDiv.classList.remove("hidden");
+      if (filenameEl) filenameEl.textContent = file.name;
+      if (filesizeEl) filesizeEl.textContent = formatSize(file.size);
+      if (progressBar) progressBar.style.width = "0%";
+      if (progressText) progressText.textContent = "0%";
+
+      // Upload via XHR for progress tracking
+      var formData = new FormData();
+      formData.append("file", file);
+
+      var xhr = new XMLHttpRequest();
+      mediaUploadXHR = xhr;
+
+      xhr.upload.addEventListener("progress", function (e) {
+        if (e.lengthComputable) {
+          var pct = Math.round((e.loaded / e.total) * 100);
+          if (progressBar) progressBar.style.width = pct + "%";
+          if (progressText) progressText.textContent = pct + "%";
+        }
+      });
+
+      xhr.addEventListener("load", function () {
+        mediaUploadXHR = null;
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            var data = JSON.parse(xhr.responseText);
+            if (data.error) {
+              showError(data.error);
+              resetUpload();
+              return;
+            }
+            // Success
+            if (progressDiv) progressDiv.classList.add("hidden");
+            if (doneDiv) doneDiv.classList.remove("hidden");
+            if (doneNameEl) doneNameEl.textContent = data.filename || file.name;
+            if (doneSizeEl) doneSizeEl.textContent = formatSize(data.size || file.size);
+            if (mediaUrlHidden) { mediaUrlHidden.value = data.url; window.CampaignWizard.mediaUrl = data.url; }
+            if (mediaTypeHidden) { mediaTypeHidden.value = data.mediaType; window.CampaignWizard.mediaType = data.mediaType; }
+          } catch (e) {
+            showError("Upload failed: invalid response");
+            resetUpload();
+          }
+        } else {
+          try {
+            var errData = JSON.parse(xhr.responseText);
+            showError(errData.error || "Upload failed (status " + xhr.status + ")");
+          } catch (e) {
+            showError("Upload failed (status " + xhr.status + ")");
+          }
+          resetUpload();
+        }
+      });
+
+      xhr.addEventListener("error", function () {
+        mediaUploadXHR = null;
+        showError("Upload failed. Check your connection.");
+        resetUpload();
+      });
+
+      xhr.addEventListener("abort", function () {
+        mediaUploadXHR = null;
+        resetUpload();
+      });
+
+      xhr.open("POST", "/api/wa-web/upload-media");
+      xhr.send(formData);
+    }
+
+    // Browse button
+    browseBtn.addEventListener("click", function () {
+      fileInput.click();
+    });
+
+    // File input change
+    fileInput.addEventListener("change", function () {
+      if (fileInput.files && fileInput.files[0]) {
+        uploadFile(fileInput.files[0]);
+      }
+    });
+
+    // Drag and drop
+    if (dropZone) {
+      dropZone.addEventListener("dragover", function (e) {
+        e.preventDefault();
+        dropZone.classList.add("border-emerald-400", "bg-emerald-50");
+      });
+      dropZone.addEventListener("dragleave", function () {
+        dropZone.classList.remove("border-emerald-400", "bg-emerald-50");
+      });
+      dropZone.addEventListener("drop", function (e) {
+        e.preventDefault();
+        dropZone.classList.remove("border-emerald-400", "bg-emerald-50");
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          uploadFile(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    // Cancel button
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", function () {
+        if (mediaUploadXHR) { mediaUploadXHR.abort(); }
+        resetUpload();
+      });
+    }
+
+    // Remove button
+    if (removeBtn) {
+      removeBtn.addEventListener("click", function () {
+        resetUpload();
+      });
+    }
+  }
+
   function initCustomTemplateUI() {
     var select = document.getElementById("cm-custom-tpl-select");
     var preview = document.getElementById("cm-custom-tpl-preview");
@@ -1125,16 +1305,108 @@
       });
     }
 
-    if (mediaUrlInput) {
-      mediaUrlInput.addEventListener("input", function () {
-        window.CampaignWizard.mediaUrl = mediaUrlInput.value.trim();
+    // --- File Upload for Media Attachment ---
+    initMediaUpload();
+
+    // --- Inline Template Creator in Step 2 ---
+    var newTplMediaType = document.getElementById("cm-new-tpl-media-type");
+    var newTplMediaUrl = document.getElementById("cm-new-tpl-media-url");
+    var newTplSubmit = document.getElementById("cm-new-tpl-submit");
+    var newTplResult = document.getElementById("cm-new-tpl-result");
+
+    // Show/hide media URL based on type
+    if (newTplMediaType) {
+      newTplMediaType.addEventListener("change", function () {
+        if (newTplMediaUrl) {
+          newTplMediaUrl.classList.toggle("hidden", !newTplMediaType.value);
+        }
       });
     }
-    if (mediaTypeSelect) {
-      mediaTypeSelect.addEventListener("change", function () {
-        window.CampaignWizard.mediaType = mediaTypeSelect.value;
+
+    // Submit new template
+    if (newTplSubmit) {
+      newTplSubmit.addEventListener("click", function () {
+        var name = (document.getElementById("cm-new-tpl-name").value || "").trim();
+        var bodyText = (document.getElementById("cm-new-tpl-body").value || "").trim();
+        var language = (document.getElementById("cm-new-tpl-lang") || {}).value || "hi";
+        var mType = newTplMediaType ? newTplMediaType.value : "";
+        var mUrl = newTplMediaUrl ? newTplMediaUrl.value.trim() : "";
+
+        if (!name || !bodyText) {
+          if (newTplResult) {
+            newTplResult.textContent = "Name and body text are required.";
+            newTplResult.className = "text-xs text-red-500";
+          }
+          return;
+        }
+
+        newTplSubmit.disabled = true;
+        if (newTplResult) { newTplResult.textContent = "Submitting..."; newTplResult.className = "text-xs text-slate-500"; }
+
+        var payload = { name: name, bodyText: bodyText, language: language };
+        if (mType) payload.mediaType = mType;
+        if (mUrl) payload.mediaUrl = mUrl;
+
+        fetch("/api/wa-web/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.error) {
+              if (newTplResult) { newTplResult.textContent = "Error: " + data.error; newTplResult.className = "text-xs text-red-500"; }
+            } else {
+              if (newTplResult) { newTplResult.textContent = "✓ Template submitted for admin approval!"; newTplResult.className = "text-xs text-emerald-600"; }
+              document.getElementById("cm-new-tpl-name").value = "";
+              document.getElementById("cm-new-tpl-body").value = "";
+              if (newTplMediaUrl) newTplMediaUrl.value = "";
+              loadMyTemplatesInStep2();
+              // Refresh custom templates dropdown
+              customTemplatesLoaded = false;
+              fetchCustomTemplates();
+            }
+          })
+          .catch(function (err) {
+            if (newTplResult) { newTplResult.textContent = "Error: " + err.message; newTplResult.className = "text-xs text-red-500"; }
+          })
+          .finally(function () { newTplSubmit.disabled = false; });
       });
     }
+
+    // Load user's templates in the Step 2 list
+    loadMyTemplatesInStep2();
+  }
+
+  function loadMyTemplatesInStep2() {
+    var listEl = document.getElementById("cm-new-tpl-list");
+    if (!listEl) return;
+
+    fetch("/api/wa-web/templates", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var templates = (data.templates || []).filter(function (t) {
+          return t.status === "pending" || t.status === "rejected";
+        });
+        if (templates.length === 0) {
+          listEl.innerHTML = "";
+          return;
+        }
+        listEl.innerHTML = '<p class="text-xs font-semibold text-slate-600 mb-2">Your submitted templates:</p>' +
+          templates.map(function (t) {
+            var colors = { pending: "bg-yellow-100 text-yellow-800", rejected: "bg-red-100 text-red-800" };
+            var cls = colors[t.status] || "bg-slate-100 text-slate-700";
+            var badge = '<span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ' + cls + '">' + t.status + '</span>';
+            var reason = t.status === "rejected" && t.rejectionReason
+              ? '<p class="text-[11px] text-red-500 mt-0.5">Reason: ' + escapeHtml(t.rejectionReason) + '</p>'
+              : '';
+            return '<div class="p-2 border border-slate-200 rounded-lg bg-white flex items-center justify-between">' +
+              '<div><span class="text-xs font-medium text-slate-700">' + escapeHtml(t.name) + '</span> ' + badge + reason + '</div>' +
+              '</div>';
+          }).join("");
+      })
+      .catch(function () {});
   }
 
   /* Lazy-load templates the first time Step 2 becomes active.   */

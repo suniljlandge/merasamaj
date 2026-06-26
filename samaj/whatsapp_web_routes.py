@@ -138,6 +138,82 @@ def disconnect():
 
 
 # ===========================================================================
+# Media Upload
+# ===========================================================================
+
+MAX_MEDIA_SIZE = 32 * 1024 * 1024  # 32 MB
+
+
+@wa_web_bp.route("/upload-media", methods=["POST"])
+@_require_auth
+def upload_media():
+    """Upload a media file for campaign messages. Max 32 MB.
+    Stores file on disk (or R2 if configured) and returns the URL."""
+    import os
+    import uuid
+    from flask import current_app
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    # Check file size from content-length header
+    content_length = request.content_length or 0
+    if content_length > MAX_MEDIA_SIZE:
+        return jsonify({"error": f"File too large. Max size is 32 MB."}), 413
+
+    # Read file and check actual size
+    file_data = file.read()
+    if len(file_data) > MAX_MEDIA_SIZE:
+        return jsonify({"error": f"File too large ({len(file_data) // (1024*1024)} MB). Max is 32 MB."}), 413
+
+    # Determine media type from extension
+    filename = file.filename
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
+        media_type = "image"
+    elif ext in (".mp4", ".mov", ".avi", ".mkv", ".webm"):
+        media_type = "video"
+    else:
+        media_type = "document"
+
+    # Save to uploads directory
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Generate unique filename
+    unique_name = f"{uuid.uuid4().hex[:12]}_{filename}"
+    file_path = os.path.join(upload_dir, unique_name)
+
+    with open(file_path, "wb") as f:
+        f.write(file_data)
+
+    # Generate URL (served by Flask or external)
+    from flask import url_for
+    media_url = url_for("wa_web.serve_upload", filename=unique_name, _external=True)
+
+    return jsonify({
+        "success": True,
+        "url": media_url,
+        "mediaType": media_type,
+        "filename": filename,
+        "size": len(file_data),
+    })
+
+
+@wa_web_bp.route("/uploads/<filename>", methods=["GET"])
+def serve_upload(filename):
+    """Serve uploaded media files."""
+    import os
+    from flask import send_from_directory
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+    return send_from_directory(upload_dir, filename)
+
+
+# ===========================================================================
 # Messaging
 # ===========================================================================
 
