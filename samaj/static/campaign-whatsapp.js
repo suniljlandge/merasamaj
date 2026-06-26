@@ -434,16 +434,34 @@
             var cls = statusColors[t.status] || "bg-slate-100 text-slate-700";
             var badge = '<span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ' + cls + '">' + (t.status || "unknown") + '</span>';
             var rejection = t.status === "rejected" && t.rejectionReason ? '<p class="text-xs text-red-500 mt-1">Reason: ' + escText(t.rejectionReason) + '</p>' : '';
+            var deleteBtn = '<button type="button" class="wa-tpl-delete text-[11px] text-red-400 hover:text-red-600" data-id="' + escText(t._id) + '">Delete</button>';
             return '<div class="p-3 border border-slate-200 rounded-lg bg-white">' +
               '<div class="flex items-center justify-between gap-2 mb-1">' +
               '<span class="text-sm font-medium text-slate-800">' + escText(t.name) + '</span>' +
-              badge +
+              '<div class="flex items-center gap-2">' + badge + deleteBtn + '</div>' +
               '</div>' +
               '<p class="text-xs text-slate-500 line-clamp-2">' + escText((t.bodyText || "").substring(0, 120)) + '</p>' +
               '<p class="text-[11px] text-slate-400 mt-1">' + (t.language || "") + (t.mediaType ? ' · ' + t.mediaType : '') + '</p>' +
               rejection +
               '</div>';
           }).join("");
+
+          // Wire delete buttons
+          listEl.querySelectorAll(".wa-tpl-delete").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              if (!confirm("Delete this template?")) return;
+              fetch(API + "/templates/" + btn.dataset.id, {
+                method: "DELETE",
+                credentials: "same-origin",
+              })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                  if (data.error) { alert("Error: " + data.error); return; }
+                  loadMyTemplates();
+                })
+                .catch(function (err) { alert("Failed: " + err.message); });
+            });
+          });
         })
         .catch(function () {
           listEl.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Failed to load templates.</p>';

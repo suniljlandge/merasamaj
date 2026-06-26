@@ -515,6 +515,38 @@ def reject_template(template_id):
     return jsonify({"success": True})
 
 
+@wa_web_bp.route("/templates/<template_id>", methods=["DELETE"])
+@_require_auth
+def delete_template(template_id):
+    """Delete a custom template. Users can delete their own, admins can delete any."""
+    from flask import current_app
+    from samaj.app import role_can
+    from bson import ObjectId
+
+    collection = current_app.extensions.get("mongo_collection")
+    db = collection.database
+    col = db[_TEMPLATES_COLLECTION]
+
+    try:
+        oid = ObjectId(template_id)
+    except Exception:
+        return jsonify({"error": "Invalid template ID"}), 400
+
+    template = col.find_one({"_id": oid})
+    if not template:
+        return jsonify({"error": "Template not found"}), 404
+
+    user_id = _get_user_id()
+    is_admin = role_can("manage_wa_web")
+
+    # Users can only delete their own templates, admins can delete any
+    if not is_admin and template.get("createdBy") != user_id:
+        return jsonify({"error": "You can only delete your own templates"}), 403
+
+    col.delete_one({"_id": oid})
+    return jsonify({"success": True})
+
+
 # ===========================================================================
 # Routing Config (Super Admin)
 # ===========================================================================

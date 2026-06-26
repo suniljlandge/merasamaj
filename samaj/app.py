@@ -3622,6 +3622,21 @@ def create_app(config=None, collection=None, correction_collection=None):
                 media_type = payload.get("mediaType") or ""  # image, video, document
 
                 # Send messages via web session (no payment required)
+                # First check daily limit
+                try:
+                    daily_stats = wa_web.get_daily_send_stats(account_id)
+                    remaining = daily_stats.get("remaining", 20)
+                    if len(recipients) > remaining:
+                        return jsonify({
+                            "error": f"Daily limit: you can send {remaining} more messages today "
+                                     f"(requested {len(recipients)}). Either reduce recipients or "
+                                     f"use Cloud API for the full batch.",
+                            "dailyRemaining": remaining,
+                            "requested": len(recipients),
+                        }), 400
+                except Exception:
+                    pass  # If we can't check, proceed anyway
+
                 sent = 0
                 failed = 0
                 errors = []

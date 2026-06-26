@@ -1410,10 +1410,25 @@
             var reason = t.status === "rejected" && t.rejectionReason
               ? '<p class="text-[11px] text-red-500 mt-0.5">Reason: ' + escapeHtml(t.rejectionReason) + '</p>'
               : '';
+            var delBtn = '<button type="button" class="cm-tpl-del text-[11px] text-red-400 hover:text-red-600" data-id="' + escapeHtml(t._id) + '">×</button>';
             return '<div class="p-2 border border-slate-200 rounded-lg bg-white flex items-center justify-between">' +
               '<div><span class="text-xs font-medium text-slate-700">' + escapeHtml(t.name) + '</span> ' + badge + reason + '</div>' +
+              delBtn +
               '</div>';
           }).join("");
+
+        // Wire delete buttons
+        listEl.querySelectorAll(".cm-tpl-del").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            if (!confirm("Delete this template?")) return;
+            fetch("/api/wa-web/templates/" + btn.dataset.id, {
+              method: "DELETE", credentials: "same-origin",
+            }).then(function (r) { return r.json(); }).then(function (d) {
+              if (d.error) { alert(d.error); return; }
+              loadMyTemplatesInStep2();
+            }).catch(function () {});
+          });
+        });
       })
       .catch(function () {});
   }
