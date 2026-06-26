@@ -1276,29 +1276,38 @@
         var id = select.value;
         if (!id) {
           window.CampaignWizard.templateBody = "";
+          window.CampaignWizard.isCustomTemplate = false;
           if (preview) { preview.textContent = ""; preview.classList.add("hidden"); }
           return;
         }
         var tpl = customTemplatesCache.filter(function (t) { return t._id === id; })[0];
         if (tpl) {
           window.CampaignWizard.templateBody = tpl.bodyText || "";
+          window.CampaignWizard.isCustomTemplate = true;
           if (preview) {
             preview.textContent = "Preview: " + (tpl.bodyText || "").substring(0, 150);
             preview.classList.remove("hidden");
           }
-          /* If the user picks a custom template, clear standard selection */
+          /* Override standard template selection with custom */
           state.selectedTemplate = { name: tpl.name, language: tpl.language, bodyText: tpl.bodyText };
-          window.CampaignWizard.templateName = tpl.name || "";
+          window.CampaignWizard.templateName = "custom:" + tpl.name;
           window.CampaignWizard.templateLanguage = tpl.language || "";
           clearTemplateNavError();
-          setTemplateStatus("Custom template selected.");
+          setTemplateStatus("Custom template selected: " + tpl.name);
+
+          /* Visually deselect standard template radios */
+          var radios = document.querySelectorAll("#cm-t-list [role=radio]");
+          radios.forEach(function (r) {
+            r.setAttribute("aria-checked", "false");
+            r.classList.remove("border-emerald-500", "bg-emerald-50");
+            r.classList.add("border-slate-200");
+          });
+
           /* Also apply media from template if set */
-          if (tpl.mediaUrl && mediaUrlInput) {
-            mediaUrlInput.value = tpl.mediaUrl;
+          if (tpl.mediaUrl) {
             window.CampaignWizard.mediaUrl = tpl.mediaUrl;
           }
-          if (tpl.mediaType && mediaTypeSelect) {
-            mediaTypeSelect.value = tpl.mediaType;
+          if (tpl.mediaType) {
             window.CampaignWizard.mediaType = tpl.mediaType;
           }
         }
@@ -1455,139 +1464,73 @@
       elPCount.textContent = String(count);
     }
     if (elPTotal) {
-      elPTotal.textContent = "\u20B9" + count;
+      elPTotal.textContent = String(count);
+    }
+    var summaryShort = document.getElementById("cm-p-summary-short");
+    if (summaryShort) {
+      summaryShort.textContent = "\u20B91 × " + count;
     }
     if (elPSummary) {
-      elPSummary.textContent =
-        count +
-        " recipient" +
-        (count === 1 ? "" : "s") +
-        " \u00D7 \u20B91 = \u20B9" +
-        count +
-        " total";
+      elPSummary.textContent = count + " recipients × ₹1 = ₹" + count;
+    }
+    var webSavings = document.getElementById("cm-p-web-savings");
+    if (webSavings) {
+      webSavings.textContent = String(count);
     }
     if (elPPay) {
-      elPPay.textContent = "Pay \u20B9" + count;
+      elPPay.textContent = "Pay \u20B9" + count + " & Send via Cloud API";
       elPPay.disabled = paying || count < 1;
     }
 
-    // Check if WhatsApp Web is connected — show free send option
+    // Populate the WhatsApp Web action area
     checkWebSendOption(count);
   }
 
   function checkWebSendOption(count) {
-    var existingBtn = document.getElementById("cm-p-web-send");
-    var existingInfo = document.getElementById("cm-p-web-info");
+    var actionDiv = document.getElementById("cm-p-web-action");
+    if (!actionDiv) return;
 
     fetch("/api/wa-web/status", { credentials: "same-origin" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.status === "connected") {
-          // Remove connect panel if it was showing
-          var connectPanel = document.getElementById("cm-p-web-connect");
-          if (connectPanel) connectPanel.remove();
-
-          // Show "Send Free via WhatsApp" option
-          if (!existingBtn) {
-            // Insert before the Back/Pay button row (the .mt-4.flex container)
-            var step3El = document.getElementById("cm-step-payment");
-            var btnRow = step3El ? step3El.querySelector(".flex.items-center.justify-between") : null;
-            var insertTarget = btnRow || (elPPay ? elPPay.parentElement : null);
-            if (insertTarget) {
-              var infoDiv = document.createElement("div");
-              infoDiv.id = "cm-p-web-info";
-              infoDiv.className = "mt-4 p-5 bg-emerald-50 border border-emerald-200 rounded-2xl";
-              infoDiv.innerHTML =
-                '<p class="text-sm font-semibold text-emerald-800 mb-2">' +
-                '✓ WhatsApp Web Connected — Send for Free!</p>' +
-                '<p class="text-xs text-slate-600 mb-3">' +
-                'Your WhatsApp is linked. Send messages directly from your number at no cost. ' +
-                'Daily limit: 20 messages/day.</p>' +
-                '<button type="button" id="cm-p-web-send" class="' +
-                'w-full sm:w-auto h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition ' +
-                'font-semibold text-white text-sm px-6">' +
-                'Send Free via WhatsApp Web (' + count + ' recipients)</button>';
-              insertTarget.parentElement.insertBefore(infoDiv, insertTarget);
-
-              // Wire up the button
-              document.getElementById("cm-p-web-send").addEventListener("click", startWebSend);
-            }
-          } else {
-            existingBtn.textContent = "Send Free via WhatsApp Web (" + count + " recipients)";
-          }
+          // Connected — show send button
+          actionDiv.innerHTML =
+            '<button type="button" id="cm-p-web-send" class="' +
+            'w-full h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition ' +
+            'font-semibold text-white text-sm">' +
+            'Send Free (' + count + ' recipients)</button>';
+          document.getElementById("cm-p-web-send").addEventListener("click", startWebSend);
         } else {
-          // Not connected — show connect option with QR code
-          if (existingBtn) existingBtn.remove();
-          if (existingInfo) existingInfo.remove();
-          showConnectInStep3(count);
+          // Not connected — show connect button with instructions
+          actionDiv.innerHTML =
+            '<button type="button" id="cm-p-start-qr-inline" class="' +
+            'w-full h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 transition ' +
+            'font-semibold text-white text-sm mb-2">' +
+            'Connect WhatsApp</button>' +
+            '<p class="text-[11px] text-slate-500 text-center">Link your WhatsApp to send free</p>' +
+            '<div id="cm-p-qr-inline-container" class="hidden mt-3 text-center">' +
+              '<div id="cm-p-qr-inline-image" class="inline-block bg-white p-2 rounded-lg border border-slate-200"></div>' +
+              '<p class="text-[11px] text-slate-400 mt-1">Scan with WhatsApp → Linked Devices</p>' +
+            '</div>';
+          var inlineBtn = document.getElementById("cm-p-start-qr-inline");
+          if (inlineBtn) {
+            inlineBtn.addEventListener("click", function () {
+              inlineBtn.disabled = true;
+              inlineBtn.textContent = "Generating QR...";
+              startInlineQR(count);
+            });
+          }
         }
       })
       .catch(function () {
-        // Service unavailable — show connect option anyway
-        if (existingBtn) existingBtn.remove();
-        if (existingInfo) existingInfo.remove();
-        showConnectInStep3(count);
+        actionDiv.innerHTML =
+          '<p class="text-xs text-slate-400 text-center">WhatsApp service unavailable</p>';
       });
   }
 
-  /* Show inline QR code connect panel in Step 3 */
-  var step3QrInstance = null;
-  var step3QrPoll = null;
-
-  function showConnectInStep3(count) {
-    var existing = document.getElementById("cm-p-web-connect");
-    if (existing) return; // Already showing
-
-    var step3El = document.getElementById("cm-step-payment");
-    var btnRow = step3El ? step3El.querySelector(".flex.items-center.justify-between") : null;
-    var insertTarget = btnRow || (elPPay ? elPPay.parentElement : null);
-    if (!insertTarget) return;
-
-    var panel = document.createElement("div");
-    panel.id = "cm-p-web-connect";
-    panel.className = "mt-4 p-5 bg-slate-50 border border-slate-200 rounded-2xl";
-    panel.innerHTML =
-      '<div class="flex flex-col sm:flex-row items-start gap-4">' +
-        '<div class="flex-1">' +
-          '<p class="text-sm font-semibold text-slate-800 mb-1">💬 Send for Free via WhatsApp Web</p>' +
-          '<p class="text-xs text-slate-600 mb-3">' +
-            'Connect your WhatsApp to send ' + count + ' messages for free (no payment needed). ' +
-            'It takes just 30 seconds.' +
-          '</p>' +
-          '<ol class="text-xs text-slate-600 space-y-1 mb-4 list-decimal list-inside">' +
-            '<li>Click "Connect with QR Code" below</li>' +
-            '<li>Open WhatsApp on your phone</li>' +
-            '<li>Go to <strong>Settings → Linked Devices → Link a Device</strong></li>' +
-            '<li>Scan the QR code shown here</li>' +
-            '<li>Done! Click "Send Free" once connected</li>' +
-          '</ol>' +
-          '<button type="button" id="cm-p-start-qr" class="' +
-            'px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-lg ' +
-            'hover:bg-emerald-700 transition-colors">' +
-            'Connect with QR Code' +
-          '</button>' +
-          '<span id="cm-p-qr-status" class="ml-3 text-xs text-slate-500"></span>' +
-        '</div>' +
-        '<div id="cm-p-qr-container" class="hidden flex-shrink-0">' +
-          '<div id="cm-p-qr-image" class="bg-white p-2 rounded-lg border border-slate-200"></div>' +
-          '<p class="text-[11px] text-slate-400 text-center mt-1">Scan with WhatsApp</p>' +
-        '</div>' +
-      '</div>';
-    insertTarget.parentElement.insertBefore(panel, insertTarget);
-
-    // Wire the connect button
-    document.getElementById("cm-p-start-qr").addEventListener("click", startStep3QR);
-  }
-
-  function startStep3QR() {
-    var btn = document.getElementById("cm-p-start-qr");
-    var statusEl = document.getElementById("cm-p-qr-status");
-    var qrContainer = document.getElementById("cm-p-qr-container");
-    var qrImage = document.getElementById("cm-p-qr-image");
-
-    if (btn) { btn.disabled = true; btn.textContent = "Connecting..."; }
-    if (statusEl) statusEl.textContent = "Requesting QR code...";
-
+  var inlineQrPoll = null;
+  function startInlineQR(count) {
     fetch("/api/wa-web/connect-qr", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1596,73 +1539,41 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.error) {
-          if (statusEl) statusEl.textContent = "Error: " + data.error;
-          if (btn) { btn.disabled = false; btn.textContent = "Connect with QR Code"; }
+          var actionDiv = document.getElementById("cm-p-web-action");
+          if (actionDiv) actionDiv.innerHTML = '<p class="text-xs text-red-500">Error: ' + data.error + '</p>';
           return;
         }
-
-        // Show QR container
+        var qrContainer = document.getElementById("cm-p-qr-inline-container");
+        var qrImage = document.getElementById("cm-p-qr-inline-image");
+        var inlineBtn = document.getElementById("cm-p-start-qr-inline");
+        if (inlineBtn) inlineBtn.classList.add("hidden");
         if (qrContainer) qrContainer.classList.remove("hidden");
-        if (statusEl) statusEl.textContent = "Scan the QR code →";
-
-        // Render QR if available
         if (data.qr && qrImage) {
           qrImage.innerHTML = "";
-          step3QrInstance = new QRCode(qrImage, {
-            text: data.qr,
-            width: 180,
-            height: 180,
-            colorDark: "#000000",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.M,
-          });
+          new QRCode(qrImage, { text: data.qr, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M });
         }
-
-        // Poll for QR updates and connection
-        if (step3QrPoll) clearInterval(step3QrPoll);
+        // Poll for connection
+        if (inlineQrPoll) clearInterval(inlineQrPoll);
         var attempts = 0;
-        step3QrPoll = setInterval(function () {
+        inlineQrPoll = setInterval(function () {
           attempts++;
-          if (attempts > 60) {
-            clearInterval(step3QrPoll);
-            step3QrPoll = null;
-            if (statusEl) statusEl.textContent = "QR expired. Try again.";
-            if (btn) { btn.disabled = false; btn.textContent = "Connect with QR Code"; }
-            if (qrContainer) qrContainer.classList.add("hidden");
-            return;
-          }
-
+          if (attempts > 60) { clearInterval(inlineQrPoll); return; }
           fetch("/api/wa-web/qr", { credentials: "same-origin" })
             .then(function (r) { return r.json(); })
             .then(function (qrData) {
               if (qrData.status === "connected") {
-                // Connected! Replace connect panel with send button
-                clearInterval(step3QrPoll);
-                step3QrPoll = null;
-                var connectPanel = document.getElementById("cm-p-web-connect");
-                if (connectPanel) connectPanel.remove();
-                // Re-run the check which will now show the "Send Free" button
-                var count = selectedRecipientCount();
+                clearInterval(inlineQrPoll);
                 checkWebSendOption(count);
               } else if (qrData.qr && qrImage) {
-                // Update QR code
                 qrImage.innerHTML = "";
-                step3QrInstance = new QRCode(qrImage, {
-                  text: qrData.qr,
-                  width: 180,
-                  height: 180,
-                  colorDark: "#000000",
-                  colorLight: "#ffffff",
-                  correctLevel: QRCode.CorrectLevel.M,
-                });
+                new QRCode(qrImage, { text: qrData.qr, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M });
               }
-            })
-            .catch(function () {});
+            }).catch(function () {});
         }, 2000);
       })
       .catch(function (err) {
-        if (statusEl) statusEl.textContent = "Failed: " + err.message;
-        if (btn) { btn.disabled = false; btn.textContent = "Connect with QR Code"; }
+        var actionDiv = document.getElementById("cm-p-web-action");
+        if (actionDiv) actionDiv.innerHTML = '<p class="text-xs text-red-500">' + err.message + '</p>';
       });
   }
 
@@ -1685,8 +1596,11 @@
       salutations: window.CampaignWizard.salutations || {},
       sendViaWeb: true,
     };
+    // Always send templateBody if available (custom template or standard with body)
     if (window.CampaignWizard.templateBody) {
       body.templateBody = window.CampaignWizard.templateBody;
+    } else if (state.selectedTemplate && state.selectedTemplate.bodyText) {
+      body.templateBody = state.selectedTemplate.bodyText;
     }
     if (window.CampaignWizard.mediaUrl) {
       body.mediaUrl = window.CampaignWizard.mediaUrl;
@@ -1710,8 +1624,9 @@
           setPaymentStatus("");
           return;
         }
-        // Success — show delivery report
+        // Success — navigate to Step 5 (Report) with web send data
         showWebSendReport(data);
+        showStep(5);
       })
       .catch(function (err) {
         showPaymentError("Send failed: " + err.message);
@@ -1721,11 +1636,10 @@
       });
   }
 
-  /* Show delivery report for free WhatsApp Web sends */
+  /* Show delivery report for free WhatsApp Web sends (in Step 5 area) */
   function showWebSendReport(data) {
-    // Hide the payment step content
-    var step3 = document.getElementById("cm-step-payment");
-    if (!step3) return;
+    var reportContainer = document.querySelector("[data-wizard-step='5']");
+    if (!reportContainer) return;
 
     var sent = data.sent || 0;
     var failed = data.failed || 0;
@@ -1733,62 +1647,57 @@
     var errors = data.errors || [];
     var pct = total > 0 ? Math.round((sent / total) * 100) : 0;
 
-    step3.innerHTML =
+    reportContainer.innerHTML =
       '<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">' +
         '<div class="px-5 py-4 border-b border-slate-200">' +
           '<h2 class="text-base font-semibold text-slate-800">Delivery Report — WhatsApp Web</h2>' +
           '<p class="text-xs text-slate-500 mt-1">Messages sent directly from your WhatsApp number (free)</p>' +
         '</div>' +
         '<div class="p-5">' +
-          // Stats grid
-          '<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">' +
+          '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">' +
             '<div class="text-center p-3 bg-slate-50 rounded-xl">' +
               '<p class="text-2xl font-bold text-slate-800">' + total + '</p>' +
-              '<p class="text-xs text-slate-500">Total</p>' +
+              '<p class="text-xs text-slate-500 mt-1">Total</p>' +
             '</div>' +
             '<div class="text-center p-3 bg-emerald-50 rounded-xl">' +
               '<p class="text-2xl font-bold text-emerald-700">' + sent + '</p>' +
-              '<p class="text-xs text-emerald-600">Sent ✓</p>' +
+              '<p class="text-xs text-emerald-600 mt-1">Sent ✓</p>' +
             '</div>' +
             '<div class="text-center p-3 ' + (failed > 0 ? 'bg-red-50' : 'bg-slate-50') + ' rounded-xl">' +
               '<p class="text-2xl font-bold ' + (failed > 0 ? 'text-red-600' : 'text-slate-800') + '">' + failed + '</p>' +
-              '<p class="text-xs ' + (failed > 0 ? 'text-red-500' : 'text-slate-500') + '">Failed</p>' +
+              '<p class="text-xs ' + (failed > 0 ? 'text-red-500' : 'text-slate-500') + ' mt-1">Failed</p>' +
             '</div>' +
             '<div class="text-center p-3 bg-slate-50 rounded-xl">' +
               '<p class="text-2xl font-bold text-slate-800">' + pct + '%</p>' +
-              '<p class="text-xs text-slate-500">Success Rate</p>' +
+              '<p class="text-xs text-slate-500 mt-1">Success Rate</p>' +
             '</div>' +
           '</div>' +
-          // Progress bar
-          '<div class="w-full h-3 bg-slate-200 rounded-full overflow-hidden mb-4">' +
-            '<div class="h-full rounded-full transition-all ' +
+          '<div class="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden mb-4">' +
+            '<div class="h-full rounded-full ' +
               (pct === 100 ? 'bg-emerald-500' : pct > 50 ? 'bg-emerald-400' : 'bg-yellow-400') +
               '" style="width:' + pct + '%"></div>' +
           '</div>' +
-          // Channel badge
-          '<div class="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-full text-xs font-medium mb-4">' +
-            '<span>📱</span> Sent via WhatsApp Web (Free — no charges)' +
+          '<div class="flex flex-wrap items-center gap-3 mb-4">' +
+            '<span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-full text-xs font-medium">' +
+              '📱 Sent via WhatsApp Web (Free)' +
+            '</span>' +
+            '<span class="text-xs text-slate-400">' + new Date().toLocaleString() + '</span>' +
           '</div>' +
-          // Errors section
           (failed > 0 && errors.length > 0 ?
-            '<div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl">' +
-              '<p class="text-xs font-semibold text-red-700 mb-2">Failed messages:</p>' +
-              '<ul class="text-xs text-red-600 space-y-1">' +
+            '<div class="p-3 bg-red-50 border border-red-200 rounded-xl">' +
+              '<p class="text-xs font-semibold text-red-700 mb-1">Failed messages:</p>' +
+              '<ul class="text-xs text-red-600 space-y-0.5">' +
                 errors.map(function (e) { return '<li>• ' + escapeHtml(e) + '</li>'; }).join("") +
               '</ul>' +
             '</div>' : '') +
         '</div>' +
       '</div>' +
-      // Action buttons
-      '<div class="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">' +
+      '<div class="mt-4">' +
         '<button type="button" onclick="window.location.reload()" class="' +
-          'h-11 rounded-xl bg-slate-900 hover:bg-slate-800 transition ' +
-          'font-semibold text-white text-sm px-6 text-center">' +
+          'w-full sm:w-auto h-11 rounded-xl bg-slate-900 hover:bg-slate-800 transition ' +
+          'font-semibold text-white text-sm px-6">' +
           'Send Another Campaign' +
         '</button>' +
-        '<span class="text-xs text-slate-500">' +
-          'Sent at ' + new Date().toLocaleTimeString() +
-        '</span>' +
       '</div>';
   }
 

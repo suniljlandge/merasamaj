@@ -238,11 +238,22 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
         return res.status(400).json({ error: "userId is required" });
       }
 
-      const sock = sessionManager.getSocket(userId);
+      let sock = sessionManager.getSocket(userId);
       if (!sock) {
-        return res.status(400).json({
-          error: "No active WhatsApp session. Connect first.",
-        });
+        // Try to reconnect from saved auth state
+        const status = sessionManager.getStatus(userId);
+        if (status === "connected" || status === "reconnecting") {
+          // Session thinks it's connected but socket is gone (after restart)
+          await sessionManager.reconnect(userId, "");
+          // Wait a moment for reconnection
+          await new Promise((r) => setTimeout(r, 5000));
+          sock = sessionManager.getSocket(userId);
+        }
+        if (!sock) {
+          return res.status(400).json({
+            error: "No active WhatsApp session. The session may need to be re-paired.",
+          });
+        }
       }
 
       // Run backup in background, return immediately

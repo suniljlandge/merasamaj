@@ -115,6 +115,13 @@ async function main() {
   // Mount routes
   createRoutes(app, { sessionManager, backupService, r2, db, logger });
 
+  // Restore previously connected sessions from disk
+  try {
+    await sessionManager.restoreSessions();
+  } catch (err) {
+    logger.error({ err: err.message }, "Failed to restore sessions on startup");
+  }
+
   logger.info("All services initialized. Ready to accept connections.");
 
   // Graceful shutdown

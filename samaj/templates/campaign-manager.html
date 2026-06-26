@@ -834,151 +834,141 @@
           data-wizard-step="3"
           id="cm-step-payment"
         >
-          <div
-            class="
-              bg-white rounded-2xl border border-slate-200
-              shadow-sm overflow-hidden mb-4
-            "
-          >
-            <div
-              class="
-                px-4 md:px-5 py-3 border-b border-slate-200
-              "
-            >
-              <h2 class="text-sm font-semibold text-slate-700">
-                Payment
-              </h2>
+          <!-- Send Options Header -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-4">
+            <div class="px-5 py-4 border-b border-slate-200">
+              <h2 class="text-base font-semibold text-slate-800">Choose how to send</h2>
+              <p class="text-xs text-slate-500 mt-1">
+                <span id="cm-p-count" class="font-semibold text-slate-700">0</span> recipients selected
+              </p>
             </div>
 
-            <!-- PAYMENT SUMMARY -->
-            <div class="p-4 md:p-6">
-              <dl class="space-y-3 max-w-sm">
-                <div class="flex items-center justify-between gap-3">
-                  <dt class="text-sm text-slate-600">Recipients</dt>
-                  <dd
-                    id="cm-p-count"
-                    class="text-sm font-semibold text-slate-800"
-                  >0</dd>
-                </div>
-                <div class="flex items-center justify-between gap-3">
-                  <dt class="text-sm text-slate-600">Rate per recipient</dt>
-                  <dd class="text-sm font-semibold text-slate-800">&#8377;1</dd>
-                </div>
-                <div
-                  class="
-                    flex items-center justify-between gap-3
-                    border-t border-slate-200 pt-3
-                  "
-                >
-                  <dt class="text-sm font-semibold text-slate-700">Total</dt>
-                  <dd
-                    id="cm-p-total"
-                    class="text-base font-bold text-emerald-700"
-                  >&#8377;0</dd>
-                </div>
-              </dl>
+            <!-- Two-column send options -->
+            <div class="p-4 md:p-5">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-              <p
-                id="cm-p-summary"
-                class="mt-4 text-sm text-slate-500"
-                aria-live="polite"
-              >
-                0 recipients &times; &#8377;1 = &#8377;0 total
-              </p>
-
-              <!-- UPI QR Code + Link (shown after campaign creation) -->
-              <div id="cm-p-upi-section" class="mt-6 hidden">
-                <div class="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                  <p class="text-sm font-medium text-slate-700 mb-3">
-                    Scan QR code or tap the button below to pay via UPI:
-                  </p>
-                  <div class="flex flex-col items-center gap-4">
-                    <div id="cm-p-qr" class="bg-white p-3 rounded-lg border border-slate-200"></div>
-                    <a
-                      id="cm-p-upi-link"
-                      href="#"
-                      class="
-                        inline-flex items-center gap-2 h-11 rounded-xl
-                        bg-indigo-500 hover:bg-indigo-600 transition
-                        font-semibold text-white text-sm px-6
-                      "
-                    >
-                      Open UPI App
-                    </a>
-                    <p id="cm-p-txn-note" class="text-xs text-slate-500"></p>
+                <!-- Option 1: Free via WhatsApp Web -->
+                <div id="cm-p-web-option" class="relative p-5 rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 hover:border-emerald-400 transition-colors">
+                  <div class="absolute -top-2.5 left-4">
+                    <span class="px-2.5 py-0.5 bg-emerald-500 text-white text-[11px] font-bold uppercase rounded-full tracking-wide">Recommended</span>
+                  </div>
+                  <div class="mt-2">
+                    <div class="flex items-center gap-2 mb-2">
+                      <span class="text-lg">📱</span>
+                      <h3 class="text-sm font-bold text-slate-800">WhatsApp Web</h3>
+                    </div>
+                    <p class="text-xs text-slate-600 mb-3">Send from your own number. No charges — completely free.</p>
+                    <div class="flex items-baseline gap-1 mb-4">
+                      <span class="text-2xl font-bold text-emerald-700">₹0</span>
+                      <span class="text-xs text-slate-400 line-through">₹<span id="cm-p-web-savings">0</span></span>
+                      <span class="text-xs text-emerald-600 font-medium ml-1">FREE</span>
+                    </div>
+                    <div id="cm-p-web-action">
+                      <!-- JS will inject: Send button OR Connect QR here -->
+                    </div>
+                    <ul class="mt-3 space-y-1.5">
+                      <li class="text-[11px] text-slate-500 flex items-start gap-1.5">
+                        <span class="text-emerald-500 mt-0.5">✓</span> Sent from your personal number
+                      </li>
+                      <li class="text-[11px] text-slate-500 flex items-start gap-1.5">
+                        <span class="text-emerald-500 mt-0.5">✓</span> Higher trust & reply rates
+                      </li>
+                      <li class="text-[11px] text-slate-500 flex items-start gap-1.5">
+                        <span class="text-emerald-500 mt-0.5">✓</span> Daily limit: 20 messages
+                      </li>
+                    </ul>
                   </div>
                 </div>
 
-                <!-- UTR / Transaction Reference Input -->
-                <div class="mt-4">
-                  <label for="cm-p-utr" class="block text-sm font-medium text-slate-700 mb-1">
-                    UPI Transaction Reference (UTR)
-                  </label>
-                  <p class="text-xs text-slate-500 mb-2">
-                    After paying, enter the transaction reference number from your UPI app.
-                  </p>
-                  <input
-                    id="cm-p-utr"
-                    type="text"
-                    placeholder="e.g. 412345678901"
-                    class="
-                      w-full h-11 rounded-xl border border-slate-300
-                      px-4 text-sm text-slate-800
-                      focus:outline-none focus:ring-2 focus:ring-emerald-400
-                    "
-                  />
+                <!-- Option 2: Cloud API (paid) -->
+                <div class="p-5 rounded-2xl border-2 border-slate-200 bg-white hover:border-slate-300 transition-colors">
+                  <div class="flex items-center gap-2 mb-2">
+                    <span class="text-lg">☁️</span>
+                    <h3 class="text-sm font-bold text-slate-800">Cloud API</h3>
+                  </div>
+                  <p class="text-xs text-slate-600 mb-3">Send via official WhatsApp Business API. Requires payment.</p>
+                  <div class="flex items-baseline gap-1 mb-4">
+                    <span class="text-2xl font-bold text-slate-800">₹<span id="cm-p-total">0</span></span>
+                    <span class="text-xs text-slate-500">(<span id="cm-p-summary-short">₹1/recipient</span>)</span>
+                  </div>
                   <button
-                    id="cm-p-submit-utr"
+                    id="cm-p-pay"
                     type="button"
-                    class="
-                      mt-3 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600
-                      transition font-semibold text-white text-sm px-6
-                      disabled:opacity-60 disabled:cursor-not-allowed
-                    "
+                    class="w-full h-10 rounded-xl bg-slate-800 hover:bg-slate-900 transition font-semibold text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Submit &amp; Confirm Payment
+                    Pay &amp; Send via Cloud API
                   </button>
+                  <ul class="mt-3 space-y-1.5">
+                    <li class="text-[11px] text-slate-500 flex items-start gap-1.5">
+                      <span class="text-slate-400 mt-0.5">•</span> Sent from business number
+                    </li>
+                    <li class="text-[11px] text-slate-500 flex items-start gap-1.5">
+                      <span class="text-slate-400 mt-0.5">•</span> No daily limit
+                    </li>
+                    <li class="text-[11px] text-slate-500 flex items-start gap-1.5">
+                      <span class="text-slate-400 mt-0.5">•</span> Template messages only
+                    </li>
+                  </ul>
                 </div>
               </div>
+
+              <!-- UPI Payment section (shown after clicking Pay) -->
+              <div id="cm-p-upi-section" class="mt-5 hidden">
+                <div class="p-5 border border-slate-200 rounded-2xl bg-slate-50">
+                  <p class="text-sm font-semibold text-slate-700 mb-4">Complete UPI Payment</p>
+                  <div class="flex flex-col sm:flex-row items-center gap-5">
+                    <div id="cm-p-qr" class="bg-white p-3 rounded-xl border border-slate-200 flex-shrink-0"></div>
+                    <div class="flex-1 w-full">
+                      <a
+                        id="cm-p-upi-link"
+                        href="#"
+                        class="block w-full text-center h-11 leading-[44px] rounded-xl bg-indigo-500 hover:bg-indigo-600 transition font-semibold text-white text-sm mb-3"
+                      >
+                        Open UPI App to Pay
+                      </a>
+                      <p id="cm-p-txn-note" class="text-xs text-slate-500 text-center mb-4"></p>
+                      <div class="border-t border-slate-200 pt-4">
+                        <label for="cm-p-utr" class="block text-xs font-medium text-slate-700 mb-1.5">
+                          Enter UTR / Transaction Reference
+                        </label>
+                        <div class="flex gap-2">
+                          <input
+                            id="cm-p-utr"
+                            type="text"
+                            placeholder="e.g. 412345678901"
+                            class="flex-1 h-10 rounded-lg border border-slate-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                          />
+                          <button
+                            id="cm-p-submit-utr"
+                            type="button"
+                            class="h-10 rounded-lg bg-emerald-500 hover:bg-emerald-600 transition font-semibold text-white text-xs px-4 disabled:opacity-50"
+                          >
+                            Submit
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hidden summary for JS -->
+              <p id="cm-p-summary" class="hidden"></p>
             </div>
           </div>
 
-          <!-- STATUS + NAV -->
-          <div class="mt-4 flex flex-col gap-3">
-            <p
-              id="cm-p-status"
-              class="text-sm text-slate-600 hidden"
-              role="status"
-              aria-live="polite"
-            ></p>
-            <p
-              id="cm-p-error"
-              class="text-sm text-red-600 hidden"
-              role="alert"
-            ></p>
+          <!-- Status & Navigation -->
+          <div class="flex flex-col gap-3">
+            <p id="cm-p-status" class="text-sm text-slate-600 hidden" role="status" aria-live="polite"></p>
+            <p id="cm-p-error" class="text-sm text-red-600 hidden" role="alert"></p>
 
             <div class="flex items-center justify-between gap-3">
               <button
                 id="cm-p-back"
                 type="button"
-                class="
-                  h-11 rounded-xl border border-slate-300 bg-white
-                  hover:bg-slate-50 transition font-semibold
-                  text-slate-700 text-sm px-6
-                "
+                class="h-11 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 transition font-semibold text-slate-700 text-sm px-6"
               >
                 &larr; Back
-              </button>
-              <button
-                id="cm-p-pay"
-                type="button"
-                class="
-                  h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600
-                  transition font-semibold text-white text-sm px-6
-                  disabled:opacity-60 disabled:cursor-not-allowed
-                "
-              >
-                Pay &#8377;0
               </button>
             </div>
           </div>

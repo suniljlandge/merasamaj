@@ -3679,6 +3679,36 @@ def create_app(config=None, collection=None, correction_collection=None):
                     import time
                     time.sleep(3)
 
+                # Save campaign record for "My Campaigns" history
+                from datetime import datetime, timezone as tz
+                from bson import ObjectId as OId
+                now = datetime.now(tz.utc)
+                try:
+                    account_oid = OId(str(account_id))
+                except Exception:
+                    account_oid = account_id
+
+                web_campaign = {
+                    "_id": OId(),
+                    "name": f"WhatsApp Web Campaign {now.strftime('%d %b %Y %H:%M')}",
+                    "accountId": account_oid,
+                    "templateName": template_name or "custom",
+                    "templateLanguage": payload.get("templateLanguage", ""),
+                    "recipientCount": len(recipients),
+                    "status": "sent",
+                    "channel": "web",
+                    "stats": {
+                        "totalRecipients": len(recipients),
+                        "sent": sent,
+                        "failed": failed,
+                        "pending": 0,
+                    },
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "sentAt": now,
+                }
+                get_collection().database["campaigns"].insert_one(web_campaign)
+
                 return jsonify({
                     "success": True,
                     "channel": "web",
@@ -3686,6 +3716,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                     "failed": failed,
                     "total": len(recipients),
                     "errors": errors[:10],
+                    "campaignId": str(web_campaign["_id"]),
                     "message": f"Sent {sent}/{len(recipients)} messages via WhatsApp Web (free)"
                 })
             except Exception as exc:
