@@ -1008,7 +1008,7 @@
 
   /* Req 4.4: block advancing to Step 3 without a selection. */
   function goToStep3() {
-    if (!state.selectedTemplate) {
+    if (!state.selectedTemplate && !window.CampaignWizard.templateBody) {
       showTemplateNavError("Please select a template before continuing.");
       return;
     }
@@ -1027,11 +1027,113 @@
     window.CampaignWizard.templateName = "";
     window.CampaignWizard.templateLanguage = "";
     window.CampaignWizard.bodyVarsTemplate = [];
+    window.CampaignWizard.templateBody = "";
+    window.CampaignWizard.mediaUrl = "";
+    window.CampaignWizard.mediaType = "";
     clearTemplateNavError();
     /* Re-render so any prior highlight is cleared; templates       */
     /* themselves stay cached and will re-render on next entry.     */
     if (templatesLoaded) {
       renderTemplates();
+    }
+    /* Reset custom template dropdown and media fields */
+    var customSelect = document.getElementById("cm-custom-tpl-select");
+    if (customSelect) customSelect.value = "";
+    var customPreview = document.getElementById("cm-custom-tpl-preview");
+    if (customPreview) { customPreview.textContent = ""; customPreview.classList.add("hidden"); }
+    var mediaUrl = document.getElementById("cm-media-url");
+    if (mediaUrl) mediaUrl.value = "";
+    var mediaType = document.getElementById("cm-media-type");
+    if (mediaType) mediaType.value = "";
+  }
+
+  /* ========================================================== */
+  /* Custom Templates & Media Attachments                        */
+  /* ---------------------------------------------------------- */
+  /* Fetches approved custom templates from the web templates    */
+  /* endpoint and populates the dropdown in Step 2. Also tracks  */
+  /* media URL/type fields for use in startWebSend.              */
+  /* ========================================================== */
+
+  var customTemplatesCache = [];
+  var customTemplatesLoaded = false;
+
+  function fetchCustomTemplates() {
+    if (customTemplatesLoaded) return;
+    fetch("/api/wa-web/templates", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var templates = (data && data.templates) || [];
+        customTemplatesCache = templates.filter(function (t) { return t.status === "approved"; });
+        customTemplatesLoaded = true;
+        renderCustomTemplateDropdown();
+      })
+      .catch(function () {
+        /* Silently fail — this is optional */
+      });
+  }
+
+  function renderCustomTemplateDropdown() {
+    var select = document.getElementById("cm-custom-tpl-select");
+    if (!select) return;
+    var opts = '<option value="">— None (use standard template above) —</option>';
+    customTemplatesCache.forEach(function (t) {
+      opts += '<option value="' + escapeHtml(t._id) + '">' +
+        escapeHtml(t.name) + ' (' + escapeHtml(t.language || "") + ')' +
+        '</option>';
+    });
+    select.innerHTML = opts;
+  }
+
+  function initCustomTemplateUI() {
+    var select = document.getElementById("cm-custom-tpl-select");
+    var preview = document.getElementById("cm-custom-tpl-preview");
+    var mediaUrlInput = document.getElementById("cm-media-url");
+    var mediaTypeSelect = document.getElementById("cm-media-type");
+
+    if (select) {
+      select.addEventListener("change", function () {
+        var id = select.value;
+        if (!id) {
+          window.CampaignWizard.templateBody = "";
+          if (preview) { preview.textContent = ""; preview.classList.add("hidden"); }
+          return;
+        }
+        var tpl = customTemplatesCache.filter(function (t) { return t._id === id; })[0];
+        if (tpl) {
+          window.CampaignWizard.templateBody = tpl.bodyText || "";
+          if (preview) {
+            preview.textContent = "Preview: " + (tpl.bodyText || "").substring(0, 150);
+            preview.classList.remove("hidden");
+          }
+          /* If the user picks a custom template, clear standard selection */
+          state.selectedTemplate = { name: tpl.name, language: tpl.language, bodyText: tpl.bodyText };
+          window.CampaignWizard.templateName = tpl.name || "";
+          window.CampaignWizard.templateLanguage = tpl.language || "";
+          clearTemplateNavError();
+          setTemplateStatus("Custom template selected.");
+          /* Also apply media from template if set */
+          if (tpl.mediaUrl && mediaUrlInput) {
+            mediaUrlInput.value = tpl.mediaUrl;
+            window.CampaignWizard.mediaUrl = tpl.mediaUrl;
+          }
+          if (tpl.mediaType && mediaTypeSelect) {
+            mediaTypeSelect.value = tpl.mediaType;
+            window.CampaignWizard.mediaType = tpl.mediaType;
+          }
+        }
+      });
+    }
+
+    if (mediaUrlInput) {
+      mediaUrlInput.addEventListener("input", function () {
+        window.CampaignWizard.mediaUrl = mediaUrlInput.value.trim();
+      });
+    }
+    if (mediaTypeSelect) {
+      mediaTypeSelect.addEventListener("change", function () {
+        window.CampaignWizard.mediaType = mediaTypeSelect.value;
+      });
     }
   }
 
@@ -1040,6 +1142,7 @@
     var step = event && event.detail ? event.detail.step : null;
     if (step === 2) {
       fetchTemplates(false);
+      fetchCustomTemplates();
     } else if (step === 3) {
       onEnterPayment();
     } else if (step === 4) {
@@ -1108,6 +1211,10 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.status === "connected") {
+          // Remove connect panel if it was showing
+          var connectPanel = document.getElementById("cm-p-web-connect");
+          if (connectPanel) connectPanel.remove();
+
           // Show "Send Free via WhatsApp" option
           if (!existingBtn) {
             var container = elPPay ? elPPay.parentElement : null;
@@ -1134,15 +1241,151 @@
             existingBtn.textContent = "Send Free via WhatsApp Web (" + count + " recipients)";
           }
         } else {
-          // Not connected — remove free option if it exists
+          // Not connected — show connect option with QR code
           if (existingBtn) existingBtn.remove();
           if (existingInfo) existingInfo.remove();
+          showConnectInStep3(count);
         }
       })
       .catch(function () {
-        // Service unavailable — hide free option
+        // Service unavailable — show connect option anyway
         if (existingBtn) existingBtn.remove();
         if (existingInfo) existingInfo.remove();
+        showConnectInStep3(count);
+      });
+  }
+
+  /* Show inline QR code connect panel in Step 3 */
+  var step3QrInstance = null;
+  var step3QrPoll = null;
+
+  function showConnectInStep3(count) {
+    var existing = document.getElementById("cm-p-web-connect");
+    if (existing) return; // Already showing
+
+    var container = elPPay ? elPPay.parentElement : null;
+    if (!container) return;
+
+    var panel = document.createElement("div");
+    panel.id = "cm-p-web-connect";
+    panel.className = "mt-4 p-5 bg-slate-50 border border-slate-200 rounded-xl";
+    panel.innerHTML =
+      '<div class="flex items-start gap-4">' +
+        '<div class="flex-1">' +
+          '<p class="text-sm font-semibold text-slate-800 mb-1">💬 Send for Free via WhatsApp Web</p>' +
+          '<p class="text-xs text-slate-600 mb-3">' +
+            'Connect your WhatsApp to send ' + count + ' messages for free (no payment needed). ' +
+            'It takes just 30 seconds.' +
+          '</p>' +
+          '<ol class="text-xs text-slate-600 space-y-1 mb-4 list-decimal list-inside">' +
+            '<li>Click "Connect with QR Code" below</li>' +
+            '<li>Open WhatsApp on your phone</li>' +
+            '<li>Go to <strong>Settings → Linked Devices → Link a Device</strong></li>' +
+            '<li>Scan the QR code shown here</li>' +
+            '<li>Done! Click "Send Free" once connected</li>' +
+          '</ol>' +
+          '<button type="button" id="cm-p-start-qr" class="' +
+            'px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-lg ' +
+            'hover:bg-emerald-700 transition-colors">' +
+            'Connect with QR Code' +
+          '</button>' +
+          '<span id="cm-p-qr-status" class="ml-3 text-xs text-slate-500"></span>' +
+        '</div>' +
+        '<div id="cm-p-qr-container" class="hidden flex-shrink-0">' +
+          '<div id="cm-p-qr-image" class="bg-white p-2 rounded-lg border border-slate-200"></div>' +
+          '<p class="text-[11px] text-slate-400 text-center mt-1">Scan with WhatsApp</p>' +
+        '</div>' +
+      '</div>';
+    container.insertBefore(panel, elPPay.nextSibling);
+
+    // Wire the connect button
+    document.getElementById("cm-p-start-qr").addEventListener("click", startStep3QR);
+  }
+
+  function startStep3QR() {
+    var btn = document.getElementById("cm-p-start-qr");
+    var statusEl = document.getElementById("cm-p-qr-status");
+    var qrContainer = document.getElementById("cm-p-qr-container");
+    var qrImage = document.getElementById("cm-p-qr-image");
+
+    if (btn) { btn.disabled = true; btn.textContent = "Connecting..."; }
+    if (statusEl) statusEl.textContent = "Requesting QR code...";
+
+    fetch("/api/wa-web/connect-qr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          if (statusEl) statusEl.textContent = "Error: " + data.error;
+          if (btn) { btn.disabled = false; btn.textContent = "Connect with QR Code"; }
+          return;
+        }
+
+        // Show QR container
+        if (qrContainer) qrContainer.classList.remove("hidden");
+        if (statusEl) statusEl.textContent = "Scan the QR code →";
+
+        // Render QR if available
+        if (data.qr && qrImage) {
+          qrImage.innerHTML = "";
+          step3QrInstance = new QRCode(qrImage, {
+            text: data.qr,
+            width: 180,
+            height: 180,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M,
+          });
+        }
+
+        // Poll for QR updates and connection
+        if (step3QrPoll) clearInterval(step3QrPoll);
+        var attempts = 0;
+        step3QrPoll = setInterval(function () {
+          attempts++;
+          if (attempts > 60) {
+            clearInterval(step3QrPoll);
+            step3QrPoll = null;
+            if (statusEl) statusEl.textContent = "QR expired. Try again.";
+            if (btn) { btn.disabled = false; btn.textContent = "Connect with QR Code"; }
+            if (qrContainer) qrContainer.classList.add("hidden");
+            return;
+          }
+
+          fetch("/api/wa-web/qr", { credentials: "same-origin" })
+            .then(function (r) { return r.json(); })
+            .then(function (qrData) {
+              if (qrData.status === "connected") {
+                // Connected! Replace connect panel with send button
+                clearInterval(step3QrPoll);
+                step3QrPoll = null;
+                var connectPanel = document.getElementById("cm-p-web-connect");
+                if (connectPanel) connectPanel.remove();
+                // Re-run the check which will now show the "Send Free" button
+                var count = selectedRecipientCount();
+                checkWebSendOption(count);
+              } else if (qrData.qr && qrImage) {
+                // Update QR code
+                qrImage.innerHTML = "";
+                step3QrInstance = new QRCode(qrImage, {
+                  text: qrData.qr,
+                  width: 180,
+                  height: 180,
+                  colorDark: "#000000",
+                  colorLight: "#ffffff",
+                  correctLevel: QRCode.CorrectLevel.M,
+                });
+              }
+            })
+            .catch(function () {});
+        }, 2000);
+      })
+      .catch(function (err) {
+        if (statusEl) statusEl.textContent = "Failed: " + err.message;
+        if (btn) { btn.disabled = false; btn.textContent = "Connect with QR Code"; }
       });
   }
 
@@ -1165,6 +1408,15 @@
       salutations: window.CampaignWizard.salutations || {},
       sendViaWeb: true,
     };
+    if (window.CampaignWizard.templateBody) {
+      body.templateBody = window.CampaignWizard.templateBody;
+    }
+    if (window.CampaignWizard.mediaUrl) {
+      body.mediaUrl = window.CampaignWizard.mediaUrl;
+    }
+    if (window.CampaignWizard.mediaType) {
+      body.mediaType = window.CampaignWizard.mediaType;
+    }
 
     fetch("/api/campaigns/create-with-payment", {
       method: "POST",
@@ -1997,6 +2249,7 @@
     if (elTNext) {
       elTNext.addEventListener("click", goToStep3);
     }
+    initCustomTemplateUI();
 
     /* Step 3 (payment) wiring. */
     if (elPPay) {
@@ -2053,6 +2306,12 @@
     window.CampaignWizard.templateLanguage || "";
   window.CampaignWizard.bodyVarsTemplate =
     window.CampaignWizard.bodyVarsTemplate || [];
+  window.CampaignWizard.templateBody =
+    window.CampaignWizard.templateBody || "";
+  window.CampaignWizard.mediaUrl =
+    window.CampaignWizard.mediaUrl || "";
+  window.CampaignWizard.mediaType =
+    window.CampaignWizard.mediaType || "";
   window.CampaignWizard.getSelectedTemplate = function () {
     return state.selectedTemplate;
   };
