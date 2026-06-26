@@ -658,6 +658,42 @@
             </div>
           </div>
 
+          <!-- Custom Template Selection -->
+          <div class="mt-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <h3 class="text-sm font-semibold text-slate-700 mb-2">Or use a custom template</h3>
+            <p class="text-xs text-slate-500 mb-3">Select from your approved custom templates.</p>
+            <select
+              id="cm-custom-tpl-select"
+              class="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">— None (use standard template above) —</option>
+            </select>
+            <p id="cm-custom-tpl-preview" class="text-xs text-slate-500 mt-2 hidden"></p>
+          </div>
+
+          <!-- Attach Media -->
+          <div class="mt-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <h3 class="text-sm font-semibold text-slate-700 mb-2">Attach Media (optional)</h3>
+            <p class="text-xs text-slate-500 mb-3">Attach an image, video, or document to the campaign message.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input
+                type="url"
+                id="cm-media-url"
+                class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Paste publicly accessible media URL"
+              >
+              <select
+                id="cm-media-type"
+                class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">None</option>
+                <option value="image">Image</option>
+                <option value="video">Video</option>
+                <option value="document">Document</option>
+              </select>
+            </div>
+          </div>
+
           <!-- NAV ERROR + BACK/NEXT (Req 4.4) -->
           <div class="mt-4 flex items-center justify-between gap-3">
             <button
@@ -1250,6 +1286,65 @@
                 </button>
                 <span id="wa-send-result" class="text-xs"></span>
               </div>
+            </div>
+          </div>
+
+          <!-- Custom Message Templates -->
+          <div class="mt-5 pt-5 border-t border-slate-200">
+            <h4 class="text-sm font-semibold text-slate-700 mb-3">Custom Message Templates</h4>
+            <p class="text-xs text-slate-500 mb-4">Create reusable templates for campaigns. Templates need admin approval before use.</p>
+
+            <!-- Create Template Form -->
+            <div class="p-4 bg-slate-50 rounded-xl mb-4">
+              <h5 class="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">Create New Template</h5>
+              <div class="flex flex-col gap-3">
+                <input
+                  type="text"
+                  id="wa-tpl-name"
+                  class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  placeholder="Template name (e.g. diwali-greeting)"
+                >
+                <textarea
+                  id="wa-tpl-body"
+                  rows="3"
+                  class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  placeholder="Body text. Use {name}, {salutation}, {mobile} as placeholders..."
+                ></textarea>
+                <div class="grid grid-cols-2 gap-3">
+                  <select id="wa-tpl-language" class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="hi">Hindi (hi)</option>
+                    <option value="en_US">English (en_US)</option>
+                    <option value="mr">Marathi (mr)</option>
+                  </select>
+                  <select id="wa-tpl-media-type" class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">No Media</option>
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                    <option value="document">Document</option>
+                  </select>
+                </div>
+                <input
+                  type="url"
+                  id="wa-tpl-media-url"
+                  class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white hidden"
+                  placeholder="Media URL (publicly accessible link)"
+                >
+                <div class="flex items-center gap-3">
+                  <button
+                    type="button"
+                    id="wa-tpl-submit"
+                    class="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    Submit Template
+                  </button>
+                  <span id="wa-tpl-result" class="text-xs"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- My Templates List -->
+            <div id="wa-tpl-list" class="space-y-2">
+              <p class="text-xs text-slate-400 text-center py-4">Loading templates...</p>
             </div>
           </div>
         </div>

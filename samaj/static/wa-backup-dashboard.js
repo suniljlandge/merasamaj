@@ -331,8 +331,121 @@
   }
 
   // =========================================================================
+  // Template Approvals
+  // =========================================================================
+
+  async function loadTemplates() {
+    const pendingTbody = document.getElementById("tpl-pending-tbody");
+    const reviewedTbody = document.getElementById("tpl-reviewed-tbody");
+    if (!pendingTbody || !reviewedTbody) return;
+
+    try {
+      const resp = await fetch(`${API}/templates`, { credentials: "same-origin" });
+      const data = await resp.json();
+      const templates = data.templates || [];
+
+      const pending = templates.filter((t) => t.status === "pending");
+      const reviewed = templates.filter((t) => t.status === "approved" || t.status === "rejected");
+
+      // Render pending
+      if (pending.length === 0) {
+        pendingTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--steel);">No pending templates.</td></tr>';
+      } else {
+        pendingTbody.innerHTML = pending.map((t) => `
+          <tr data-tpl-id="${escHtml(t._id)}">
+            <td>${escHtml(t.name)}</td>
+            <td title="${escHtml(t.bodyText || "")}">${escHtml((t.bodyText || "").substring(0, 80))}${(t.bodyText || "").length > 80 ? "…" : ""}</td>
+            <td>${escHtml(t.language || "")}</td>
+            <td>${escHtml(t.createdBy || "—")}</td>
+            <td>${t.createdAt ? formatDate(t.createdAt) : "—"}</td>
+            <td style="white-space:nowrap;">
+              <button type="button" class="tpl-approve-btn" data-id="${escHtml(t._id)}"
+                style="padding:4px 10px;font-size:12px;font-weight:600;color:#fff;background:#10b981;border:none;border-radius:4px;cursor:pointer;margin-right:4px;">
+                Approve
+              </button>
+              <button type="button" class="tpl-reject-btn" data-id="${escHtml(t._id)}"
+                style="padding:4px 10px;font-size:12px;font-weight:600;color:#fff;background:#ef4444;border:none;border-radius:4px;cursor:pointer;">
+                Reject
+              </button>
+            </td>
+          </tr>
+        `).join("");
+      }
+
+      // Render reviewed
+      if (reviewed.length === 0) {
+        reviewedTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--steel);">No reviewed templates yet.</td></tr>';
+      } else {
+        reviewedTbody.innerHTML = reviewed.map((t) => {
+          const statusColor = t.status === "approved" ? "color:#10b981;" : "color:#ef4444;";
+          const statusLabel = t.status === "approved" ? "✓ Approved" : "✗ Rejected";
+          const extra = t.status === "rejected" && t.rejectionReason ? ` — ${escHtml(t.rejectionReason)}` : "";
+          return `
+          <tr>
+            <td>${escHtml(t.name)}</td>
+            <td title="${escHtml(t.bodyText || "")}">${escHtml((t.bodyText || "").substring(0, 80))}${(t.bodyText || "").length > 80 ? "…" : ""}</td>
+            <td>${escHtml(t.language || "")}</td>
+            <td style="${statusColor}font-weight:600;font-size:12px;">${statusLabel}${extra}</td>
+            <td>${escHtml(t.reviewedBy || "—")}</td>
+            <td>${t.reviewedAt ? formatDate(t.reviewedAt) : "—"}</td>
+          </tr>`;
+        }).join("");
+      }
+
+      // Wire approve/reject buttons
+      document.querySelectorAll(".tpl-approve-btn").forEach((btn) => {
+        btn.addEventListener("click", () => approveTemplate(btn.dataset.id));
+      });
+      document.querySelectorAll(".tpl-reject-btn").forEach((btn) => {
+        btn.addEventListener("click", () => rejectTemplate(btn.dataset.id));
+      });
+    } catch (err) {
+      if (pendingTbody) pendingTbody.innerHTML = `<tr><td colspan="6" style="color:var(--danger);">Failed to load: ${err.message}</td></tr>`;
+    }
+  }
+
+  async function approveTemplate(id) {
+    try {
+      const resp = await fetch(`${API}/templates/${id}/approve`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = await resp.json();
+      if (data.error) { alert("Error: " + data.error); return; }
+      loadTemplates();
+    } catch (err) {
+      alert("Failed to approve: " + err.message);
+    }
+  }
+
+  async function rejectTemplate(id) {
+    const reason = prompt("Rejection reason:");
+    if (reason === null) return; // cancelled
+    try {
+      const resp = await fetch(`${API}/templates/${id}/reject`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason }),
+      });
+      const data = await resp.json();
+      if (data.error) { alert("Error: " + data.error); return; }
+      loadTemplates();
+    } catch (err) {
+      alert("Failed to reject: " + err.message);
+    }
+  }
+
+  // Wire refresh button
+  const tplRefreshBtn = document.getElementById("tpl-refresh-btn");
+  if (tplRefreshBtn) {
+    tplRefreshBtn.addEventListener("click", loadTemplates);
+  }
+
+  // =========================================================================
   // Init
   // =========================================================================
 
   loadSessions();
+  loadTemplates();
 })();

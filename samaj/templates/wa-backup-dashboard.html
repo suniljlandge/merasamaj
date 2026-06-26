@@ -106,6 +106,62 @@
         </div>
       </section>
 
+      <!-- Template Approvals -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Super Admin</p>
+            <h2>Template Approvals</h2>
+            <p>Review and approve or reject user-submitted message templates.</p>
+          </div>
+          <button type="button" id="tpl-refresh-btn" class="button-secondary">Refresh</button>
+        </div>
+
+        <!-- Pending Templates -->
+        <div class="form-surface" style="margin-bottom:20px;">
+          <h3 style="margin:0 0 12px;">Pending Review</h3>
+          <div class="directory-table-wrapper">
+            <table class="directory-table" id="tpl-pending-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Body Preview</th>
+                  <th>Language</th>
+                  <th>Created By</th>
+                  <th>Created At</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tpl-pending-tbody">
+                <tr><td colspan="6" style="text-align:center;color:var(--steel);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recently Reviewed Templates -->
+        <div class="form-surface">
+          <h3 style="margin:0 0 12px;">Recently Reviewed</h3>
+          <div class="directory-table-wrapper">
+            <table class="directory-table" id="tpl-reviewed-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Body Preview</th>
+                  <th>Language</th>
+                  <th>Status</th>
+                  <th>Reviewed By</th>
+                  <th>Reviewed At</th>
+                </tr>
+              </thead>
+              <tbody id="tpl-reviewed-tbody">
+                <tr><td colspan="6" style="text-align:center;color:var(--steel);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
     </main>
 
     {% include "_footer.html" %}

@@ -346,6 +346,122 @@
     });
 
     // ===================================================================
+    // Custom Template Management
+    // ===================================================================
+
+    var tplMediaType = document.getElementById("wa-tpl-media-type");
+    var tplMediaUrl = document.getElementById("wa-tpl-media-url");
+    var tplSubmit = document.getElementById("wa-tpl-submit");
+    var tplResult = document.getElementById("wa-tpl-result");
+
+    // Show/hide media URL field based on media type selection
+    if (tplMediaType) {
+      tplMediaType.addEventListener("change", function () {
+        if (tplMediaUrl) {
+          tplMediaUrl.classList.toggle("hidden", !tplMediaType.value);
+        }
+      });
+    }
+
+    // Submit new template
+    if (tplSubmit) {
+      tplSubmit.addEventListener("click", function () {
+        var name = document.getElementById("wa-tpl-name").value.trim();
+        var bodyText = document.getElementById("wa-tpl-body").value.trim();
+        var language = document.getElementById("wa-tpl-language").value;
+        var mediaType = tplMediaType ? tplMediaType.value : "";
+        var mediaUrl = tplMediaUrl ? tplMediaUrl.value.trim() : "";
+
+        if (!name || !bodyText) {
+          tplResult.textContent = "Name and body are required.";
+          tplResult.className = "text-xs text-red-500";
+          return;
+        }
+
+        tplSubmit.disabled = true;
+        tplResult.textContent = "Submitting...";
+        tplResult.className = "text-xs text-slate-500";
+
+        var payload = { name: name, bodyText: bodyText, language: language };
+        if (mediaType) { payload.mediaType = mediaType; }
+        if (mediaUrl) { payload.mediaUrl = mediaUrl; }
+
+        fetch(API + "/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.error) {
+              tplResult.textContent = "Error: " + data.error;
+              tplResult.className = "text-xs text-red-500";
+            } else {
+              tplResult.textContent = "✓ Template submitted for approval";
+              tplResult.className = "text-xs text-emerald-600";
+              document.getElementById("wa-tpl-name").value = "";
+              document.getElementById("wa-tpl-body").value = "";
+              if (tplMediaUrl) tplMediaUrl.value = "";
+              loadMyTemplates();
+            }
+          })
+          .catch(function (err) {
+            tplResult.textContent = "Error: " + err.message;
+            tplResult.className = "text-xs text-red-500";
+          })
+          .finally(function () {
+            tplSubmit.disabled = false;
+          });
+      });
+    }
+
+    // Load and display user's templates
+    function loadMyTemplates() {
+      var listEl = document.getElementById("wa-tpl-list");
+      if (!listEl) return;
+
+      fetch(API + "/templates", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var templates = data.templates || [];
+          if (templates.length === 0) {
+            listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">No templates yet. Create one above.</p>';
+            return;
+          }
+          listEl.innerHTML = templates.map(function (t) {
+            var statusColors = { pending: "bg-yellow-100 text-yellow-800", approved: "bg-emerald-100 text-emerald-800", rejected: "bg-red-100 text-red-800" };
+            var cls = statusColors[t.status] || "bg-slate-100 text-slate-700";
+            var badge = '<span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ' + cls + '">' + (t.status || "unknown") + '</span>';
+            var rejection = t.status === "rejected" && t.rejectionReason ? '<p class="text-xs text-red-500 mt-1">Reason: ' + escText(t.rejectionReason) + '</p>' : '';
+            return '<div class="p-3 border border-slate-200 rounded-lg bg-white">' +
+              '<div class="flex items-center justify-between gap-2 mb-1">' +
+              '<span class="text-sm font-medium text-slate-800">' + escText(t.name) + '</span>' +
+              badge +
+              '</div>' +
+              '<p class="text-xs text-slate-500 line-clamp-2">' + escText((t.bodyText || "").substring(0, 120)) + '</p>' +
+              '<p class="text-[11px] text-slate-400 mt-1">' + (t.language || "") + (t.mediaType ? ' · ' + t.mediaType : '') + '</p>' +
+              rejection +
+              '</div>';
+          }).join("");
+        })
+        .catch(function () {
+          listEl.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Failed to load templates.</p>';
+        });
+    }
+
+    function escText(str) {
+      var div = document.createElement("div");
+      div.textContent = str || "";
+      return div.innerHTML;
+    }
+
+    // Load templates on init if elements exist
+    if (document.getElementById("wa-tpl-list")) {
+      loadMyTemplates();
+    }
+
+    // ===================================================================
     // Init
     // ===================================================================
 
