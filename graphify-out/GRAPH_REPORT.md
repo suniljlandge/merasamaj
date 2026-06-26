@@ -1,11 +1,11 @@
 # Graph Report - SAMAJ  (2026-06-26)
 
 ## Corpus Check
-- 70 files · ~225,654 words
+- 70 files · ~227,893 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1532 nodes · 2889 edges · 166 communities detected
+- 1533 nodes · 2892 edges · 166 communities detected
 - Extraction: 77% EXTRACTED · 23% INFERRED · 0% AMBIGUOUS · INFERRED: 677 edges (avg confidence: 0.73)
 - Token cost: 0 input · 0 output
 
@@ -196,120 +196,120 @@
   samaj\campaign.py → tests\test_campaign_properties.py
 - `normalize_wa_number()` --calls--> `test_normalization_is_idempotent()`  [INFERRED]
   samaj\campaign.py → tests\test_campaign_properties.py
-- `Integration tests for verify-otp account type routing.` --uses--> `FakeDatabase`  [INFERRED]
+- `Unit tests for the standalone redirect routing function.` --uses--> `FakeDatabase`  [INFERRED]
   tests\test_campaigner_routing.py → tests\test_user_management.py
-- `Tests for is_campaigner_session, @require_campaigner, and registrant-only     e` --uses--> `FakeDatabase`  [INFERRED]
+- `Integration tests for verify-otp account type routing.` --uses--> `FakeDatabase`  [INFERRED]
   tests\test_campaigner_routing.py → tests\test_user_management.py
 
 ## Communities
 
 ### Community 0 - "Community 0"
 Cohesion: 0.02
-Nodes (113): classify_area(), get_redirect_for_account(), Determine the post-OTP redirect target for a public_account.      Routing rule, Tests for Campaign Manager environment configuration (Task 13.2).  Verifies th, The UPI_ID and UPI_PAYEE_NAME env vars must be wired into app.config., The three RAZORPAY_* env vars must be wired into app.config., WhatsApp credentials come from the existing settings collection., WhatsApp credentials come from the existing settings collection. (+105 more)
+Nodes (101): create_app(), env_flag(), AudiencePreviewEndpointTests, _bilingual(), _make_hof(), Tests for the GET /api/campaigns/audience-preview endpoint.  Covers @require_c, Tests for Campaign Manager environment configuration (Task 13.2).  Verifies th, The UPI_ID and UPI_PAYEE_NAME env vars must be wired into app.config. (+93 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.03
-Nodes (104): createBackupService(), sleep(), main(), createNullClient(), createR2Client(), createRoutes(), createSessionManager(), apply_projection() (+96 more)
+Nodes (49): confirm_upi_payment(), create_campaign_with_upi(), get_campaign_messages_collection(), get_campaign_payments_collection(), get_campaigns_collection(), _get_database(), Return the app's MongoDB database instance via the registrations collection., Return the 'campaigns' MongoDB collection. (+41 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.04
-Nodes (21): create_app(), env_flag(), find_public_account_by_mobile(), Look up a public_account by its 10-digit mobile, tolerating legacy formats., execute_campaign_send(), load_whatsapp_settings(), Load Meta WhatsApp delivery credentials from the settings collection.      Rea, Send a paid campaign's WhatsApp template messages to every recipient.      Cal (+13 more)
+Cohesion: 0.03
+Nodes (77): send_otp_message(), createBackupService(), sleep(), init(), activateTab(), loadAddressAreas(), loadAreaDetail(), renderResult() (+69 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.04
-Nodes (65): add_family_tree_edge(), append_audit_event(), _applicant_full_name(), _bilingual_en(), _bilingual_mr(), build_bilingual_name(), build_directory_export_rows(), build_family_tree_graph_data() (+57 more)
+Cohesion: 0.06
+Nodes (93): applyFilters(), buildQuery(), checkboxRow(), checkWebSendOption(), clearError(), clearPaymentError(), clearTemplateNavError(), deselectRecipientId() (+85 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.04
-Nodes (69): _address_en(), build_campaign_report(), build_upi_link(), confirm_upi_payment(), _family_members_count(), get_ad_templates(), get_campaign_messages_collection(), get_campaign_payments_collection() (+61 more)
+Cohesion: 0.03
+Nodes (68): CampaignReportEndpointTests, Tests for the GET /api/campaigns/<id>/report endpoint.  Covers @require_campai, apply_projection(), apply_update(), FakeCursor, FakeDeleteResult, FakeInsertResult, FakeUpdateResult (+60 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.06
-Nodes (92): applyFilters(), buildQuery(), checkboxRow(), checkWebSendOption(), clearError(), clearPaymentError(), clearTemplateNavError(), deselectRecipientId() (+84 more)
-
-### Community 6 - "Community 6"
 Cohesion: 0.03
 Nodes (52): Resolve a salutation toggle answer into its display text.      Accepts one of, Replace placeholders in template variables with recipient data.      Recognize, resolve_body_vars(), salutation_text(), test_output_entries_are_all_strings(), test_output_length_equals_input_length(), Tests for resolve_body_vars() — template variable resolution.  Validates Requi, Requirement 13.4: Missing name key -> empty string. (+44 more)
 
-### Community 7 - "Community 7"
-Cohesion: 0.04
-Nodes (63): send_otp_message(), init(), activateTab(), loadAddressAreas(), loadAreaDetail(), renderResult(), renderUnaligned(), runApply() (+55 more)
+### Community 6 - "Community 6"
+Cohesion: 0.05
+Nodes (61): add_family_tree_edge(), append_audit_event(), _applicant_full_name(), _bilingual_en(), _bilingual_mr(), build_bilingual_name(), build_directory_export_rows(), build_family_tree_graph_data() (+53 more)
 
-### Community 8 - "Community 8"
+### Community 7 - "Community 7"
 Cohesion: 0.06
 Nodes (67): build_corrected_phrase(), Return the configured default account type for new mobile signups.      Reads, read_default_account_type(), _collect_bilingual_correction(), collect_transliteration_corrections(), load_corrections(), normalize_source(), save_corrections() (+59 more)
 
+### Community 8 - "Community 8"
+Cohesion: 0.07
+Nodes (11): find_public_account_by_mobile(), Look up a public_account by its 10-digit mobile, tolerating legacy formats., Integration tests for verify-otp account type routing., VerifyOtpRoutingTests, FindPublicAccountByMobileTests, PublicAccountTypeEndpointTests, RegistrationPermissionsTests, valid_registration_payload() (+3 more)
+
 ### Community 9 - "Community 9"
 Cohesion: 0.06
-Nodes (25): create_campaign_with_upi(), Create a campaign and generate a UPI payment link for it.      Validates the r, Validate whether a campaign status transition is permitted.      Args:, validate_campaign_status_transition(), CreateCampaignWithUpiTests, _make_recipients(), _patched_campaign_env(), Property-based tests for campaign payment correctness (task 6.4).  Uses the Hy (+17 more)
+Nodes (11): normalize_wa_number(), Normalize an Indian mobile number to WhatsApp format (91XXXXXXXXXX).      Stri, Unit tests for normalize_wa_number() phone normalization utility., A number already in 91XXXXXXXXXX format should pass through., Numbers starting with 0-5 after prefix removal are invalid., Output must be exactly 12 chars matching 91[6-9]\\d{9}., Tests for phone number normalization to WhatsApp format., TestNormalizeWaNumber (+3 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.06
-Nodes (11): normalize_wa_number(), Normalize an Indian mobile number to WhatsApp format (91XXXXXXXXXX).      Stri, Unit tests for normalize_wa_number() phone normalization utility., A number already in 91XXXXXXXXXX format should pass through., Numbers starting with 0-5 after prefix removal are invalid., Output must be exactly 12 chars matching 91[6-9]\\d{9}., Tests for phone number normalization to WhatsApp format., TestNormalizeWaNumber (+3 more)
+Cohesion: 0.07
+Nodes (48): _address_en(), build_campaign_report(), build_upi_link(), _family_members_count(), get_ad_templates(), get_hof_by_area(), _get_settings_collection(), _get_upi_id() (+40 more)
 
 ### Community 11 - "Community 11"
 Cohesion: 0.09
 Nodes (37): activateWizardStep(), activateWizardStepForErrors(), buildRelationshipTargetOptions(), clamp(), clearFieldErrors(), clearMessage(), createTemporaryPersonId(), escapeAttribute() (+29 more)
 
 ### Community 12 - "Community 12"
+Cohesion: 0.1
+Nodes (17): execute_campaign_send(), Best-effort conversion of a value to ObjectId, returning the raw value     unch, Send a paid campaign's WhatsApp template messages to every recipient.      Cal, Truncate an error description to at most 500 characters (Requirement 7.3)., Send one WhatsApp template message via the Meta Graph API v24.0.      POSTs a, send_single_template_message(), _to_object_id(), _truncate_error() (+9 more)
+
+### Community 13 - "Community 13"
+Cohesion: 0.07
+Nodes (29): classify_area(), get_redirect_for_account(), Determine the post-OTP redirect target for a public_account.      Routing rule, _en(), _expected_area_counts(), _fake_matches(), _FakeCollection, formatted_indian_mobile() (+21 more)
+
+### Community 14 - "Community 14"
 Cohesion: 0.09
 Nodes (8): CampaignAreasEndpointTests, CampaignListAndDetailEndpointTests, CampaignSurnameGroupsEndpointTests, CampaignTemplatesEndpointTests, Tests for the GET /api/campaigns/areas endpoint (Requirements 3.3, 3.4)., Tests for the GET /api/campaigns/surname-groups endpoint     (Requirement 3.1)., Tests for the GET /api/campaigns/templates endpoint     (Requirements 4.1, 4.2), Tests for GET /api/campaigns and GET /api/campaigns/<id> endpoints     (Require
 
-### Community 13 - "Community 13"
+### Community 15 - "Community 15"
 Cohesion: 0.14
 Nodes (27): _build_watermark_overlay(), _column_widths(), _draw_footer(), _font(), _hard_break(), _harden(), _is_deva(), _latin_font() (+19 more)
 
-### Community 14 - "Community 14"
-Cohesion: 0.12
-Nodes (12): CampaignEndToEndFlowTests, CampaignerLoginRedirectTests, CampaignManagerIntegrationBase, CampaignSessionIsolationTests, End-to-end integration tests for the Campaign Manager flow (task 13.3).  These, Login as a staff admin for payment confirmation., Scenario 1: login as campaigner -> redirect to /campaign-manager., Scenarios 2 & 3: audience -> create -> UPI pay -> admin confirm -> report. (+4 more)
+### Community 16 - "Community 16"
+Cohesion: 0.16
+Nodes (24): collectConfigFromForm(), downloadExport(), escapeHtml(), escapeHtmlAttribute(), fillSelect(), fillSortOptions(), initialize(), loadExportColumns() (+16 more)
 
-### Community 15 - "Community 15"
+### Community 17 - "Community 17"
 Cohesion: 0.24
 Nodes (19): get_areas_with_counts(), Compute available areas with family counts for the Area filter dropdown., _bilingual(), FakeCollection, make_hof(), _matches(), Tests for samaj.campaign.get_areas_with_counts — area dropdown counts.  Covers, sample_docs() (+11 more)
 
-### Community 16 - "Community 16"
-Cohesion: 0.17
-Nodes (11): Truncate an error description to at most 500 characters (Requirement 7.3)., Send one WhatsApp template message via the Meta Graph API v24.0.      POSTs a, send_single_template_message(), _truncate_error(), _FakeResponse, Unit tests for send_single_template_message() WhatsApp delivery (Task 7.3).  C, Minimal stand-in for a requests.Response object., _send() (+3 more)
-
-### Community 17 - "Community 17"
+### Community 18 - "Community 18"
 Cohesion: 0.16
 Nodes (13): calculateFamilyMembersCount(), closeInvitationModal(), createInvitationModal(), deleteMember(), escapeAttribute(), escapeHtml(), loadMemberDirectory(), maskMobile() (+5 more)
 
-### Community 18 - "Community 18"
+### Community 19 - "Community 19"
 Cohesion: 0.27
 Nodes (15): get_distinct_surname_groups(), Return distinct surnameGroup values for the surname filter dropdown.      Quer, FakeCollection, make_doc(), _matches(), Tests for samaj.campaign.get_distinct_surname_groups — surname dropdown.  Cove, sample_docs(), test_combined_district_taluka_filter() (+7 more)
 
-### Community 19 - "Community 19"
+### Community 20 - "Community 20"
+Cohesion: 0.17
+Nodes (4): is_campaigner_session(), Return True when the current session is a public session whose stored     accou, Tests for is_campaigner_session, @require_campaigner, and registrant-only     e, SessionIsolationTests
+
+### Community 21 - "Community 21"
 Cohesion: 0.3
 Nodes (15): bilingual(), escapeAttr(), escapeHtml(), init(), joinName(), loadMembers(), maskMobile(), membersCount() (+7 more)
 
-### Community 20 - "Community 20"
+### Community 22 - "Community 22"
 Cohesion: 0.24
 Nodes (12): escapeHtml(), escapeHtmlAttribute(), formatFullName(), formatMemberName(), formatStatus(), loadReviewQueue(), openSubmissionViewer(), renderDetailRow() (+4 more)
 
-### Community 21 - "Community 21"
+### Community 23 - "Community 23"
 Cohesion: 0.31
 Nodes (11): Resolve selected registration ids into recipient dicts server-side.      Full, resolve_recipients_by_ids(), _doc(), FakeCollection, _matches(), Tests for samaj.campaign.resolve_recipients_by_ids.  The campaign wizard sends, test_dedups_by_mobile_number(), test_empty_input_returns_empty() (+3 more)
 
-### Community 22 - "Community 22"
+### Community 24 - "Community 24"
 Cohesion: 0.26
 Nodes (11): createDisplayGraph(), createStyledEdges(), createStyledNodes(), escapeHtml(), FamilyMemberNode(), FlowApp(), isSpouseRelation(), loadTree() (+3 more)
 
-### Community 23 - "Community 23"
+### Community 25 - "Community 25"
 Cohesion: 0.31
 Nodes (11): canChangePassword(), canDeleteUser(), escapeHtml(), escapeHtmlAttribute(), formatDate(), formatRole(), handleUserCreate(), initializeUserManagement() (+3 more)
 
-### Community 24 - "Community 24"
+### Community 26 - "Community 26"
 Cohesion: 0.21
 Nodes (8): create_collection(), create_collections(), get_database(), main(), main(), normalize(), Uses your existing Google-based transliteration endpoint logic.     Replace lat, transliterate()
-
-### Community 25 - "Community 25"
-Cohesion: 0.26
-Nodes (4): AudiencePreviewEndpointTests, _bilingual(), _make_hof(), Tests for the GET /api/campaigns/audience-preview endpoint.  Covers @require_c
-
-### Community 26 - "Community 26"
-Cohesion: 0.36
-Nodes (2): CampaignReportEndpointTests, Tests for the GET /api/campaigns/<id>/report endpoint.  Covers @require_campai
 
 ### Community 27 - "Community 27"
 Cohesion: 0.33
@@ -870,8 +870,6 @@ Nodes (1): Unit tests for verify_razorpay_signature().  Covers valid/invalid HMA
 ## Knowledge Gaps
 - **332 isolated node(s):** `Uses your existing Google-based transliteration endpoint logic.     Replace lat`, `Map personId -> display name for resolving relationship links.`, `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`, `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`, `Return a list of CSV rows for one registration document.      ``selected_relat` (+327 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 26`** (12 nodes): `CampaignReportEndpointTests`, `._login()`, `.test_invalid_campaign_id_returns_404()`, `.test_other_campaigner_cannot_view_returns_404()`, `.test_registrant_blocked_with_403()`, `.test_report_masks_mobile_numbers()`, `.test_report_stats_aggregation()`, `.test_unauthenticated_blocked_with_403()`, `.test_unknown_campaign_returns_404()`, `._url()`, `Tests for the GET /api/campaigns/<id>/report endpoint.  Covers @require_campai`, `test_campaign_report_endpoint.py`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 33`** (1 nodes): `Send a personal message via WhatsApp Web session.     Falls back to Cloud API i`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 34`** (1 nodes): `Get today's send statistics.`
@@ -1146,12 +1144,12 @@ Nodes (1): Unit tests for verify_razorpay_signature().  Covers valid/invalid HMA
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `FakeDatabase` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 9`, `Community 12`, `Community 14`, `Community 25`, `Community 26`, `Community 27`?**
-  _High betweenness centrality (0.170) - this node is a cross-community bridge._
-- **Why does `send_single_template_message()` connect `Community 16` to `Community 2`, `Community 4`, `Community 7`?**
-  _High betweenness centrality (0.122) - this node is a cross-community bridge._
-- **Why does `execute_campaign_send()` connect `Community 2` to `Community 1`, `Community 4`, `Community 6`, `Community 9`, `Community 10`, `Community 16`?**
-  _High betweenness centrality (0.103) - this node is a cross-community bridge._
+- **Why does `FakeDatabase` connect `Community 0` to `Community 1`, `Community 4`, `Community 8`, `Community 12`, `Community 13`, `Community 14`, `Community 20`, `Community 27`?**
+  _High betweenness centrality (0.179) - this node is a cross-community bridge._
+- **Why does `send_single_template_message()` connect `Community 12` to `Community 10`, `Community 2`?**
+  _High betweenness centrality (0.123) - this node is a cross-community bridge._
+- **Why does `execute_campaign_send()` connect `Community 12` to `Community 1`, `Community 4`, `Community 5`, `Community 8`, `Community 9`, `Community 10`?**
+  _High betweenness centrality (0.105) - this node is a cross-community bridge._
 - **Are the 159 inferred relationships involving `FakeDatabase` (e.g. with `GetRedirectForAccountTests` and `VerifyOtpRoutingTests`) actually correct?**
   _`FakeDatabase` has 159 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 44 inferred relationships involving `normalize_wa_number()` (e.g. with `.test_plain_10_digit_number()` and `.test_with_plus_91_prefix()`) actually correct?**

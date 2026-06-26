@@ -1489,22 +1489,25 @@
 
           // Show "Send Free via WhatsApp" option
           if (!existingBtn) {
-            var container = elPPay ? elPPay.parentElement : null;
-            if (container) {
+            // Insert before the Back/Pay button row (the .mt-4.flex container)
+            var step3El = document.getElementById("cm-step-payment");
+            var btnRow = step3El ? step3El.querySelector(".flex.items-center.justify-between") : null;
+            var insertTarget = btnRow || (elPPay ? elPPay.parentElement : null);
+            if (insertTarget) {
               var infoDiv = document.createElement("div");
               infoDiv.id = "cm-p-web-info";
-              infoDiv.className = "mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl";
+              infoDiv.className = "mt-4 p-5 bg-emerald-50 border border-emerald-200 rounded-2xl";
               infoDiv.innerHTML =
                 '<p class="text-sm font-semibold text-emerald-800 mb-2">' +
                 '✓ WhatsApp Web Connected — Send for Free!</p>' +
                 '<p class="text-xs text-slate-600 mb-3">' +
                 'Your WhatsApp is linked. Send messages directly from your number at no cost. ' +
-                'Daily limit applies (' + count + ' recipients).</p>' +
+                'Daily limit: 20 messages/day.</p>' +
                 '<button type="button" id="cm-p-web-send" class="' +
-                'h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition ' +
+                'w-full sm:w-auto h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition ' +
                 'font-semibold text-white text-sm px-6">' +
                 'Send Free via WhatsApp Web (' + count + ' recipients)</button>';
-              container.insertBefore(infoDiv, elPPay.nextSibling);
+              insertTarget.parentElement.insertBefore(infoDiv, insertTarget);
 
               // Wire up the button
               document.getElementById("cm-p-web-send").addEventListener("click", startWebSend);
@@ -1535,14 +1538,16 @@
     var existing = document.getElementById("cm-p-web-connect");
     if (existing) return; // Already showing
 
-    var container = elPPay ? elPPay.parentElement : null;
-    if (!container) return;
+    var step3El = document.getElementById("cm-step-payment");
+    var btnRow = step3El ? step3El.querySelector(".flex.items-center.justify-between") : null;
+    var insertTarget = btnRow || (elPPay ? elPPay.parentElement : null);
+    if (!insertTarget) return;
 
     var panel = document.createElement("div");
     panel.id = "cm-p-web-connect";
-    panel.className = "mt-4 p-5 bg-slate-50 border border-slate-200 rounded-xl";
+    panel.className = "mt-4 p-5 bg-slate-50 border border-slate-200 rounded-2xl";
     panel.innerHTML =
-      '<div class="flex items-start gap-4">' +
+      '<div class="flex flex-col sm:flex-row items-start gap-4">' +
         '<div class="flex-1">' +
           '<p class="text-sm font-semibold text-slate-800 mb-1">💬 Send for Free via WhatsApp Web</p>' +
           '<p class="text-xs text-slate-600 mb-3">' +
@@ -1568,7 +1573,7 @@
           '<p class="text-[11px] text-slate-400 text-center mt-1">Scan with WhatsApp</p>' +
         '</div>' +
       '</div>';
-    container.insertBefore(panel, elPPay.nextSibling);
+    insertTarget.parentElement.insertBefore(panel, insertTarget);
 
     // Wire the connect button
     document.getElementById("cm-p-start-qr").addEventListener("click", startStep3QR);
@@ -1705,12 +1710,8 @@
           setPaymentStatus("");
           return;
         }
-        // Success! Show results
-        setPaymentStatus(data.message || ("Sent " + data.sent + "/" + data.total + " messages"));
-        btn.textContent = "\u2713 Sent " + data.sent + "/" + data.total;
-        if (data.failed > 0) {
-          showPaymentError("Failed: " + data.failed + " messages. " + (data.errors || []).join(", "));
-        }
+        // Success — show delivery report
+        showWebSendReport(data);
       })
       .catch(function (err) {
         showPaymentError("Send failed: " + err.message);
@@ -1718,6 +1719,77 @@
         btn.textContent = "Send Free via WhatsApp Web";
         setPaymentStatus("");
       });
+  }
+
+  /* Show delivery report for free WhatsApp Web sends */
+  function showWebSendReport(data) {
+    // Hide the payment step content
+    var step3 = document.getElementById("cm-step-payment");
+    if (!step3) return;
+
+    var sent = data.sent || 0;
+    var failed = data.failed || 0;
+    var total = data.total || 0;
+    var errors = data.errors || [];
+    var pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+
+    step3.innerHTML =
+      '<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">' +
+        '<div class="px-5 py-4 border-b border-slate-200">' +
+          '<h2 class="text-base font-semibold text-slate-800">Delivery Report — WhatsApp Web</h2>' +
+          '<p class="text-xs text-slate-500 mt-1">Messages sent directly from your WhatsApp number (free)</p>' +
+        '</div>' +
+        '<div class="p-5">' +
+          // Stats grid
+          '<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">' +
+            '<div class="text-center p-3 bg-slate-50 rounded-xl">' +
+              '<p class="text-2xl font-bold text-slate-800">' + total + '</p>' +
+              '<p class="text-xs text-slate-500">Total</p>' +
+            '</div>' +
+            '<div class="text-center p-3 bg-emerald-50 rounded-xl">' +
+              '<p class="text-2xl font-bold text-emerald-700">' + sent + '</p>' +
+              '<p class="text-xs text-emerald-600">Sent ✓</p>' +
+            '</div>' +
+            '<div class="text-center p-3 ' + (failed > 0 ? 'bg-red-50' : 'bg-slate-50') + ' rounded-xl">' +
+              '<p class="text-2xl font-bold ' + (failed > 0 ? 'text-red-600' : 'text-slate-800') + '">' + failed + '</p>' +
+              '<p class="text-xs ' + (failed > 0 ? 'text-red-500' : 'text-slate-500') + '">Failed</p>' +
+            '</div>' +
+            '<div class="text-center p-3 bg-slate-50 rounded-xl">' +
+              '<p class="text-2xl font-bold text-slate-800">' + pct + '%</p>' +
+              '<p class="text-xs text-slate-500">Success Rate</p>' +
+            '</div>' +
+          '</div>' +
+          // Progress bar
+          '<div class="w-full h-3 bg-slate-200 rounded-full overflow-hidden mb-4">' +
+            '<div class="h-full rounded-full transition-all ' +
+              (pct === 100 ? 'bg-emerald-500' : pct > 50 ? 'bg-emerald-400' : 'bg-yellow-400') +
+              '" style="width:' + pct + '%"></div>' +
+          '</div>' +
+          // Channel badge
+          '<div class="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-full text-xs font-medium mb-4">' +
+            '<span>📱</span> Sent via WhatsApp Web (Free — no charges)' +
+          '</div>' +
+          // Errors section
+          (failed > 0 && errors.length > 0 ?
+            '<div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl">' +
+              '<p class="text-xs font-semibold text-red-700 mb-2">Failed messages:</p>' +
+              '<ul class="text-xs text-red-600 space-y-1">' +
+                errors.map(function (e) { return '<li>• ' + escapeHtml(e) + '</li>'; }).join("") +
+              '</ul>' +
+            '</div>' : '') +
+        '</div>' +
+      '</div>' +
+      // Action buttons
+      '<div class="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">' +
+        '<button type="button" onclick="window.location.reload()" class="' +
+          'h-11 rounded-xl bg-slate-900 hover:bg-slate-800 transition ' +
+          'font-semibold text-white text-sm px-6 text-center">' +
+          'Send Another Campaign' +
+        '</button>' +
+        '<span class="text-xs text-slate-500">' +
+          'Sent at ' + new Date().toLocaleTimeString() +
+        '</span>' +
+      '</div>';
   }
 
   function setPaymentStatus(message) {
