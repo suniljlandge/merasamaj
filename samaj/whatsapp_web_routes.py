@@ -284,6 +284,162 @@ def profile_pic(phone):
 
 
 # ===========================================================================
+# Custom Templates (with admin approval)
+# ===========================================================================
+
+_TEMPLATES_COLLECTION = "wa_custom_templates"
+
+
+@wa_web_bp.route("/templates", methods=["GET"])
+@_require_auth
+def list_custom_templates():
+    """List custom templates. Users see only their own + approved ones."""
+    from flask import current_app
+    from samaj.app import role_can
+    collection = current_app.extensions.get("mongo_collection")
+    db = collection.database
+    col = db[_TEMPLATES_COLLECTION]
+
+    user_id = _get_user_id()
+    is_admin = role_can("manage_wa_web")
+
+    if is_admin:
+        # Admin sees all templates
+        templates = list(col.find({}).sort("createdAt", -1))
+    else:
+        # Users see their own (any status) + all approved
+        templates = list(col.find({
+            "$or": [
+                {"createdBy": user_id},
+                {"status": "approved"},
+            ]
+        }).sort("createdAt", -1))
+
+    for t in templates:
+        t["_id"] = str(t["_id"])
+
+    return jsonify({"templates": templates})
+
+
+@wa_web_bp.route("/templates", methods=["POST"])
+@_require_auth
+def create_custom_template():
+    """Create a custom template (pending approval)."""
+    from flask import current_app
+    from datetime import datetime, timezone
+    collection = current_app.extensions.get("mongo_collection")
+    db = collection.database
+    col = db[_TEMPLATES_COLLECTION]
+
+    data = request.get_json(force=True)
+    name = (data.get("name") or "").strip()
+    body_text = (data.get("bodyText") or "").strip()
+    language = (data.get("language") or "hi").strip()
+    media_url = (data.get("mediaUrl") or "").strip()
+    media_type = (data.get("mediaType") or "").strip()
+
+    if not name or not body_text:
+        return jsonify({"error": "name and bodyText are required"}), 400
+
+    user_id = _get_user_id()
+
+    template = {
+        "name": name,
+        "bodyText": body_text,
+        "language": language,
+        "mediaUrl": media_url,
+        "mediaType": media_type,
+        "status": "pending",  # pending, approved, rejected
+        "createdBy": user_id,
+        "createdAt": datetime.now(timezone.utc),
+        "reviewedBy": None,
+        "reviewedAt": None,
+        "rejectionReason": None,
+    }
+
+    result = col.insert_one(template)
+    template["_id"] = str(result.inserted_id)
+
+    return jsonify({"success": True, "template": template})
+
+
+@wa_web_bp.route("/templates/<template_id>/approve", methods=["POST"])
+@_require_auth
+def approve_template(template_id):
+    """Approve a custom template (super admin/admin only)."""
+    from flask import current_app
+    from samaj.app import role_can
+    from datetime import datetime, timezone
+    from bson import ObjectId
+
+    if not role_can("manage_wa_web"):
+        return jsonify({"error": "Forbidden"}), 403
+
+    collection = current_app.extensions.get("mongo_collection")
+    db = collection.database
+    col = db[_TEMPLATES_COLLECTION]
+
+    try:
+        oid = ObjectId(template_id)
+    except Exception:
+        return jsonify({"error": "Invalid template ID"}), 400
+
+    result = col.update_one(
+        {"_id": oid, "status": "pending"},
+        {"$set": {
+            "status": "approved",
+            "reviewedBy": _get_user_id(),
+            "reviewedAt": datetime.now(timezone.utc),
+        }}
+    )
+
+    if result.matched_count == 0:
+        return jsonify({"error": "Template not found or already reviewed"}), 404
+
+    return jsonify({"success": True})
+
+
+@wa_web_bp.route("/templates/<template_id>/reject", methods=["POST"])
+@_require_auth
+def reject_template(template_id):
+    """Reject a custom template (super admin/admin only)."""
+    from flask import current_app
+    from samaj.app import role_can
+    from datetime import datetime, timezone
+    from bson import ObjectId
+
+    if not role_can("manage_wa_web"):
+        return jsonify({"error": "Forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+
+    collection = current_app.extensions.get("mongo_collection")
+    db = collection.database
+    col = db[_TEMPLATES_COLLECTION]
+
+    try:
+        oid = ObjectId(template_id)
+    except Exception:
+        return jsonify({"error": "Invalid template ID"}), 400
+
+    result = col.update_one(
+        {"_id": oid, "status": "pending"},
+        {"$set": {
+            "status": "rejected",
+            "reviewedBy": _get_user_id(),
+            "reviewedAt": datetime.now(timezone.utc),
+            "rejectionReason": reason or "No reason provided",
+        }}
+    )
+
+    if result.matched_count == 0:
+        return jsonify({"error": "Template not found or already reviewed"}), 404
+
+    return jsonify({"success": True})
+
+
+# ===========================================================================
 # Routing Config (Super Admin)
 # ===========================================================================
 

@@ -162,6 +162,66 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
     });
   });
 
+  /**
+   * POST /api/message/send-media
+   * Send a media message (image/video/document) via WhatsApp Web.
+   * Body: { userId, recipientPhone, caption, mediaUrl, mediaType }
+   */
+  app.post("/api/message/send-media", async (req, res) => {
+    try {
+      const { userId, recipientPhone, caption, mediaUrl, mediaType } = req.body;
+      if (!userId || !recipientPhone || !mediaUrl) {
+        return res.status(400).json({
+          error: "userId, recipientPhone, and mediaUrl are required",
+        });
+      }
+
+      const sock = sessionManager.getSocket(userId);
+      if (!sock) {
+        return res.status(400).json({ error: "No active session" });
+      }
+
+      const jid = recipientPhone.replace(/[^0-9]/g, "") + "@s.whatsapp.net";
+
+      // Download media from URL
+      const mediaResp = await fetch(mediaUrl);
+      if (!mediaResp.ok) {
+        return res.status(400).json({ error: "Failed to download media from URL" });
+      }
+      const buffer = Buffer.from(await mediaResp.arrayBuffer());
+
+      // Determine message type
+      let message = {};
+      const type = (mediaType || "").toLowerCase();
+
+      if (type === "image" || mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+        message = { image: buffer, caption: caption || "" };
+      } else if (type === "video" || mediaUrl.match(/\.(mp4|mov|avi|mkv)$/i)) {
+        message = { video: buffer, caption: caption || "" };
+      } else {
+        // Document (PDF, etc.)
+        const fileName = mediaUrl.split("/").pop() || "document";
+        message = { document: buffer, caption: caption || "", fileName };
+      }
+
+      await sock.sendMessage(jid, message);
+
+      // Track daily sends
+      const today = new Date().toISOString().split("T")[0];
+      const dailySendsCol = db.collection("wa_web_daily_sends");
+      await dailySendsCol.updateOne(
+        { userId, date: today },
+        { $inc: { count: 1 }, $set: { lastSentAt: new Date() } },
+        { upsert: true }
+      );
+
+      res.json({ success: true, jid, mediaType: type, sentAt: new Date() });
+    } catch (err) {
+      logger.error({ err: err.message }, "Send media error");
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // =========================================================================
   // BACKUP
   // =========================================================================

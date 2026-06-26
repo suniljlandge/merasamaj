@@ -3601,6 +3601,26 @@ def create_app(config=None, collection=None, correction_collection=None):
                         "error": "WhatsApp Web is not connected. Connect first or use Cloud API."
                     }), 400
 
+                # Get template body text for variable substitution
+                template_body = payload.get("templateBody") or ""
+                if not template_body and template_name:
+                    # Look up body from AD_TEMPLATES or custom templates
+                    for t in campaign.get_ad_templates():
+                        if t["name"] == template_name:
+                            template_body = t.get("bodyText", "")
+                            break
+                    # Also check custom templates in DB
+                    if not template_body:
+                        custom_t = get_collection().database["wa_custom_templates"].find_one(
+                            {"name": template_name, "status": "approved"}
+                        )
+                        if custom_t:
+                            template_body = custom_t.get("bodyText", "")
+
+                # Media attachment (optional)
+                media_url = payload.get("mediaUrl") or ""
+                media_type = payload.get("mediaType") or ""  # image, video, document
+
                 # Send messages via web session (no payment required)
                 sent = 0
                 failed = 0
@@ -3610,16 +3630,42 @@ def create_app(config=None, collection=None, correction_collection=None):
                     if not phone:
                         failed += 1
                         continue
-                    # Resolve message text from template vars
-                    body_vars = campaign.resolve_body_vars(
-                        body_vars_template, recipient
-                    )
-                    message_text = " ".join(str(v) for v in body_vars if v)
+
+                    # Resolve the full message body with substituted variables
+                    message_text = template_body
+                    if message_text:
+                        name = recipient.get("name", "")
+                        salutation = campaign.salutation_text(
+                            recipient.get("salutation")
+                        )
+                        mobile = campaign.normalize_wa_number(
+                            recipient.get("mobileNumber", "")
+                        ) or ""
+                        message_text = message_text.replace("{name}", name)
+                        message_text = message_text.replace("{salutation}", salutation)
+                        message_text = message_text.replace("{mobile}", mobile)
+                    else:
+                        # Fallback: join resolved vars
+                        body_vars = campaign.resolve_body_vars(
+                            body_vars_template, recipient
+                        )
+                        message_text = " ".join(str(v) for v in body_vars if v)
+
                     if not message_text:
                         message_text = f"Hello {recipient.get('name', '')}"
 
                     try:
-                        result = wa_web.send_personal_message(account_id, phone, message_text)
+                        # Send with or without media
+                        if media_url and media_type:
+                            result = wa_web.send_media_message(
+                                account_id, phone, message_text,
+                                media_url, media_type
+                            )
+                        else:
+                            result = wa_web.send_personal_message(
+                                account_id, phone, message_text
+                            )
+
                         if result.get("fallbackToCloudAPI"):
                             errors.append(f"{phone}: Daily limit reached")
                             failed += 1
@@ -3631,7 +3677,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
                     # Small delay between messages to avoid detection
                     import time
-                    time.sleep(2)
+                    time.sleep(3)
 
                 return jsonify({
                     "success": True,
@@ -3639,7 +3685,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                     "sent": sent,
                     "failed": failed,
                     "total": len(recipients),
-                    "errors": errors[:10],  # Only first 10 errors
+                    "errors": errors[:10],
                     "message": f"Sent {sent}/{len(recipients)} messages via WhatsApp Web (free)"
                 })
             except Exception as exc:

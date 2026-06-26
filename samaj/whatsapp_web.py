@@ -208,6 +208,43 @@ def get_daily_send_stats(user_id: str) -> dict:
     return resp.json()
 
 
+def send_media_message(
+    user_id: str, recipient_phone: str, caption: str,
+    media_url: str, media_type: str
+) -> dict:
+    """
+    Send a media message (image/video/document) via WhatsApp Web session.
+
+    Args:
+        user_id: Sender's user ID.
+        recipient_phone: Recipient phone number.
+        caption: Text caption for the media.
+        media_url: URL of the media file to send.
+        media_type: One of 'image', 'video', 'document'.
+
+    Returns:
+        dict with success status.
+    """
+    resp = requests.post(
+        _url("/api/message/send-media"),
+        headers=_headers(),
+        json={
+            "userId": user_id,
+            "recipientPhone": recipient_phone,
+            "caption": caption,
+            "mediaUrl": media_url,
+            "mediaType": media_type,
+        },
+        timeout=30,
+    )
+
+    if resp.status_code == 429:
+        return resp.json()
+
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ===========================================================================
 # Backup Management
 # ===========================================================================
