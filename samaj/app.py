@@ -3688,8 +3688,9 @@ def create_app(config=None, collection=None, correction_collection=None):
                 except Exception:
                     account_oid = account_id
 
+                campaign_id = OId()
                 web_campaign = {
-                    "_id": OId(),
+                    "_id": campaign_id,
                     "name": f"WhatsApp Web Campaign {now.strftime('%d %b %Y %H:%M')}",
                     "accountId": account_oid,
                     "templateName": template_name or "custom",
@@ -3708,6 +3709,34 @@ def create_app(config=None, collection=None, correction_collection=None):
                     "sentAt": now,
                 }
                 get_collection().database["campaigns"].insert_one(web_campaign)
+
+                # Save individual message records for the delivery report
+                msg_records = []
+                sent_idx = 0
+                failed_idx = 0
+                for recipient in recipients:
+                    phone = recipient.get("mobileNumber", "").replace("+", "")
+                    name = recipient.get("name", "")
+                    # Determine if this recipient was sent or failed
+                    # (We track them in order — first N are sent, rest failed)
+                    msg_status = "sent" if sent_idx < sent else "failed"
+                    if msg_status == "sent":
+                        sent_idx += 1
+                    else:
+                        failed_idx += 1
+
+                    msg_records.append({
+                        "campaignId": campaign_id,
+                        "recipientName": name,
+                        "recipientMobile": phone,
+                        "status": msg_status,
+                        "channel": "web",
+                        "sentAt": now if msg_status == "sent" else None,
+                        "error": None,
+                    })
+
+                if msg_records:
+                    get_collection().database["campaign_messages"].insert_many(msg_records)
 
                 return jsonify({
                     "success": True,
