@@ -553,19 +553,30 @@ function createSessionManager(db, logger, { onConnected } = {}) {
         // Store the message
         try {
           const msgContent = msg.message || {};
+          // Handle nested message types (ephemeral, viewOnce, etc.)
+          const innerMsg =
+            msgContent.ephemeralMessage?.message ||
+            msgContent.viewOnceMessage?.message ||
+            msgContent.viewOnceMessageV2?.message ||
+            msgContent.documentWithCaptionMessage?.message ||
+            msgContent;
           const text =
+            innerMsg.conversation ||
+            innerMsg.extendedTextMessage?.text ||
+            innerMsg.imageMessage?.caption ||
+            innerMsg.videoMessage?.caption ||
+            innerMsg.documentMessage?.caption ||
+            innerMsg.buttonsResponseMessage?.selectedDisplayText ||
+            innerMsg.listResponseMessage?.title ||
             msgContent.conversation ||
             msgContent.extendedTextMessage?.text ||
-            msgContent.imageMessage?.caption ||
-            msgContent.videoMessage?.caption ||
-            msgContent.documentMessage?.caption ||
             "";
           const mediaType =
-            msgContent.imageMessage ? "image" :
-            msgContent.videoMessage ? "video" :
-            msgContent.audioMessage ? "audio" :
-            msgContent.documentMessage ? "document" :
-            msgContent.stickerMessage ? "sticker" :
+            (innerMsg.imageMessage || msgContent.imageMessage) ? "image" :
+            (innerMsg.videoMessage || msgContent.videoMessage) ? "video" :
+            (innerMsg.audioMessage || msgContent.audioMessage) ? "audio" :
+            (innerMsg.documentMessage || msgContent.documentMessage) ? "document" :
+            (innerMsg.stickerMessage || msgContent.stickerMessage) ? "sticker" :
             null;
 
           // Extract media metadata for on-demand download
@@ -699,19 +710,30 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           if (!phone || !/^\d+$/.test(phone)) continue;
 
           const msgContent = msg.message || {};
+          // Handle nested message types (ephemeral, viewOnce, etc.)
+          const innerMsg =
+            msgContent.ephemeralMessage?.message ||
+            msgContent.viewOnceMessage?.message ||
+            msgContent.viewOnceMessageV2?.message ||
+            msgContent.documentWithCaptionMessage?.message ||
+            msgContent;
           const text =
+            innerMsg.conversation ||
+            innerMsg.extendedTextMessage?.text ||
+            innerMsg.imageMessage?.caption ||
+            innerMsg.videoMessage?.caption ||
+            innerMsg.documentMessage?.caption ||
+            innerMsg.buttonsResponseMessage?.selectedDisplayText ||
+            innerMsg.listResponseMessage?.title ||
             msgContent.conversation ||
             msgContent.extendedTextMessage?.text ||
-            msgContent.imageMessage?.caption ||
-            msgContent.videoMessage?.caption ||
-            msgContent.documentMessage?.caption ||
             "";
           const mediaType =
-            msgContent.imageMessage ? "image" :
-            msgContent.videoMessage ? "video" :
-            msgContent.audioMessage ? "audio" :
-            msgContent.documentMessage ? "document" :
-            msgContent.stickerMessage ? "sticker" :
+            (innerMsg.imageMessage || msgContent.imageMessage) ? "image" :
+            (innerMsg.videoMessage || msgContent.videoMessage) ? "video" :
+            (innerMsg.audioMessage || msgContent.audioMessage) ? "audio" :
+            (innerMsg.documentMessage || msgContent.documentMessage) ? "document" :
+            (innerMsg.stickerMessage || msgContent.stickerMessage) ? "sticker" :
             null;
 
           msgBatch.push({

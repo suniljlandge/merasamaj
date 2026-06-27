@@ -267,7 +267,8 @@ function createBackupService(db, r2, logger) {
   async function exportContacts(userId, format = "json") {
     const contacts = await contactsCol
       .find({ userId, isActive: true })
-      .project({ _id: 0, phone: 1, pushName: 1, source: 1, firstSeenAt: 1 })
+      .project({ _id: 0, phone: 1, pushName: 1, source: 1, firstSeenAt: 1, lastSeenAt: 1 })
+      .sort({ lastSeenAt: -1 })
       .toArray();
 
     if (format === "csv") {

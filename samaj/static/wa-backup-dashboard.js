@@ -502,7 +502,15 @@
         return;
       }
 
-      msgContainer.innerHTML = messages.map((m) => {
+      // Filter out empty messages (history sync stubs with no content)
+      const displayMessages = messages.filter((m) => m.text || m.mediaType || m.mediaUrl);
+
+      if (displayMessages.length === 0) {
+        msgContainer.innerHTML = '<p style="text-align:center;color:#94a3b8;font-size:13px;margin:auto;">No readable messages found. Messages will appear here as new ones arrive.</p>';
+        return;
+      }
+
+      msgContainer.innerHTML = displayMessages.map((m) => {
         const align = m.fromMe ? "margin-left:auto;" : "margin-right:auto;";
         const bg = m.fromMe ? "background:#dcfce7;" : "background:#fff;border:1px solid #e5e7eb;";
         const time = m.timestamp ? new Date(m.timestamp).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }) : "";
