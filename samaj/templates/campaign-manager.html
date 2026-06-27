@@ -106,43 +106,44 @@
         <span>SAMAJ</span>
       </a>
 
-      <!-- WhatsApp Status Indicator (dropdown) -->
-      <div class="relative" id="wa-topbar-widget">
-        <button type="button" id="wa-topbar-btn"
-          class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-sm">
-          <span id="wa-topbar-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
-          <span id="wa-topbar-label" class="text-xs font-medium text-slate-600 hidden sm:inline">WhatsApp</span>
-        </button>
-        <!-- Dropdown panel -->
-        <div id="wa-topbar-dropdown" class="hidden absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-slate-200 shadow-xl z-50 p-4">
-          <div class="flex items-center justify-between mb-3">
-            <div class="flex items-center gap-2">
-              <span id="wa-dd-dot" class="w-3 h-3 rounded-full bg-slate-300"></span>
-              <span id="wa-dd-status" class="text-sm font-semibold text-slate-700">Checking...</span>
+      <!-- WhatsApp Status Indicator (dropdown) + Campaign Manager label -->
+      <div class="flex items-center gap-3">
+        <div class="relative" id="wa-topbar-widget">
+          <button type="button" id="wa-topbar-btn"
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-sm">
+            <span id="wa-topbar-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+            <span id="wa-topbar-label" class="text-xs font-medium text-slate-600 hidden sm:inline">WhatsApp</span>
+          </button>
+          <!-- Dropdown panel -->
+          <div id="wa-topbar-dropdown" class="hidden absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-slate-200 shadow-xl z-50 p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span id="wa-dd-dot" class="w-3 h-3 rounded-full bg-slate-300"></span>
+                <span id="wa-dd-status" class="text-sm font-semibold text-slate-700">Checking...</span>
+              </div>
+              <button type="button" id="wa-dd-close" class="text-slate-400 hover:text-slate-600 text-lg leading-none">×</button>
             </div>
-            <button type="button" id="wa-dd-close" class="text-slate-400 hover:text-slate-600 text-lg leading-none">×</button>
+            <!-- Stats (shown when connected) -->
+            <div id="wa-dd-stats" class="hidden grid grid-cols-3 gap-2 mb-3">
+              <div class="text-center p-2 bg-slate-50 rounded-lg">
+                <p id="wa-dd-sent" class="text-base font-bold text-slate-800">0</p>
+                <p class="text-[10px] text-slate-500">Sent</p>
+              </div>
+              <div class="text-center p-2 bg-slate-50 rounded-lg">
+                <p id="wa-dd-limit" class="text-base font-bold text-slate-800">20</p>
+                <p class="text-[10px] text-slate-500">Limit</p>
+              </div>
+              <div class="text-center p-2 bg-emerald-50 rounded-lg">
+                <p id="wa-dd-remaining" class="text-base font-bold text-emerald-700">20</p>
+                <p class="text-[10px] text-slate-500">Left</p>
+              </div>
+            </div>
+            <!-- Connect/Disconnect action -->
+            <div id="wa-dd-action"></div>
           </div>
-          <!-- Stats (shown when connected) -->
-          <div id="wa-dd-stats" class="hidden grid grid-cols-3 gap-2 mb-3">
-            <div class="text-center p-2 bg-slate-50 rounded-lg">
-              <p id="wa-dd-sent" class="text-base font-bold text-slate-800">0</p>
-              <p class="text-[10px] text-slate-500">Sent</p>
-            </div>
-            <div class="text-center p-2 bg-slate-50 rounded-lg">
-              <p id="wa-dd-limit" class="text-base font-bold text-slate-800">20</p>
-              <p class="text-[10px] text-slate-500">Limit</p>
-            </div>
-            <div class="text-center p-2 bg-emerald-50 rounded-lg">
-              <p id="wa-dd-remaining" class="text-base font-bold text-emerald-700">20</p>
-              <p class="text-[10px] text-slate-500">Left</p>
-            </div>
-          </div>
-          <!-- Connect/Disconnect action -->
-          <div id="wa-dd-action"></div>
         </div>
+        <span class="text-sm text-slate-500">Campaign Manager</span>
       </div>
-
-      <span class="text-sm text-slate-500">Campaign Manager</span>
     </div>
   </header>
 
