@@ -106,6 +106,42 @@
         <span>SAMAJ</span>
       </a>
 
+      <!-- WhatsApp Status Indicator (dropdown) -->
+      <div class="relative" id="wa-topbar-widget">
+        <button type="button" id="wa-topbar-btn"
+          class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-sm">
+          <span id="wa-topbar-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+          <span id="wa-topbar-label" class="text-xs font-medium text-slate-600 hidden sm:inline">WhatsApp</span>
+        </button>
+        <!-- Dropdown panel -->
+        <div id="wa-topbar-dropdown" class="hidden absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-slate-200 shadow-xl z-50 p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span id="wa-dd-dot" class="w-3 h-3 rounded-full bg-slate-300"></span>
+              <span id="wa-dd-status" class="text-sm font-semibold text-slate-700">Checking...</span>
+            </div>
+            <button type="button" id="wa-dd-close" class="text-slate-400 hover:text-slate-600 text-lg leading-none">×</button>
+          </div>
+          <!-- Stats (shown when connected) -->
+          <div id="wa-dd-stats" class="hidden grid grid-cols-3 gap-2 mb-3">
+            <div class="text-center p-2 bg-slate-50 rounded-lg">
+              <p id="wa-dd-sent" class="text-base font-bold text-slate-800">0</p>
+              <p class="text-[10px] text-slate-500">Sent</p>
+            </div>
+            <div class="text-center p-2 bg-slate-50 rounded-lg">
+              <p id="wa-dd-limit" class="text-base font-bold text-slate-800">20</p>
+              <p class="text-[10px] text-slate-500">Limit</p>
+            </div>
+            <div class="text-center p-2 bg-emerald-50 rounded-lg">
+              <p id="wa-dd-remaining" class="text-base font-bold text-emerald-700">20</p>
+              <p class="text-[10px] text-slate-500">Left</p>
+            </div>
+          </div>
+          <!-- Connect/Disconnect action -->
+          <div id="wa-dd-action"></div>
+        </div>
+      </div>
+
       <span class="text-sm text-slate-500">Campaign Manager</span>
     </div>
   </header>
@@ -161,18 +197,6 @@
         data-tab="history"
       >
         My Campaigns
-      </button>
-
-      <button
-        type="button"
-        class="cm-tab px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200"
-        id="cm-tab-whatsapp"
-        role="tab"
-        aria-selected="false"
-        aria-controls="cm-panel-whatsapp"
-        data-tab="whatsapp"
-      >
-        WhatsApp
       </button>
 
       <button
@@ -662,12 +686,10 @@
           <div class="mt-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
             <h3 class="text-sm font-semibold text-slate-700 mb-2">Or use a custom template</h3>
             <p class="text-xs text-slate-500 mb-3">Select from your approved custom templates.</p>
-            <select
-              id="cm-custom-tpl-select"
-              class="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="">— None (use standard template above) —</option>
-            </select>
+            <div id="cm-custom-tpl-list" class="space-y-2 mb-2">
+              <!-- Populated by JS with selectable template items + delete buttons -->
+            </div>
+            <select id="cm-custom-tpl-select" class="hidden"></select>
             <p id="cm-custom-tpl-preview" class="text-xs text-slate-500 mt-2 hidden"></p>
 
             <!-- Create New Template (inline) -->
@@ -1225,215 +1247,6 @@
         <p id="cm-history-empty" class="hidden px-4 py-8 text-center text-sm text-slate-400">
           No campaigns yet. Create your first campaign from the WhatsApp Campaign tab.
         </p>
-      </div>
-    </section>
-
-    <!-- ========================================================== -->
-    <!-- TAB PANEL: WHATSAPP CONNECTION                            -->
-    <!-- ========================================================== -->
-    <section
-      id="cm-panel-whatsapp"
-      class="cm-panel hidden"
-      role="tabpanel"
-      aria-labelledby="cm-tab-whatsapp"
-    >
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-
-        <!-- Status -->
-        <div id="wa-status-bar" class="flex items-center gap-3 mb-5 p-3 bg-slate-50 rounded-xl">
-          <span id="wa-dot" class="w-3 h-3 rounded-full bg-slate-300 flex-shrink-0"></span>
-          <span id="wa-status-label" class="text-sm font-semibold text-slate-700">Checking...</span>
-          <span id="wa-status-msg" class="text-xs text-slate-500 ml-auto"></span>
-        </div>
-
-        <!-- Connect Form -->
-        <div id="wa-connect-form">
-          <h3 class="text-base font-semibold text-slate-800 mb-2">Connect Your WhatsApp</h3>
-          <p class="text-sm text-slate-500 mb-4">
-            Link your personal WhatsApp to send follow-up messages directly. Choose QR code (recommended) or pairing code.
-          </p>
-
-          <!-- QR Code option (primary) -->
-          <div class="mb-4 p-4 border border-slate-200 rounded-xl">
-            <button
-              type="button"
-              id="wa-qr-btn"
-              class="w-full px-5 py-3 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
-            >
-              Connect with QR Code (Recommended)
-            </button>
-          </div>
-
-          <!-- QR Code Display -->
-          <div id="wa-qr-panel" class="hidden text-center p-5 bg-slate-50 rounded-xl mb-4">
-            <p class="text-sm text-slate-600 mb-3">Scan this QR code with WhatsApp:</p>
-            <div id="wa-qr-image" class="inline-block bg-white p-3 rounded-lg border border-slate-200"></div>
-            <p class="text-xs text-slate-500 mt-3">
-              WhatsApp → Settings → Linked Devices → Link a Device → Scan QR
-            </p>
-            <p class="text-xs text-slate-400 mt-1">QR refreshes automatically every 20 seconds</p>
-          </div>
-
-          <!-- Pairing Code option (fallback) -->
-          <details class="border border-slate-200 rounded-xl">
-            <summary class="px-4 py-3 text-sm font-medium text-slate-600 cursor-pointer hover:bg-slate-50 rounded-xl">
-              Or connect with Pairing Code
-            </summary>
-            <div class="px-4 pb-4">
-              <div class="flex flex-col sm:flex-row gap-3 mt-3">
-                <input
-                  type="tel"
-                  id="wa-phone-input"
-                  class="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="+91 98765 43210"
-                >
-                <button
-                  type="button"
-                  id="wa-connect-btn"
-                  class="px-5 py-2.5 bg-slate-700 text-white text-sm font-semibold rounded-lg hover:bg-slate-800 transition-colors"
-                >
-                  Get Pairing Code
-                </button>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <!-- Pairing Code -->
-        <div id="wa-pairing-panel" class="hidden text-center mt-5 p-5 bg-emerald-50 rounded-xl">
-          <p class="text-sm text-slate-600 mb-2">Enter this code on your phone:</p>
-          <p id="wa-pairing-code" class="text-3xl font-bold tracking-widest text-emerald-800 my-3"></p>
-          <p class="text-xs text-slate-500">
-            WhatsApp → Settings → Linked Devices → Link a Device → Enter code
-          </p>
-          <button type="button" id="wa-retry-code-btn" class="mt-3 px-4 py-1.5 text-xs font-medium border border-slate-300 rounded-lg hover:bg-slate-50">
-            Get New Code
-          </button>
-        </div>
-
-        <!-- Connected State -->
-        <div id="wa-connected-panel" class="hidden mt-5">
-          <div class="flex items-center justify-between p-4 bg-emerald-50 rounded-xl">
-            <div>
-              <p class="text-sm font-semibold text-emerald-800">✓ WhatsApp Connected</p>
-              <p id="wa-connected-phone" class="text-xs text-slate-600 mt-0.5"></p>
-            </div>
-            <div class="flex gap-2">
-              <button
-                type="button"
-                id="wa-disconnect-btn"
-                class="px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
-
-          <!-- Daily stats -->
-          <div class="grid grid-cols-3 gap-4 mt-4 text-center">
-            <div class="p-3 bg-slate-50 rounded-lg">
-              <p id="wa-stat-sent" class="text-xl font-bold text-slate-800">0</p>
-              <p class="text-xs text-slate-500">Sent Today</p>
-            </div>
-            <div class="p-3 bg-slate-50 rounded-lg">
-              <p id="wa-stat-limit" class="text-xl font-bold text-slate-800">20</p>
-              <p class="text-xs text-slate-500">Daily Limit</p>
-            </div>
-            <div class="p-3 bg-slate-50 rounded-lg">
-              <p id="wa-stat-remaining" class="text-xl font-bold text-emerald-700">20</p>
-              <p class="text-xs text-slate-500">Remaining</p>
-            </div>
-          </div>
-
-          <!-- Quick Send -->
-          <div class="mt-5 pt-5 border-t border-slate-200">
-            <h4 class="text-sm font-semibold text-slate-700 mb-3">Send Personal Follow-up</h4>
-            <div class="flex flex-col gap-3">
-              <input
-                type="tel"
-                id="wa-send-phone"
-                class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="Recipient phone (91XXXXXXXXXX)"
-              >
-              <textarea
-                id="wa-send-text"
-                rows="2"
-                class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="Type your message..."
-              ></textarea>
-              <div class="flex items-center gap-3">
-                <button
-                  type="button"
-                  id="wa-send-btn"
-                  class="px-5 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
-                >
-                  Send
-                </button>
-                <span id="wa-send-result" class="text-xs"></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Custom Message Templates -->
-          <div class="mt-5 pt-5 border-t border-slate-200">
-            <h4 class="text-sm font-semibold text-slate-700 mb-3">Custom Message Templates</h4>
-            <p class="text-xs text-slate-500 mb-4">Create reusable templates for campaigns. Templates need admin approval before use.</p>
-
-            <!-- Create Template Form -->
-            <div class="p-4 bg-slate-50 rounded-xl mb-4">
-              <h5 class="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">Create New Template</h5>
-              <div class="flex flex-col gap-3">
-                <input
-                  type="text"
-                  id="wa-tpl-name"
-                  class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                  placeholder="Template name (e.g. diwali-greeting)"
-                >
-                <textarea
-                  id="wa-tpl-body"
-                  rows="3"
-                  class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                  placeholder="Body text. Use {name}, {salutation}, {mobile} as placeholders..."
-                ></textarea>
-                <div class="grid grid-cols-2 gap-3">
-                  <select id="wa-tpl-language" class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="hi">Hindi (hi)</option>
-                    <option value="en_US">English (en_US)</option>
-                    <option value="mr">Marathi (mr)</option>
-                  </select>
-                  <select id="wa-tpl-media-type" class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">No Media</option>
-                    <option value="image">Image</option>
-                    <option value="video">Video</option>
-                    <option value="document">Document</option>
-                  </select>
-                </div>
-                <input
-                  type="url"
-                  id="wa-tpl-media-url"
-                  class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white hidden"
-                  placeholder="Media URL (publicly accessible link)"
-                >
-                <div class="flex items-center gap-3">
-                  <button
-                    type="button"
-                    id="wa-tpl-submit"
-                    class="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    Submit Template
-                  </button>
-                  <span id="wa-tpl-result" class="text-xs"></span>
-                </div>
-              </div>
-            </div>
-
-            <!-- My Templates List -->
-            <div id="wa-tpl-list" class="space-y-2">
-              <p class="text-xs text-slate-400 text-center py-4">Loading templates...</p>
-            </div>
-          </div>
-        </div>
-
       </div>
     </section>
 
