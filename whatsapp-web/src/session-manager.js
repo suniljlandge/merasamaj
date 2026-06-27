@@ -571,8 +571,20 @@ function createSessionManager(db, logger, { onConnected } = {}) {
 
     sock.ev.on("messages.upsert", async (m) => {
       for (const msg of m.messages || []) {
+        // Send read receipt for incoming messages to keep delivery active
+        if (!msg.key?.fromMe && msg.key?.remoteJid) {
+          try {
+            await sock.readMessages([msg.key]);
+          } catch {}
+        }
+
         let jid = msg.key?.remoteJid || "";
         let phone = "";
+
+        // Log all incoming messages for debugging
+        if (!msg.key?.fromMe) {
+          logger.info({ userId, jid, fromMe: false, id: msg.key?.id }, "Incoming message received");
+        }
 
         if (jid.endsWith("@s.whatsapp.net")) {
           phone = jid.replace("@s.whatsapp.net", "");
@@ -603,11 +615,16 @@ function createSessionManager(db, logger, { onConnected } = {}) {
               );
             } catch {}
           }
+          // If we still can't resolve, store under LID as phone (for debugging)
+          if (!phone) {
+            phone = jid.replace("@lid", "");
+            logger.info({ userId, lid: jid, msg: "Unresolved LID message" });
+          }
         } else {
           continue; // Skip group messages, status broadcasts
         }
 
-        if (!phone || !/^\d+$/.test(phone)) continue;
+        if (!phone) continue;
 
         try {
           await contactsCol.updateOne(
