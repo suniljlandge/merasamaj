@@ -59,6 +59,9 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     // Handle credential updates
     sock.ev.on("creds.update", saveCreds);
 
+    // Listen for contact and chat sync events (captures what web.whatsapp.com shows)
+    attachContactListeners(sock, userId);
+
     // Handle connection updates
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect } = update;
@@ -162,6 +165,7 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     connectionStatus.set(userId, "waiting_qr");
 
     sock.ev.on("creds.update", saveCreds);
+    attachContactListeners(sock, userId);
 
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
@@ -254,6 +258,7 @@ function createSessionManager(db, logger, { onConnected } = {}) {
 
     activeSockets.set(userId, sock);
     sock.ev.on("creds.update", saveCreds);
+    attachContactListeners(sock, userId);
 
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect } = update;
@@ -403,6 +408,223 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     );
 
     return { success: true, jid, sentAt: new Date() };
+  }
+
+  /**
+   * Attach event listeners to capture contacts, chats, and LID→phone mappings.
+   * This is what makes the backup work like web.whatsapp.com's contact list.
+   */
+  function attachContactListeners(sock, userId) {
+    const contactsCol = db.collection("wa_contact_backups");
+    const chatsCol = db.collection("wa_chat_list");
+
+    // Contacts synced from WhatsApp (name, phone, pushName)
+    sock.ev.on("contacts.upsert", async (contacts) => {
+      logger.info({ userId, count: contacts.length }, "Contacts upsert received");
+      for (const contact of contacts) {
+        const jid = contact.id || "";
+        if (!jid.endsWith("@s.whatsapp.net")) continue;
+        const phone = jid.replace("@s.whatsapp.net", "");
+        if (!phone || !/^\d+$/.test(phone)) continue;
+
+        try {
+          await contactsCol.updateOne(
+            { userId, phone },
+            {
+              $set: {
+                userId,
+                phone,
+                pushName: contact.notify || contact.name || null,
+                verifiedName: contact.verifiedName || null,
+                source: "sync",
+                lastSeenAt: new Date(),
+                isActive: true,
+              },
+              $setOnInsert: { firstSeenAt: new Date(), profilePicKey: null, profilePicHash: null },
+            },
+            { upsert: true }
+          );
+        } catch (err) {
+          if (err.code !== 11000) logger.error({ userId, phone, err: err.message }, "Contact upsert error");
+        }
+      }
+    });
+
+    sock.ev.on("contacts.update", async (updates) => {
+      for (const update of updates) {
+        const jid = update.id || "";
+        if (!jid.endsWith("@s.whatsapp.net")) continue;
+        const phone = jid.replace("@s.whatsapp.net", "");
+        if (!phone || !/^\d+$/.test(phone)) continue;
+
+        const $set = { lastSeenAt: new Date() };
+        if (update.notify) $set.pushName = update.notify;
+        if (update.verifiedName) $set.verifiedName = update.verifiedName;
+
+        try {
+          await contactsCol.updateOne({ userId, phone }, { $set });
+        } catch {}
+      }
+    });
+
+    // Chat list sync — captures individual and group chats like web.whatsapp.com sidebar
+    sock.ev.on("chats.upsert", async (chats) => {
+      logger.info({ userId, count: chats.length }, "Chats upsert received");
+      for (const chat of chats) {
+        const jid = chat.id || "";
+        const isGroup = jid.endsWith("@g.us");
+        const isIndividual = jid.endsWith("@s.whatsapp.net");
+        if (!isGroup && !isIndividual) continue;
+
+        try {
+          await chatsCol.updateOne(
+            { userId, jid },
+            {
+              $set: {
+                userId,
+                jid,
+                name: chat.name || chat.subject || null,
+                isGroup,
+                unreadCount: chat.unreadCount || 0,
+                lastMessageAt: chat.conversationTimestamp
+                  ? new Date(chat.conversationTimestamp * 1000)
+                  : null,
+                updatedAt: new Date(),
+              },
+              $setOnInsert: { createdAt: new Date() },
+            },
+            { upsert: true }
+          );
+
+          // Also save individual chat contacts
+          if (isIndividual) {
+            const phone = jid.replace("@s.whatsapp.net", "");
+            if (phone && /^\d+$/.test(phone)) {
+              await contactsCol.updateOne(
+                { userId, phone },
+                {
+                  $set: {
+                    userId,
+                    phone,
+                    pushName: chat.name || null,
+                    source: "chat",
+                    lastSeenAt: new Date(),
+                    isActive: true,
+                  },
+                  $setOnInsert: { firstSeenAt: new Date(), profilePicKey: null, profilePicHash: null },
+                },
+                { upsert: true }
+              );
+            }
+          }
+        } catch (err) {
+          if (err.code !== 11000) logger.error({ userId, jid, err: err.message }, "Chat upsert error");
+        }
+      }
+    });
+
+    // Message events — capture contact from every sent/received message
+    sock.ev.on("messages.upsert", async (m) => {
+      for (const msg of m.messages || []) {
+        const jid = msg.key?.remoteJid || "";
+        if (!jid.endsWith("@s.whatsapp.net")) continue;
+        const phone = jid.replace("@s.whatsapp.net", "");
+        if (!phone || !/^\d+$/.test(phone)) continue;
+
+        try {
+          await contactsCol.updateOne(
+            { userId, phone },
+            {
+              $set: { userId, phone, source: "message", lastSeenAt: new Date(), isActive: true },
+              $setOnInsert: { firstSeenAt: new Date(), pushName: null, profilePicKey: null, profilePicHash: null },
+            },
+            { upsert: true }
+          );
+        } catch {}
+
+        // Also capture LID → phone number mapping if available
+        const participant = msg.key?.participant || "";
+        const participantPn = msg.key?.participantPn || "";
+        if (participant.endsWith("@lid") && participantPn.endsWith("@s.whatsapp.net")) {
+          const realPhone = participantPn.replace("@s.whatsapp.net", "");
+          if (realPhone && /^\d+$/.test(realPhone)) {
+            try {
+              await db.collection("wa_lid_mappings").updateOne(
+                { lid: participant },
+                { $set: { lid: participant, phone: realPhone, userId, updatedAt: new Date() } },
+                { upsert: true }
+              );
+              // Also save the real phone as a contact
+              await contactsCol.updateOne(
+                { userId, phone: realPhone },
+                {
+                  $set: { userId, phone: realPhone, source: "lid_resolved", lastSeenAt: new Date(), isActive: true },
+                  $setOnInsert: { firstSeenAt: new Date(), pushName: null, profilePicKey: null, profilePicHash: null },
+                },
+                { upsert: true }
+              );
+            } catch {}
+          }
+        }
+      }
+    });
+
+    // History sync — Baileys v6 fires this with bulk chat/contact data
+    sock.ev.on("messaging-history.set", async (data) => {
+      const { chats: syncChats, contacts: syncContacts } = data;
+      logger.info({ userId, chats: syncChats?.length, contacts: syncContacts?.length }, "History sync received");
+
+      // Process contacts from history
+      if (syncContacts && syncContacts.length > 0) {
+        for (const contact of syncContacts) {
+          const jid = contact.id || "";
+          if (!jid.endsWith("@s.whatsapp.net")) continue;
+          const phone = jid.replace("@s.whatsapp.net", "");
+          if (!phone || !/^\d+$/.test(phone)) continue;
+
+          try {
+            await contactsCol.updateOne(
+              { userId, phone },
+              {
+                $set: {
+                  userId, phone,
+                  pushName: contact.notify || contact.name || null,
+                  source: "history_sync",
+                  lastSeenAt: new Date(),
+                  isActive: true,
+                },
+                $setOnInsert: { firstSeenAt: new Date(), profilePicKey: null, profilePicHash: null },
+              },
+              { upsert: true }
+            );
+          } catch {}
+        }
+      }
+
+      // Process chats from history
+      if (syncChats && syncChats.length > 0) {
+        for (const chat of syncChats) {
+          const jid = chat.id || "";
+          if (!jid.endsWith("@s.whatsapp.net") && !jid.endsWith("@g.us")) continue;
+
+          try {
+            await chatsCol.updateOne(
+              { userId, jid },
+              {
+                $set: {
+                  userId, jid,
+                  name: chat.name || null,
+                  isGroup: jid.endsWith("@g.us"),
+                  updatedAt: new Date(),
+                },
+                $setOnInsert: { createdAt: new Date() },
+              },
+              { upsert: true }
+            );
+          } catch {}
+        }
+      }
+    });
   }
 
   return {
