@@ -534,9 +534,42 @@ function createSessionManager(db, logger, { onConnected } = {}) {
 
     sock.ev.on("messages.upsert", async (m) => {
       for (const msg of m.messages || []) {
-        const jid = msg.key?.remoteJid || "";
-        if (!jid.endsWith("@s.whatsapp.net")) continue;
-        const phone = jid.replace("@s.whatsapp.net", "");
+        let jid = msg.key?.remoteJid || "";
+        let phone = "";
+
+        if (jid.endsWith("@s.whatsapp.net")) {
+          phone = jid.replace("@s.whatsapp.net", "");
+        } else if (jid.endsWith("@lid")) {
+          // LID message — try to resolve from participant_pn or lid_mappings
+          const participantPn = msg.key?.participantPn || "";
+          if (participantPn.endsWith("@s.whatsapp.net")) {
+            phone = participantPn.replace("@s.whatsapp.net", "");
+          } else {
+            // Look up in lid_mappings collection
+            const mapping = await db.collection("wa_lid_mappings").findOne({ lid: jid });
+            if (mapping) {
+              phone = mapping.phone;
+            } else {
+              // Also check remoteJid without @lid as a phone lookup
+              const lidId = jid.replace("@lid", "");
+              const mappingAlt = await db.collection("wa_lid_mappings").findOne({ lid: { $regex: lidId } });
+              if (mappingAlt) phone = mappingAlt.phone;
+            }
+          }
+          // Store LID mapping if we have participant_pn
+          if (phone && jid.endsWith("@lid")) {
+            try {
+              await db.collection("wa_lid_mappings").updateOne(
+                { lid: jid },
+                { $set: { lid: jid, phone, userId, updatedAt: new Date() } },
+                { upsert: true }
+              );
+            } catch {}
+          }
+        } else {
+          continue; // Skip group messages, status broadcasts
+        }
+
         if (!phone || !/^\d+$/.test(phone)) continue;
 
         try {
