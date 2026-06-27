@@ -359,6 +359,18 @@ def profile_pic(phone):
         return jsonify({"error": str(e)}), 500
 
 
+@wa_web_bp.route("/backup/profile-pic-history/<phone>", methods=["GET"])
+@_require_super_admin
+def profile_pic_history(phone):
+    """Get all historical profile pictures for a contact (super admin only)."""
+    user_id = request.args.get("userId") or _get_user_id()
+    try:
+        history = wa.get_profile_pic_history(user_id, phone)
+        return jsonify({"history": history})
+    except Exception as e:
+        return jsonify({"error": str(e), "history": []}), 200
+
+
 @wa_web_bp.route("/messages/<phone>", methods=["GET"])
 @_require_super_admin
 def get_messages(phone):

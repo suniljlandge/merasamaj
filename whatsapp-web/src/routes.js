@@ -452,6 +452,22 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
     }
   });
 
+  /**
+   * GET /api/backup/profile-pic-history/:userId/:phone
+   * Get all historical profile pictures for a contact (newest first).
+   */
+  app.get("/api/backup/profile-pic-history/:userId/:phone", async (req, res) => {
+    try {
+      const history = await backupService.getProfilePicHistory(
+        req.params.userId,
+        req.params.phone
+      );
+      res.json({ history });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // =========================================================================
   // ROUTING DECISION (for the hybrid approach)
   // =========================================================================

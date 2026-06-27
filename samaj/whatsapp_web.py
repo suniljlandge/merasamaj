@@ -333,3 +333,23 @@ def get_profile_pic_url(user_id: str, phone: str) -> Optional[str]:
 
     resp.raise_for_status()
     return resp.json().get("url")
+
+
+def get_profile_pic_history(user_id: str, phone: str) -> list:
+    """
+    Get all historical profile pictures for a contact (newest first).
+
+    Args:
+        user_id: User ID.
+        phone: Contact phone number (91XXXXXXXXXX).
+
+    Returns:
+        List of dicts with 'url' and 'capturedAt' keys.
+    """
+    resp = requests.get(
+        _url(f"/api/backup/profile-pic-history/{user_id}/{phone}"),
+        headers=_headers(),
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json().get("history", [])

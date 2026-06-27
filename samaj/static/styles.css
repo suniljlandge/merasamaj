@@ -1741,6 +1741,17 @@ input[readonly][lang="mr"] {
   letter-spacing: 0.5px;
 }
 
+.contact-pic:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .status-badge {
   display: inline-block;
   padding: 2px 8px;

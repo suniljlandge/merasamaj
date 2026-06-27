@@ -6,6 +6,7 @@
  */
 
 const crypto = require("crypto");
+const { PutObjectCommand } = require("@aws-sdk/client-s3");
 
 const PROFILE_PIC_DELAY = parseInt(
   process.env.PROFILE_PIC_FETCH_DELAY_MS || "2500",
@@ -17,12 +18,16 @@ function createBackupService(db, r2, logger) {
   const groupsCol = db.collection("wa_group_backups");
   const backupLogCol = db.collection("wa_backup_log");
 
+  const profilePicHistoryCol = db.collection("wa_profile_pic_history");
+
   // Ensure indexes
   (async () => {
     await contactsCol.createIndex({ userId: 1, phone: 1 }, { unique: true });
     await contactsCol.createIndex({ userId: 1 });
     await groupsCol.createIndex({ userId: 1, groupJid: 1 }, { unique: true });
     await backupLogCol.createIndex({ userId: 1, createdAt: -1 });
+    await profilePicHistoryCol.createIndex({ userId: 1, phone: 1, capturedAt: -1 });
+    await profilePicHistoryCol.createIndex({ userId: 1, phone: 1, hash: 1 }, { unique: true });
   })();
 
   /**
@@ -188,15 +193,39 @@ function createBackupService(db, r2, logger) {
             continue;
           }
 
-          // Upload to R2
-          const key = await r2.uploadProfilePic(userId, contact.phone, buffer);
+          // Upload to R2 with timestamp-based key (preserves history)
+          const timestamp = Date.now();
+          const versionedKey = `wa-backups/${userId}/profile-pics/${contact.phone}/${timestamp}.jpg`;
 
-          // Update DB
+          await r2.client.send(
+            new PutObjectCommand({
+              Bucket: r2.bucketName,
+              Key: versionedKey,
+              Body: buffer,
+              ContentType: "image/jpeg",
+            })
+          );
+
+          // Save to history collection
+          try {
+            await profilePicHistoryCol.insertOne({
+              userId,
+              phone: contact.phone,
+              key: versionedKey,
+              hash: newHash,
+              capturedAt: new Date(),
+            });
+          } catch (dupErr) {
+            // Duplicate hash — already have this version
+            if (dupErr.code !== 11000) throw dupErr;
+          }
+
+          // Update contact with latest pic pointer
           await contactsCol.updateOne(
             { userId, phone: contact.phone },
             {
               $set: {
-                profilePicKey: key,
+                profilePicKey: versionedKey,
                 profilePicHash: newHash,
                 profilePicUpdatedAt: new Date(),
               },
@@ -286,7 +315,7 @@ function createBackupService(db, r2, logger) {
   }
 
   /**
-   * Get a signed URL for a contact's profile picture.
+   * Get a signed URL for a contact's profile picture (latest).
    */
   async function getContactProfilePicUrl(userId, phone) {
     const contact = await contactsCol.findOne({ userId, phone });
@@ -294,11 +323,44 @@ function createBackupService(db, r2, logger) {
     return r2.getProfilePicUrl(contact.profilePicKey);
   }
 
+  /**
+   * Get all historical profile pictures for a contact (newest first).
+   * Returns signed URLs for each version.
+   */
+  async function getProfilePicHistory(userId, phone) {
+    const history = await profilePicHistoryCol
+      .find({ userId, phone })
+      .sort({ capturedAt: -1 })
+      .toArray();
+
+    if (!history.length) {
+      // Fallback: check if contact has a single legacy key (pre-history migration)
+      const contact = await contactsCol.findOne({ userId, phone });
+      if (contact?.profilePicKey) {
+        const url = await r2.getProfilePicUrl(contact.profilePicKey);
+        return url ? [{ url, capturedAt: contact.profilePicUpdatedAt || null }] : [];
+      }
+      return [];
+    }
+
+    const results = [];
+    for (const entry of history) {
+      try {
+        const url = await r2.getProfilePicUrl(entry.key);
+        results.push({ url, capturedAt: entry.capturedAt });
+      } catch {
+        // Skip entries where R2 object is missing
+      }
+    }
+    return results;
+  }
+
   return {
     runFullBackup,
     getBackupStatus,
     exportContacts,
     getContactProfilePicUrl,
+    getProfilePicHistory,
   };
 }
 

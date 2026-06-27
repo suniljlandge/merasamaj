@@ -270,11 +270,111 @@
     // Load profile pictures for visible contacts
     pageItems.forEach((c) => loadProfilePic(c.phone));
 
-    // Click handler to open chat
+    // Click handler: pic opens lightbox, rest of card opens chat
     grid.querySelectorAll(".contact-card").forEach((card) => {
       card.style.cursor = "pointer";
+      const picEl = card.querySelector(".contact-pic");
+      picEl.style.cursor = "zoom-in";
+      picEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const img = picEl.querySelector("img");
+        if (img) openProfilePicModal(card.dataset.phone, card.querySelector(".contact-name").textContent);
+      });
       card.addEventListener("click", () => openChatPopup(card.dataset.phone));
     });
+  }
+
+  // =========================================================================
+  // Profile Picture Lightbox Modal with History
+  // =========================================================================
+
+  async function openProfilePicModal(phone, name) {
+    // Remove existing modal if any
+    const existing = document.getElementById("profile-pic-modal");
+    if (existing) existing.remove();
+
+    // Fetch history
+    let history = [];
+    try {
+      const resp = await fetch(`${API}/backup/profile-pic-history/${phone}?userId=${selectedUserId}`);
+      const data = await resp.json();
+      history = data.history || [];
+    } catch {}
+
+    if (!history.length) {
+      // Fallback: just show current pic
+      const picEl = document.getElementById(`pic-${phone}`);
+      const img = picEl?.querySelector("img");
+      if (img) history = [{ url: img.src, capturedAt: null }];
+      else return;
+    }
+
+    let currentIdx = 0;
+
+    const modal = document.createElement("div");
+    modal.id = "profile-pic-modal";
+    modal.style.cssText = `
+      position:fixed;inset:0;z-index:9999;display:flex;align-items:center;
+      justify-content:center;background:rgba(0,0,0,0.8);backdrop-filter:blur(4px);
+      animation:fadeIn 0.2s ease;
+    `;
+
+    function renderModal() {
+      const entry = history[currentIdx];
+      const dateStr = entry.capturedAt
+        ? new Date(entry.capturedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+        : "";
+      const counterText = history.length > 1 ? `${currentIdx + 1} / ${history.length}` : "";
+
+      modal.innerHTML = `
+        <div style="position:relative;max-width:90vw;max-height:90vh;text-align:center;">
+          <img src="${entry.url}" alt="${escHtml(name)}" style="max-width:80vw;max-height:70vh;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);object-fit:contain;">
+          <p style="color:#fff;margin-top:12px;font-size:16px;font-weight:600;">${escHtml(name)}</p>
+          ${dateStr ? `<p style="color:#ccc;margin-top:4px;font-size:13px;">${dateStr}</p>` : ""}
+          ${counterText ? `<p style="color:#999;margin-top:4px;font-size:12px;">${counterText}</p>` : ""}
+          ${history.length > 1 ? `
+            <div style="display:flex;justify-content:center;gap:16px;margin-top:12px;">
+              <button id="pp-prev" style="
+                padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);
+                color:#fff;font-size:14px;cursor:pointer;backdrop-filter:blur(4px);
+              " ${currentIdx >= history.length - 1 ? "disabled style=\"opacity:0.3;padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;cursor:not-allowed;\"" : ""}>← Older</button>
+              <button id="pp-next" style="
+                padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);
+                color:#fff;font-size:14px;cursor:pointer;backdrop-filter:blur(4px);
+              " ${currentIdx <= 0 ? "disabled style=\"opacity:0.3;padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;cursor:not-allowed;\"" : ""}>Newer →</button>
+            </div>
+          ` : ""}
+          <button id="pp-close" style="
+            position:absolute;top:-12px;right:-12px;width:36px;height:36px;
+            border-radius:50%;border:none;background:#fff;color:#333;font-size:20px;
+            cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;
+            align-items:center;justify-content:center;
+          ">&times;</button>
+        </div>
+      `;
+
+      // Attach button listeners
+      modal.querySelector("#pp-close").addEventListener("click", () => modal.remove());
+      const prevBtn = modal.querySelector("#pp-prev");
+      const nextBtn = modal.querySelector("#pp-next");
+      if (prevBtn && !prevBtn.disabled) prevBtn.addEventListener("click", () => { currentIdx++; renderModal(); });
+      if (nextBtn && !nextBtn.disabled) nextBtn.addEventListener("click", () => { currentIdx--; renderModal(); });
+    }
+
+    renderModal();
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) modal.remove();
+    });
+    document.body.appendChild(modal);
+
+    // Keyboard navigation
+    const onKey = (e) => {
+      if (e.key === "Escape") { modal.remove(); document.removeEventListener("keydown", onKey); }
+      if (e.key === "ArrowLeft" && currentIdx < history.length - 1) { currentIdx++; renderModal(); }
+      if (e.key === "ArrowRight" && currentIdx > 0) { currentIdx--; renderModal(); }
+    };
+    document.addEventListener("keydown", onKey);
   }
 
   async function loadProfilePic(phone) {

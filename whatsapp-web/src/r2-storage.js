@@ -86,6 +86,8 @@ function createR2Client() {
     uploadProfilePic,
     getProfilePicUrl,
     deleteProfilePic,
+    client,
+    bucketName,
     isEnabled: true,
   };
 }
@@ -98,6 +100,8 @@ function createNullClient() {
     uploadProfilePic: async () => null,
     getProfilePicUrl: async () => null,
     deleteProfilePic: async () => {},
+    client: null,
+    bucketName: null,
     isEnabled: false,
   };
 }
