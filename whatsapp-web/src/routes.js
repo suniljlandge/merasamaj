@@ -223,6 +223,120 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
   });
 
   // =========================================================================
+  // CHAT MESSAGES
+  // =========================================================================
+
+  /**
+   * GET /api/messages/:userId/:phone
+   * Get chat messages for a contact. Returns last 100 messages sorted by time.
+   */
+  app.get("/api/messages/:userId/:phone", async (req, res) => {
+    try {
+      const { userId, phone } = req.params;
+      const limit = Math.min(parseInt(req.query.limit || "100", 10), 500);
+
+      const messages = await db.collection("wa_messages")
+        .find({ userId, phone })
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .toArray();
+
+      // Reverse so oldest first (chat order)
+      messages.reverse();
+
+      res.json({
+        messages: messages.map((m) => ({
+          id: m.odgId,
+          fromMe: m.fromMe,
+          text: m.text,
+          mediaType: m.mediaType,
+          mediaInfo: m.mediaInfo || null,
+          mediaUrl: m.mediaUrl || null,
+          timestamp: m.timestamp,
+          pushName: m.pushName,
+        })),
+        total: messages.length,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/messages/download-media
+   * Download media for a specific message on-demand.
+   * Body: { userId, phone, messageId }
+   * Returns: { url } (URL to the downloaded file served from uploads)
+   */
+  app.post("/api/messages/download-media", async (req, res) => {
+    try {
+      const { userId, phone, messageId } = req.body;
+      if (!userId || !messageId) {
+        return res.status(400).json({ error: "userId and messageId required" });
+      }
+
+      const { downloadMediaMessage } = require("@whiskeysockets/baileys");
+      const messagesCol = db.collection("wa_messages");
+
+      // Find the message
+      const msgDoc = await messagesCol.findOne({ odgId: messageId, userId, phone });
+      if (!msgDoc) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+      if (!msgDoc._rawMessage) {
+        return res.status(400).json({ error: "No media data available (message too old or not a media message)" });
+      }
+      if (msgDoc.mediaUrl) {
+        // Already downloaded
+        return res.json({ url: msgDoc.mediaUrl, mediaType: msgDoc.mediaType });
+      }
+
+      // Parse stored raw message
+      let rawMsg;
+      try {
+        rawMsg = JSON.parse(msgDoc._rawMessage);
+      } catch {
+        return res.status(400).json({ error: "Corrupt media data" });
+      }
+
+      // Download media using Baileys
+      const buffer = await downloadMediaMessage(rawMsg, "buffer", {});
+      if (!buffer || buffer.length === 0) {
+        return res.status(400).json({ error: "Failed to download media (key may have expired)" });
+      }
+
+      // Save to uploads directory
+      const fs = require("fs");
+      const path = require("path");
+      const crypto = require("crypto");
+
+      const uploadsDir = path.join(__dirname, "..", "..", "uploads");
+      fs.mkdirSync(uploadsDir, { recursive: true });
+
+      const ext = msgDoc.mediaInfo?.mimetype
+        ? "." + msgDoc.mediaInfo.mimetype.split("/")[1]?.split(";")[0] || "bin"
+        : ".bin";
+      const filename = `${crypto.randomBytes(8).toString("hex")}${ext}`;
+      const filePath = path.join(uploadsDir, filename);
+      fs.writeFileSync(filePath, buffer);
+
+      // Generate URL
+      const mediaUrl = `/api/wa-web/uploads/${filename}`;
+
+      // Update message with URL so we don't re-download
+      await messagesCol.updateOne(
+        { odgId: messageId, userId, phone },
+        { $set: { mediaUrl } }
+      );
+
+      res.json({ url: mediaUrl, mediaType: msgDoc.mediaType, size: buffer.length });
+    } catch (err) {
+      logger.error({ err: err.message }, "Media download error");
+      res.status(500).json({ error: "Download failed: " + err.message });
+    }
+  });
+
+  // =========================================================================
   // BACKUP
   // =========================================================================
 

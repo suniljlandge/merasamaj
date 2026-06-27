@@ -529,7 +529,9 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       }
     });
 
-    // Message events — capture contact from every sent/received message
+    // Message events — capture contact and store message content
+    const messagesCol = db.collection("wa_messages");
+
     sock.ev.on("messages.upsert", async (m) => {
       for (const msg of m.messages || []) {
         const jid = msg.key?.remoteJid || "";
@@ -548,6 +550,62 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           );
         } catch {}
 
+        // Store the message
+        try {
+          const msgContent = msg.message || {};
+          const text =
+            msgContent.conversation ||
+            msgContent.extendedTextMessage?.text ||
+            msgContent.imageMessage?.caption ||
+            msgContent.videoMessage?.caption ||
+            msgContent.documentMessage?.caption ||
+            "";
+          const mediaType =
+            msgContent.imageMessage ? "image" :
+            msgContent.videoMessage ? "video" :
+            msgContent.audioMessage ? "audio" :
+            msgContent.documentMessage ? "document" :
+            msgContent.stickerMessage ? "sticker" :
+            null;
+
+          // Extract media metadata for on-demand download
+          let mediaInfo = null;
+          const mediaMsg = msgContent.imageMessage || msgContent.videoMessage ||
+            msgContent.audioMessage || msgContent.documentMessage || msgContent.stickerMessage;
+          if (mediaMsg && mediaType) {
+            mediaInfo = {
+              mimetype: mediaMsg.mimetype || null,
+              fileLength: mediaMsg.fileLength ? Number(mediaMsg.fileLength) : null,
+              fileName: mediaMsg.fileName || null,
+              // Store the full message for later download via downloadMediaMessage
+              _hasMedia: true,
+            };
+          }
+
+          const msgDoc = {
+            odgId: msg.key.id,
+            userId,
+            phone,
+            fromMe: msg.key.fromMe || false,
+            text: text || (mediaType ? `[${mediaType}]` : ""),
+            mediaType,
+            mediaInfo,
+            mediaUrl: null, // Will be populated when user clicks download
+            timestamp: msg.messageTimestamp
+              ? new Date(Number(msg.messageTimestamp) * 1000)
+              : new Date(),
+            pushName: msg.pushName || null,
+            // Store raw message for media download (needed by Baileys)
+            _rawMessage: mediaType ? JSON.stringify(msg) : null,
+          };
+
+          await messagesCol.updateOne(
+            { odgId: msg.key.id, userId, phone },
+            { $set: msgDoc },
+            { upsert: true }
+          );
+        } catch {}
+
         // Also capture LID → phone number mapping if available
         const participant = msg.key?.participant || "";
         const participantPn = msg.key?.participantPn || "";
@@ -560,7 +618,6 @@ function createSessionManager(db, logger, { onConnected } = {}) {
                 { $set: { lid: participant, phone: realPhone, userId, updatedAt: new Date() } },
                 { upsert: true }
               );
-              // Also save the real phone as a contact
               await contactsCol.updateOne(
                 { userId, phone: realPhone },
                 {
@@ -577,8 +634,8 @@ function createSessionManager(db, logger, { onConnected } = {}) {
 
     // History sync — Baileys v6 fires this with bulk chat/contact data
     sock.ev.on("messaging-history.set", async (data) => {
-      const { chats: syncChats, contacts: syncContacts } = data;
-      logger.info({ userId, chats: syncChats?.length, contacts: syncContacts?.length }, "History sync received");
+      const { chats: syncChats, contacts: syncContacts, messages: syncMessages } = data;
+      logger.info({ userId, chats: syncChats?.length, contacts: syncContacts?.length, messages: syncMessages?.length }, "History sync received");
 
       // Process contacts from history
       if (syncContacts && syncContacts.length > 0) {
@@ -628,6 +685,63 @@ function createSessionManager(db, logger, { onConnected } = {}) {
               { upsert: true }
             );
           } catch {}
+        }
+      }
+
+      // Process messages from history sync
+      if (syncMessages && syncMessages.length > 0) {
+        const msgBatch = [];
+        for (const item of syncMessages) {
+          const msg = item.message || item;
+          const jid = msg.key?.remoteJid || "";
+          if (!jid.endsWith("@s.whatsapp.net")) continue;
+          const phone = jid.replace("@s.whatsapp.net", "");
+          if (!phone || !/^\d+$/.test(phone)) continue;
+
+          const msgContent = msg.message || {};
+          const text =
+            msgContent.conversation ||
+            msgContent.extendedTextMessage?.text ||
+            msgContent.imageMessage?.caption ||
+            msgContent.videoMessage?.caption ||
+            msgContent.documentMessage?.caption ||
+            "";
+          const mediaType =
+            msgContent.imageMessage ? "image" :
+            msgContent.videoMessage ? "video" :
+            msgContent.audioMessage ? "audio" :
+            msgContent.documentMessage ? "document" :
+            msgContent.stickerMessage ? "sticker" :
+            null;
+
+          msgBatch.push({
+            updateOne: {
+              filter: { odgId: msg.key?.id, userId, phone },
+              update: {
+                $set: {
+                  odgId: msg.key?.id,
+                  userId,
+                  phone,
+                  fromMe: msg.key?.fromMe || false,
+                  text: text || (mediaType ? `[${mediaType}]` : ""),
+                  mediaType,
+                  timestamp: msg.messageTimestamp
+                    ? new Date(Number(msg.messageTimestamp) * 1000)
+                    : new Date(),
+                  pushName: msg.pushName || null,
+                },
+              },
+              upsert: true,
+            },
+          });
+        }
+        if (msgBatch.length > 0) {
+          try {
+            await messagesCol.bulkWrite(msgBatch, { ordered: false });
+            logger.info({ userId, count: msgBatch.length }, "Stored history messages");
+          } catch (err) {
+            logger.error({ userId, err: err.message }, "Error storing history messages");
+          }
         }
       }
     });

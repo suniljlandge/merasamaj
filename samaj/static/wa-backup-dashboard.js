@@ -269,6 +269,12 @@
 
     // Load profile pictures for visible contacts
     pageItems.forEach((c) => loadProfilePic(c.phone));
+
+    // Click handler to open chat
+    grid.querySelectorAll(".contact-card").forEach((card) => {
+      card.style.cursor = "pointer";
+      card.addEventListener("click", () => openChatPopup(card.dataset.phone));
+    });
   }
 
   async function loadProfilePic(phone) {
@@ -440,6 +446,159 @@
   const tplRefreshBtn = document.getElementById("tpl-refresh-btn");
   if (tplRefreshBtn) {
     tplRefreshBtn.addEventListener("click", loadTemplates);
+  }
+
+  // =========================================================================
+  // Chat Popup
+  // =========================================================================
+
+  async function openChatPopup(phone) {
+    // Find contact name
+    const contact = allContacts.find((c) => c.phone === phone);
+    const name = contact?.pushName || "Unknown";
+
+    // Create modal
+    let modal = document.getElementById("chat-modal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "chat-modal";
+      document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+      <div style="position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div style="position:absolute;inset:0;background:rgba(15,23,42,0.5);" id="chat-modal-backdrop"></div>
+        <div style="position:relative;width:100%;max-width:480px;height:80vh;max-height:600px;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,0.2);display:flex;flex-direction:column;overflow:hidden;">
+          <!-- Header -->
+          <div style="padding:14px 18px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:12px;flex-shrink:0;">
+            <div style="width:36px;height:36px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:16px;">👤</div>
+            <div style="flex:1;min-width:0;">
+              <p style="font-weight:600;font-size:14px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</p>
+              <p style="font-size:12px;color:#64748b;margin:0;">+${escHtml(phone)}</p>
+            </div>
+            <button type="button" id="chat-modal-close" style="width:28px;height:28px;border:none;background:#f1f5f9;border-radius:50%;font-size:16px;cursor:pointer;color:#64748b;">×</button>
+          </div>
+          <!-- Messages -->
+          <div id="chat-messages" style="flex:1;overflow-y:auto;padding:16px;background:#f8fafc;display:flex;flex-direction:column;gap:8px;">
+            <p style="text-align:center;color:#94a3b8;font-size:13px;margin:auto;">Loading messages...</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Close handlers
+    document.getElementById("chat-modal-backdrop").addEventListener("click", closeChatPopup);
+    document.getElementById("chat-modal-close").addEventListener("click", closeChatPopup);
+
+    // Fetch messages
+    try {
+      const resp = await fetch(`${API}/messages/${phone}?userId=${selectedUserId}`);
+      const data = await resp.json();
+      const messages = data.messages || [];
+      const msgContainer = document.getElementById("chat-messages");
+
+      if (messages.length === 0) {
+        msgContainer.innerHTML = '<p style="text-align:center;color:#94a3b8;font-size:13px;margin:auto;">No messages found for this contact.</p>';
+        return;
+      }
+
+      msgContainer.innerHTML = messages.map((m) => {
+        const align = m.fromMe ? "margin-left:auto;" : "margin-right:auto;";
+        const bg = m.fromMe ? "background:#dcfce7;" : "background:#fff;border:1px solid #e5e7eb;";
+        const time = m.timestamp ? new Date(m.timestamp).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }) : "";
+
+        // Media rendering
+        let mediaHtml = "";
+        if (m.mediaType) {
+          if (m.mediaUrl) {
+            // Already downloaded — show inline
+            if (m.mediaType === "image") {
+              mediaHtml = `<img src="${escHtml(m.mediaUrl)}" style="max-width:100%;border-radius:8px;margin-bottom:4px;cursor:pointer;" onclick="window.open('${escHtml(m.mediaUrl)}','_blank')" alt="image">`;
+            } else if (m.mediaType === "video") {
+              mediaHtml = `<video src="${escHtml(m.mediaUrl)}" controls style="max-width:100%;border-radius:8px;margin-bottom:4px;"></video>`;
+            } else {
+              mediaHtml = `<a href="${escHtml(m.mediaUrl)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;background:#f1f5f9;border-radius:6px;font-size:11px;color:#334155;text-decoration:none;margin-bottom:4px;">📄 Download ${m.mediaType}</a>`;
+            }
+          } else if (m.mediaInfo && m.mediaInfo._hasMedia) {
+            // Has media data but not downloaded — show skeleton + download button
+            const sizeText = m.mediaInfo.fileLength ? `(${(m.mediaInfo.fileLength / 1024).toFixed(0)} KB)` : "";
+            mediaHtml = `<div class="media-skeleton" data-msg-id="${escHtml(m.id)}" data-phone="${escHtml(phone)}" style="background:#f1f5f9;border-radius:8px;padding:12px;margin-bottom:4px;text-align:center;">
+              <div style="font-size:24px;margin-bottom:4px;">${m.mediaType === "image" ? "🖼️" : m.mediaType === "video" ? "🎬" : "📄"}</div>
+              <p style="font-size:11px;color:#64748b;margin:0 0 6px;">${m.mediaType} ${sizeText}</p>
+              <button type="button" class="media-download-btn" data-msg-id="${escHtml(m.id)}" data-phone="${escHtml(phone)}" style="padding:4px 12px;font-size:11px;font-weight:600;background:#fff;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;color:#334155;">⬇ Download</button>
+            </div>`;
+          } else {
+            // No media data available (expired)
+            mediaHtml = `<div style="background:#f8fafc;border-radius:6px;padding:8px;margin-bottom:4px;text-align:center;">
+              <span style="font-size:11px;color:#94a3b8;">📎 ${m.mediaType} (unavailable)</span>
+            </div>`;
+          }
+        }
+
+        return `<div style="max-width:80%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.4;${align}${bg}">
+          ${mediaHtml}
+          ${m.text && m.text !== `[${m.mediaType}]` ? `<span style="word-break:break-word;">${escHtml(m.text)}</span>` : (!mediaHtml ? `<span style="word-break:break-word;">${escHtml(m.text || "")}</span>` : "")}
+          <span style="display:block;font-size:10px;color:#94a3b8;margin-top:4px;text-align:right;">${time}</span>
+        </div>`;
+      }).join("");
+
+      // Wire download buttons
+      msgContainer.querySelectorAll(".media-download-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          downloadMedia(btn.dataset.msgId, btn.dataset.phone, btn);
+        });
+      });
+
+      // Scroll to bottom
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+    } catch (err) {
+      const msgContainer = document.getElementById("chat-messages");
+      if (msgContainer) {
+        msgContainer.innerHTML = `<p style="text-align:center;color:#ef4444;font-size:13px;margin:auto;">Error: ${err.message}</p>`;
+      }
+    }
+  }
+
+  async function downloadMedia(messageId, phone, btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Downloading...";
+
+    try {
+      const resp = await fetch(`${API}/messages/download-media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: selectedUserId, phone, messageId }),
+      });
+      const data = await resp.json();
+
+      if (data.error) {
+        btn.textContent = "❌ " + (data.error.includes("expired") ? "Expired" : "Failed");
+        btn.style.color = "#ef4444";
+        return;
+      }
+
+      // Replace skeleton with actual media
+      const skeleton = btn.closest(".media-skeleton");
+      if (skeleton && data.url) {
+        const mediaType = data.mediaType || "document";
+        if (mediaType === "image") {
+          skeleton.outerHTML = `<img src="${escHtml(data.url)}" style="max-width:100%;border-radius:8px;margin-bottom:4px;cursor:pointer;" onclick="window.open('${escHtml(data.url)}','_blank')" alt="image">`;
+        } else if (mediaType === "video") {
+          skeleton.outerHTML = `<video src="${escHtml(data.url)}" controls style="max-width:100%;border-radius:8px;margin-bottom:4px;"></video>`;
+        } else {
+          skeleton.outerHTML = `<a href="${escHtml(data.url)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;background:#f1f5f9;border-radius:6px;font-size:11px;color:#334155;text-decoration:none;margin-bottom:4px;">📄 Open ${mediaType}</a>`;
+        }
+      }
+    } catch (err) {
+      btn.textContent = "❌ Error";
+      btn.style.color = "#ef4444";
+    }
+  }
+
+  function closeChatPopup() {
+    const modal = document.getElementById("chat-modal");
+    if (modal) modal.innerHTML = "";
   }
 
   // =========================================================================

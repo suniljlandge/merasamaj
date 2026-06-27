@@ -359,6 +359,47 @@ def profile_pic(phone):
         return jsonify({"error": str(e)}), 500
 
 
+@wa_web_bp.route("/messages/<phone>", methods=["GET"])
+@_require_super_admin
+def get_messages(phone):
+    """Get chat messages for a contact (super admin only)."""
+    user_id = request.args.get("userId") or _get_user_id()
+    limit = request.args.get("limit", "100")
+    try:
+        resp = http_requests.get(
+            wa._url(f"/api/messages/{user_id}/{phone}"),
+            headers=wa._headers(),
+            params={"limit": limit},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e), "messages": []}), 200
+
+
+@wa_web_bp.route("/messages/download-media", methods=["POST"])
+@_require_super_admin
+def download_media():
+    """Download media for a message on-demand (super admin only)."""
+    data = request.get_json(force=True)
+    user_id = data.get("userId") or _get_user_id()
+    phone = data.get("phone", "")
+    message_id = data.get("messageId", "")
+
+    try:
+        resp = http_requests.post(
+            wa._url("/api/messages/download-media"),
+            headers=wa._headers(),
+            json={"userId": user_id, "phone": phone, "messageId": message_id},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ===========================================================================
 # Custom Templates (with admin approval)
 # ===========================================================================
