@@ -1574,10 +1574,22 @@
             'w-full h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 transition ' +
             'font-semibold text-white text-sm mb-2">' +
             'Connect WhatsApp</button>' +
-            '<p class="text-[11px] text-slate-500 text-center">Link your WhatsApp to send free</p>' +
+            '<p class="text-[11px] text-slate-500 text-center mb-2">Link your WhatsApp to send free</p>' +
             '<div id="cm-p-qr-inline-container" class="hidden mt-3 text-center">' +
               '<div id="cm-p-qr-inline-image" class="inline-block bg-white p-2 rounded-lg border border-slate-200"></div>' +
               '<p class="text-[11px] text-slate-400 mt-1">Scan with WhatsApp → Linked Devices</p>' +
+              '<details class="mt-3 text-left">' +
+                '<summary class="text-[11px] text-slate-500 cursor-pointer hover:text-slate-700">Or use Pairing Code instead</summary>' +
+                '<div class="mt-2 flex gap-2">' +
+                  '<input type="tel" id="cm-p-pair-phone" placeholder="+91 9876543210" class="flex-1 h-8 px-2 text-xs border border-slate-200 rounded-lg">' +
+                  '<button type="button" id="cm-p-pair-btn" class="h-8 px-3 text-xs font-semibold bg-slate-700 text-white rounded-lg hover:bg-slate-800">Get Code</button>' +
+                '</div>' +
+                '<div id="cm-p-pair-result" class="mt-2 text-center hidden">' +
+                  '<p class="text-xs text-slate-600">Enter this code on your phone:</p>' +
+                  '<p id="cm-p-pair-code" class="text-xl font-bold tracking-widest text-emerald-800 my-1"></p>' +
+                  '<p class="text-[10px] text-slate-400">WhatsApp → Linked Devices → Link a Device → Enter code</p>' +
+                '</div>' +
+              '</details>' +
             '</div>';
           var inlineBtn = document.getElementById("cm-p-start-qr-inline");
           if (inlineBtn) {
@@ -1585,6 +1597,52 @@
               inlineBtn.disabled = true;
               inlineBtn.textContent = "Generating QR...";
               startInlineQR(count);
+            });
+          }
+          // Pairing code button
+          var pairBtn = document.getElementById("cm-p-pair-btn");
+          if (pairBtn) {
+            pairBtn.addEventListener("click", function () {
+              var phone = (document.getElementById("cm-p-pair-phone").value || "").trim();
+              if (!phone) return;
+              pairBtn.disabled = true;
+              pairBtn.textContent = "...";
+              fetch("/api/wa-web/connect", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ phoneNumber: phone }),
+              })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                  if (data.pairingCode) {
+                    var resultDiv = document.getElementById("cm-p-pair-result");
+                    var codeEl = document.getElementById("cm-p-pair-code");
+                    if (resultDiv) resultDiv.classList.remove("hidden");
+                    if (codeEl) codeEl.textContent = data.pairingCode;
+                    // Poll for connection
+                    var pairPoll = setInterval(function () {
+                      fetch("/api/wa-web/status", { credentials: "same-origin" })
+                        .then(function (r) { return r.json(); })
+                        .then(function (s) {
+                          if (s.status === "connected") {
+                            clearInterval(pairPoll);
+                            checkWebSendOption(count);
+                          }
+                        }).catch(function () {});
+                    }, 2000);
+                    setTimeout(function () { clearInterval(pairPoll); }, 120000);
+                  } else if (data.error) {
+                    alert(data.error);
+                  }
+                  pairBtn.disabled = false;
+                  pairBtn.textContent = "Get Code";
+                })
+                .catch(function (err) {
+                  alert("Failed: " + err.message);
+                  pairBtn.disabled = false;
+                  pairBtn.textContent = "Get Code";
+                });
             });
           }
         }
