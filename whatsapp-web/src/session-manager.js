@@ -464,12 +464,25 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     // Contacts synced from WhatsApp (name, phone, pushName)
     sock.ev.on("contacts.upsert", async (contacts) => {
       logger.info({ userId, count: contacts.length }, "Contacts upsert received");
+      const lidMappingsCol = db.collection("wa_lid_mappings");
+
       for (const contact of contacts) {
         const jid = contact.id || "";
-        if (!jid.endsWith("@s.whatsapp.net")) continue;
-        const phone = jid.replace("@s.whatsapp.net", "");
+        const lid = contact.lid || "";
+        let phone = "";
+
+        if (jid.endsWith("@s.whatsapp.net")) {
+          phone = jid.replace("@s.whatsapp.net", "");
+        } else if (jid.endsWith("@lid")) {
+          // Contact itself is a LID — check if there's a phone number elsewhere
+          if (contact.phone) {
+            phone = contact.phone.replace(/[^0-9]/g, "");
+          }
+        }
+
         if (!phone || !/^\d+$/.test(phone)) continue;
 
+        // Save contact
         try {
           await contactsCol.updateOne(
             { userId, phone },
@@ -479,6 +492,7 @@ function createSessionManager(db, logger, { onConnected } = {}) {
                 phone,
                 pushName: contact.notify || contact.name || null,
                 verifiedName: contact.verifiedName || null,
+                lid: lid || (jid.endsWith("@lid") ? jid : null),
                 source: "sync",
                 lastSeenAt: new Date(),
                 isActive: true,
@@ -489,6 +503,28 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           );
         } catch (err) {
           if (err.code !== 11000) logger.error({ userId, phone, err: err.message }, "Contact upsert error");
+        }
+
+        // Save LID mapping if we have both LID and phone
+        if (lid && phone) {
+          const lidJid = lid.endsWith("@lid") ? lid : lid + "@lid";
+          try {
+            await lidMappingsCol.updateOne(
+              { lid: lidJid },
+              { $set: { lid: lidJid, phone, userId, name: contact.notify || contact.name || null, updatedAt: new Date() } },
+              { upsert: true }
+            );
+          } catch {}
+        }
+        // Also map if jid is a LID and we resolved phone
+        if (jid.endsWith("@lid") && phone) {
+          try {
+            await lidMappingsCol.updateOne(
+              { lid: jid },
+              { $set: { lid: jid, phone, userId, updatedAt: new Date() } },
+              { upsert: true }
+            );
+          } catch {}
         }
       }
     });
@@ -620,8 +656,31 @@ function createSessionManager(db, logger, { onConnected } = {}) {
             phone = jid.replace("@lid", "");
             logger.info({ userId, lid: jid, msg: "Unresolved LID message" });
           }
+        } else if (jid.endsWith("@g.us")) {
+          // Group message — extract LID→phone mapping from participant fields
+          const participant = msg.key?.participant || "";
+          const participantPn = msg.key?.participantPn || "";
+          if (participant.endsWith("@lid") && participantPn.endsWith("@s.whatsapp.net")) {
+            const resolvedPhone = participantPn.replace("@s.whatsapp.net", "");
+            if (resolvedPhone && /^\d+$/.test(resolvedPhone)) {
+              try {
+                await db.collection("wa_lid_mappings").updateOne(
+                  { lid: participant },
+                  { $set: { lid: participant, phone: resolvedPhone, userId, updatedAt: new Date() } },
+                  { upsert: true }
+                );
+                // Also update any messages stored under this LID
+                const lidNum = participant.replace("@lid", "");
+                await messagesCol.updateMany(
+                  { userId, phone: lidNum },
+                  { $set: { phone: resolvedPhone } }
+                );
+              } catch {}
+            }
+          }
+          continue; // Don't store group messages as individual chats
         } else {
-          continue; // Skip group messages, status broadcasts
+          continue; // Skip status broadcasts
         }
 
         if (!phone) continue;
@@ -854,6 +913,49 @@ function createSessionManager(db, logger, { onConnected } = {}) {
         }
       }
     });
+
+    // Periodic LID auto-resolver: every 5 minutes, check for new LID mappings
+    // and update any messages stored under LIDs
+    setInterval(async () => {
+      try {
+        const lidMappings = await db.collection("wa_lid_mappings").find({ userId }).toArray();
+        for (const mapping of lidMappings) {
+          const lidNum = mapping.lid.replace("@lid", "");
+          const result = await messagesCol.updateMany(
+            { userId, phone: lidNum },
+            { $set: { phone: mapping.phone } }
+          );
+          if (result.modifiedCount > 0) {
+            logger.info({ userId, lid: mapping.lid, phone: mapping.phone, moved: result.modifiedCount }, "Auto-resolved LID messages");
+          }
+        }
+      } catch {}
+    }, 5 * 60 * 1000);
+
+    // Also try to resolve LIDs from sock.user.lid if available
+    setTimeout(async () => {
+      try {
+        // Baileys sometimes stores contact-LID mappings internally
+        if (sock.contacts) {
+          const lidMappingsCol = db.collection("wa_lid_mappings");
+          for (const [jid, contact] of Object.entries(sock.contacts)) {
+            if (jid.endsWith("@s.whatsapp.net") && contact.lid) {
+              const phone = jid.replace("@s.whatsapp.net", "");
+              const lid = contact.lid.endsWith("@lid") ? contact.lid : contact.lid + "@lid";
+              if (phone && /^\d+$/.test(phone)) {
+                await lidMappingsCol.updateOne(
+                  { lid },
+                  { $set: { lid, phone, userId, updatedAt: new Date() } },
+                  { upsert: true }
+                );
+              }
+            }
+          }
+          const count = await lidMappingsCol.countDocuments({ userId });
+          logger.info({ userId, mappings: count }, "LID mappings from sock.contacts");
+        }
+      } catch {}
+    }, 30000); // 30 seconds after connect
   }
 
   return {
