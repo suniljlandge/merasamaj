@@ -49,6 +49,8 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       version,
       auth: state,
       printQRInTerminal: false,
+      syncFullHistory: true,
+      shouldSyncHistoryMessage: () => true,
       logger: logger.child({ module: "baileys", userId }),
     });
 
@@ -158,6 +160,8 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       version,
       auth: state,
       printQRInTerminal: false,
+      syncFullHistory: true,
+      shouldSyncHistoryMessage: () => true,
       logger: logger.child({ module: "baileys", userId }),
     });
 
@@ -253,6 +257,8 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       version,
       auth: state,
       printQRInTerminal: false,
+      syncFullHistory: true,
+      shouldSyncHistoryMessage: () => true,
       logger: logger.child({ module: "baileys", userId }),
     });
 
