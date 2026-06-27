@@ -85,6 +85,14 @@ function createSessionManager(db, logger, { onConnected } = {}) {
         );
         logger.info({ userId }, "WhatsApp session connected");
 
+        // Send presence "available" to receive messages
+        try {
+          await sock.sendPresenceUpdate("available");
+        } catch {}
+
+        // Keep presence alive every 3 minutes
+        startPresenceKeepAlive(userId, sock);
+
         // Auto-trigger background backup on connect
         if (onConnected) onConnected(userId, sock);
       }
@@ -414,6 +422,35 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     );
 
     return { success: true, jid, sentAt: new Date() };
+  }
+
+  /**
+   * Keep WhatsApp presence "available" so messages are delivered to this device.
+   */
+  const presenceIntervals = new Map();
+
+  function startPresenceKeepAlive(userId, sock) {
+    // Clear any existing interval
+    if (presenceIntervals.has(userId)) {
+      clearInterval(presenceIntervals.get(userId));
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        if (connectionStatus.get(userId) === "connected" && activeSockets.has(userId)) {
+          await sock.sendPresenceUpdate("available");
+        } else {
+          clearInterval(interval);
+          presenceIntervals.delete(userId);
+        }
+      } catch {
+        // Socket might be dead
+        clearInterval(interval);
+        presenceIntervals.delete(userId);
+      }
+    }, 3 * 60 * 1000); // Every 3 minutes
+
+    presenceIntervals.set(userId, interval);
   }
 
   /**
