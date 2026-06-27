@@ -353,3 +353,24 @@ def get_profile_pic_history(user_id: str, phone: str) -> list:
     )
     resp.raise_for_status()
     return resp.json().get("history", [])
+
+
+def get_profile_pics_batch(user_id: str, phones: list) -> dict:
+    """
+    Get signed URLs for multiple contacts' profile pictures in one call.
+
+    Args:
+        user_id: User ID.
+        phones: List of phone numbers.
+
+    Returns:
+        Dict mapping phone -> signed URL.
+    """
+    resp = requests.post(
+        _url("/api/backup/profile-pics-batch"),
+        headers=_headers(),
+        json={"userId": user_id, "phones": phones},
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json().get("urls", {})

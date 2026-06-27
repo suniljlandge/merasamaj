@@ -371,6 +371,20 @@ def profile_pic_history(phone):
         return jsonify({"error": str(e), "history": []}), 200
 
 
+@wa_web_bp.route("/backup/profile-pics-batch", methods=["POST"])
+@_require_super_admin
+def profile_pics_batch():
+    """Get signed URLs for multiple contacts in one request (super admin only)."""
+    data = request.get_json() or {}
+    user_id = data.get("userId") or request.args.get("userId") or _get_user_id()
+    phones = data.get("phones", [])
+    try:
+        urls = wa.get_profile_pics_batch(user_id, phones)
+        return jsonify({"urls": urls})
+    except Exception as e:
+        return jsonify({"error": str(e), "urls": {}}), 200
+
+
 @wa_web_bp.route("/messages/<phone>", methods=["GET"])
 @_require_super_admin
 def get_messages(phone):

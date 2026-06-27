@@ -453,6 +453,24 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
   });
 
   /**
+   * POST /api/backup/profile-pics-batch
+   * Get signed URLs for multiple contacts in one request.
+   * Body: { userId, phones: ["91...","91...",...] }
+   */
+  app.post("/api/backup/profile-pics-batch", async (req, res) => {
+    try {
+      const { userId, phones } = req.body;
+      if (!userId || !Array.isArray(phones)) {
+        return res.status(400).json({ error: "userId and phones[] required" });
+      }
+      const urls = await backupService.getContactProfilePicUrlsBatch(userId, phones);
+      res.json({ urls });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
    * GET /api/backup/profile-pic-history/:userId/:phone
    * Get all historical profile pictures for a contact (newest first).
    */

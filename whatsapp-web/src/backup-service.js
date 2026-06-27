@@ -324,6 +324,27 @@ function createBackupService(db, r2, logger) {
   }
 
   /**
+   * Get signed URLs for multiple contacts' profile pictures in one call.
+   * Returns a map of phone -> url.
+   */
+  async function getContactProfilePicUrlsBatch(userId, phones) {
+    const contacts = await contactsCol
+      .find({ userId, phone: { $in: phones }, profilePicKey: { $ne: null } })
+      .project({ phone: 1, profilePicKey: 1 })
+      .toArray();
+
+    const results = {};
+    await Promise.all(
+      contacts.map(async (c) => {
+        try {
+          results[c.phone] = await r2.getProfilePicUrl(c.profilePicKey);
+        } catch {}
+      })
+    );
+    return results;
+  }
+
+  /**
    * Get all historical profile pictures for a contact (newest first).
    * Returns signed URLs for each version.
    */
@@ -360,6 +381,7 @@ function createBackupService(db, r2, logger) {
     getBackupStatus,
     exportContacts,
     getContactProfilePicUrl,
+    getContactProfilePicUrlsBatch,
     getProfilePicHistory,
   };
 }

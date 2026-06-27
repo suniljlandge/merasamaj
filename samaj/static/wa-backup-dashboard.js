@@ -267,8 +267,8 @@
       pagination.style.display = "none";
     }
 
-    // Load profile pictures for visible contacts
-    pageItems.forEach((c) => loadProfilePic(c.phone));
+    // Load profile pictures for visible contacts (parallel batch)
+    loadProfilePicsBatch(pageItems.map((c) => c.phone));
 
     // Click handler: pic opens lightbox, rest of card opens chat
     grid.querySelectorAll(".contact-card").forEach((card) => {
@@ -285,6 +285,65 @@
   }
 
   // =========================================================================
+  // Fast Profile Pic Loading — batch + parallel + cached
+  // =========================================================================
+
+  const picUrlCache = new Map(); // phone -> url
+
+  async function loadProfilePicsBatch(phones) {
+    // Filter out already-cached phones
+    const uncached = phones.filter((p) => !picUrlCache.has(p));
+
+    // Apply cached ones immediately
+    phones.forEach((p) => { if (picUrlCache.has(p)) applyPicToEl(p, picUrlCache.get(p)); });
+
+    if (!uncached.length) return;
+
+    // Single batch request for all uncached pics
+    try {
+      const resp = await fetch(`${API}/backup/profile-pics-batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: selectedUserId, phones: uncached }),
+      });
+      const data = await resp.json();
+      const urls = data.urls || {};
+      for (const [phone, url] of Object.entries(urls)) {
+        picUrlCache.set(phone, url);
+        applyPicToEl(phone, url);
+      }
+    } catch {
+      // Fallback: load individually in parallel
+      await Promise.allSettled(uncached.map((p) => loadProfilePicSingle(p)));
+    }
+  }
+
+  async function loadProfilePicSingle(phone) {
+    try {
+      const resp = await fetch(`${API}/backup/profile-pic/${phone}?userId=${selectedUserId}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data.url) {
+        picUrlCache.set(phone, data.url);
+        applyPicToEl(phone, data.url);
+      }
+    } catch {}
+  }
+
+  function applyPicToEl(phone, url) {
+    const el = document.getElementById(`pic-${phone}`);
+    if (!el) return;
+    const img = new Image();
+    img.onload = () => {
+      el.innerHTML = "";
+      img.style.cssText = "width:48px;height:48px;border-radius:50%;object-fit:cover;";
+      img.alt = "Profile";
+      el.appendChild(img);
+    };
+    img.src = url;
+  }
+
+  // =========================================================================
   // Profile Picture Lightbox Modal with History
   // =========================================================================
 
@@ -293,21 +352,9 @@
     const existing = document.getElementById("profile-pic-modal");
     if (existing) existing.remove();
 
-    // Fetch history
-    let history = [];
-    try {
-      const resp = await fetch(`${API}/backup/profile-pic-history/${phone}?userId=${selectedUserId}`);
-      const data = await resp.json();
-      history = data.history || [];
-    } catch {}
-
-    if (!history.length) {
-      // Fallback: just show current pic
-      const picEl = document.getElementById(`pic-${phone}`);
-      const img = picEl?.querySelector("img");
-      if (img) history = [{ url: img.src, capturedAt: null }];
-      else return;
-    }
+    // Show modal IMMEDIATELY with the already-cached pic
+    const cachedUrl = picUrlCache.get(phone);
+    let history = cachedUrl ? [{ url: cachedUrl, capturedAt: null }] : [];
 
     let currentIdx = 0;
 
@@ -316,7 +363,7 @@
     modal.style.cssText = `
       position:fixed;inset:0;z-index:9999;display:flex;align-items:center;
       justify-content:center;background:rgba(0,0,0,0.8);backdrop-filter:blur(4px);
-      animation:fadeIn 0.2s ease;
+      animation:fadeIn 0.15s ease;
     `;
 
     function renderModal() {
@@ -334,14 +381,14 @@
           ${counterText ? `<p style="color:#999;margin-top:4px;font-size:12px;">${counterText}</p>` : ""}
           ${history.length > 1 ? `
             <div style="display:flex;justify-content:center;gap:16px;margin-top:12px;">
-              <button id="pp-prev" style="
+              <button id="pp-prev" ${currentIdx >= history.length - 1 ? 'disabled' : ''} style="
                 padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);
-                color:#fff;font-size:14px;cursor:pointer;backdrop-filter:blur(4px);
-              " ${currentIdx >= history.length - 1 ? "disabled style=\"opacity:0.3;padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;cursor:not-allowed;\"" : ""}>← Older</button>
-              <button id="pp-next" style="
+                color:#fff;font-size:14px;cursor:pointer;${currentIdx >= history.length - 1 ? 'opacity:0.3;cursor:not-allowed;' : ''}
+              ">← Older</button>
+              <button id="pp-next" ${currentIdx <= 0 ? 'disabled' : ''} style="
                 padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);
-                color:#fff;font-size:14px;cursor:pointer;backdrop-filter:blur(4px);
-              " ${currentIdx <= 0 ? "disabled style=\"opacity:0.3;padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;cursor:not-allowed;\"" : ""}>Newer →</button>
+                color:#fff;font-size:14px;cursor:pointer;${currentIdx <= 0 ? 'opacity:0.3;cursor:not-allowed;' : ''}
+              ">Newer →</button>
             </div>
           ` : ""}
           <button id="pp-close" style="
@@ -353,40 +400,40 @@
         </div>
       `;
 
-      // Attach button listeners
-      modal.querySelector("#pp-close").addEventListener("click", () => modal.remove());
+      modal.querySelector("#pp-close").addEventListener("click", closeModal);
       const prevBtn = modal.querySelector("#pp-prev");
       const nextBtn = modal.querySelector("#pp-next");
       if (prevBtn && !prevBtn.disabled) prevBtn.addEventListener("click", () => { currentIdx++; renderModal(); });
       if (nextBtn && !nextBtn.disabled) nextBtn.addEventListener("click", () => { currentIdx--; renderModal(); });
     }
 
-    renderModal();
+    function closeModal() {
+      modal.remove();
+      document.removeEventListener("keydown", onKey);
+    }
 
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal) modal.remove();
-    });
-    document.body.appendChild(modal);
-
-    // Keyboard navigation
     const onKey = (e) => {
-      if (e.key === "Escape") { modal.remove(); document.removeEventListener("keydown", onKey); }
+      if (e.key === "Escape") closeModal();
       if (e.key === "ArrowLeft" && currentIdx < history.length - 1) { currentIdx++; renderModal(); }
       if (e.key === "ArrowRight" && currentIdx > 0) { currentIdx--; renderModal(); }
     };
-    document.addEventListener("keydown", onKey);
-  }
 
-  async function loadProfilePic(phone) {
+    // Show immediately with cached pic
+    if (history.length) renderModal();
+    modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+    document.body.appendChild(modal);
+    document.addEventListener("keydown", onKey);
+
+    // Load full history in background, then re-render with navigation
     try {
-      const resp = await fetch(`${API}/backup/profile-pic/${phone}?userId=${selectedUserId}`);
-      if (!resp.ok) return;
+      const resp = await fetch(`${API}/backup/profile-pic-history/${phone}?userId=${selectedUserId}`);
       const data = await resp.json();
-      if (data.url) {
-        const el = document.getElementById(`pic-${phone}`);
-        if (el) {
-          el.innerHTML = `<img src="${data.url}" alt="Profile" style="width:48px;height:48px;border-radius:50%;object-fit:cover;">`;
-        }
+      if (data.history && data.history.length > 0) {
+        history = data.history;
+        currentIdx = 0;
+        // Preload first few images for instant switching
+        history.slice(0, 4).forEach((entry) => { const i = new Image(); i.src = entry.url; });
+        if (document.getElementById("profile-pic-modal")) renderModal();
       }
     } catch {}
   }
