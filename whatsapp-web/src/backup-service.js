@@ -117,6 +117,7 @@ function createBackupService(db, r2, logger) {
       }
 
       // Method 2: Get contacts from incoming/outgoing messages via sock.contacts
+      const contactNames = new Map(); // phone -> name
       try {
         if (sock.contacts) {
           for (const [jid, contact] of Object.entries(sock.contacts)) {
@@ -124,6 +125,8 @@ function createBackupService(db, r2, logger) {
             const phone = jid.replace("@s.whatsapp.net", "");
             if (phone && !phone.includes("-") && /^\d+$/.test(phone)) {
               contactPhones.add(phone);
+              const name = contact.notify || contact.name || contact.verifiedName || null;
+              if (name) contactNames.set(phone, name);
             }
           }
         }
@@ -131,23 +134,27 @@ function createBackupService(db, r2, logger) {
         logger.error({ userId, err: chatErr.message }, "Error fetching chat contacts");
       }
 
-      logger.info({ userId, contactCount: contactPhones.size }, "Contacts collected");
+      logger.info({ userId, contactCount: contactPhones.size, withNames: contactNames.size }, "Contacts collected");
 
       // Save each contact
       for (const phone of contactPhones) {
         try {
+          const name = contactNames.get(phone) || null;
           const existing = await contactsCol.findOne({ userId, phone });
           if (existing) {
+            const $set = { lastSeenAt: new Date(), isActive: true };
+            // Update pushName if we have one and existing doesn't
+            if (name && !existing.pushName) $set.pushName = name;
             await contactsCol.updateOne(
               { userId, phone },
-              { $set: { lastSeenAt: new Date(), isActive: true } }
+              { $set }
             );
             results.contacts.updated++;
           } else {
             await contactsCol.insertOne({
               userId,
               phone,
-              pushName: null,
+              pushName: name,
               source: "group",
               profilePicKey: null,
               profilePicHash: null,

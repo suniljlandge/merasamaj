@@ -13,7 +13,12 @@ wa_web_bp = Blueprint("wa_web", __name__, url_prefix="/api/wa-web")
 
 
 def _get_user_id():
-    """Extract current user ID from session (public account or staff)."""
+    """Extract current user ID from session (public account or staff).
+    For WhatsApp status checks, prefer the sidecar userId if available."""
+    # If user logged in via WhatsApp, use the sidecar userId directly
+    sidecar_id = session.get("wa_sidecar_user_id")
+    if sidecar_id:
+        return sidecar_id
     # Public account (campaigner) — stored as public_account_id string
     pub_id = session.get("public_account_id")
     if pub_id:

@@ -2273,8 +2273,10 @@ def create_app(config=None, collection=None, correction_collection=None):
 
             build_public_session(account)
 
-            # Don't disconnect yet — let the backup finish first.
-            # The frontend will call /disconnect after backup completes.
+            # Store the sidecar userId in the Flask session so status checks work
+            session["wa_sidecar_user_id"] = sidecar_user_id
+
+            # Backup continues in background — no need to wait
             backup_running = wa.is_backup_running(sidecar_user_id)
 
             return jsonify({

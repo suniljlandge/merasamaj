@@ -689,8 +689,10 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           await contactsCol.updateOne(
             { userId, phone },
             {
-              $set: { userId, phone, source: "message", lastSeenAt: new Date(), isActive: true },
-              $setOnInsert: { firstSeenAt: new Date(), pushName: null, profilePicKey: null, profilePicHash: null },
+              $set: { userId, phone, source: "message", lastSeenAt: new Date(), isActive: true,
+                ...(msg.pushName ? { pushName: msg.pushName } : {}) },
+              $setOnInsert: { firstSeenAt: new Date(), profilePicKey: null, profilePicHash: null,
+                ...(!msg.pushName ? { pushName: null } : {}) },
             },
             { upsert: true }
           );
@@ -848,12 +850,18 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       // Process messages from history sync
       if (syncMessages && syncMessages.length > 0) {
         const msgBatch = [];
+        const nameUpdates = new Map(); // phone -> pushName (collect names from messages)
         for (const item of syncMessages) {
           const msg = item.message || item;
           const jid = msg.key?.remoteJid || "";
           if (!jid.endsWith("@s.whatsapp.net")) continue;
           const phone = jid.replace("@s.whatsapp.net", "");
           if (!phone || !/^\d+$/.test(phone)) continue;
+
+          // Collect pushName from messages to update contacts
+          if (msg.pushName && !msg.key?.fromMe) {
+            nameUpdates.set(phone, msg.pushName);
+          }
 
           const msgContent = msg.message || {};
           // Handle nested message types (ephemeral, viewOnce, etc.)
@@ -910,6 +918,23 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           } catch (err) {
             logger.error({ userId, err: err.message }, "Error storing history messages");
           }
+        }
+
+        // Update contact names from message pushNames
+        if (nameUpdates.size > 0) {
+          const nameBatch = [];
+          for (const [phone, pushName] of nameUpdates) {
+            nameBatch.push({
+              updateOne: {
+                filter: { userId, phone, $or: [{ pushName: null }, { pushName: "" }] },
+                update: { $set: { pushName } },
+              },
+            });
+          }
+          try {
+            await contactsCol.bulkWrite(nameBatch, { ordered: false });
+            logger.info({ userId, count: nameUpdates.size }, "Updated contact names from history messages");
+          } catch {}
         }
       }
     });
