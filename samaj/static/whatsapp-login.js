@@ -275,11 +275,10 @@ async function pollWaStatus() {
     // Check if verified / connected
     if (body.status === "verified" || body.ok === true) {
       if (!waVerified) {
-        // First time seeing verified status
         waVerified = true;
         waRedirectTo = body.redirectTo || "/";
 
-        // Hide pairing/QR panels, show backup status
+        // Hide pairing/QR panels
         if (waPairingPanel) waPairingPanel.hidden = true;
         if (waQrPanel) waQrPanel.hidden = true;
         if (waStartButtons) waStartButtons.hidden = true;
@@ -287,25 +286,13 @@ async function pollWaStatus() {
         if (waMobileInput) waMobileInput.disabled = true;
       }
 
-      // Check backup status
-      if (body.backupRunning) {
-        setWaStatus("✓ WhatsApp verified! Backing up contacts... Please wait.", false);
-        // Keep polling to check when backup finishes
-        return;
-      }
-
-      // Backup done — disconnect and redirect
-      setWaStatus("✓ Backup complete! Redirecting...", false);
+      // Redirect immediately — backup continues in the background on the server
+      setWaStatus("✓ WhatsApp verified! Redirecting...", false);
       stopWaPolling();
-
-      // Disconnect the session (fire and forget)
-      fetch("/api/public/whatsapp-login/disconnect/" + waCurrentSessionId, {
-        method: "POST",
-      }).catch(function () {});
 
       setTimeout(function () {
         window.location = waRedirectTo;
-      }, 800);
+      }, 600);
       return;
     }
 
