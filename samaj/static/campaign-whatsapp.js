@@ -104,8 +104,9 @@
         loadStats();
         if (ddAction) {
           ddAction.innerHTML =
-            '<button type="button" id="wa-dd-disconnect" class="w-full text-center text-xs text-red-500 hover:text-red-700 font-medium py-1.5">Disconnect</button>';
-          document.getElementById("wa-dd-disconnect").addEventListener("click", doDisconnect);
+            '<button type="button" id="wa-dd-disconnect" class="w-full text-center text-xs text-red-500 hover:text-red-700 font-medium py-1.5" disabled style="opacity:0.4;cursor:not-allowed;">Disconnect</button>';
+          // Check if backup is running before enabling disconnect
+          checkBackupBeforeDisconnect();
         }
       } else {
         if (ddStats) ddStats.classList.add("hidden");
@@ -119,6 +120,35 @@
           document.getElementById("wa-dd-connect-qr").addEventListener("click", doConnectQR);
         }
       }
+    }
+
+    function checkBackupBeforeDisconnect() {
+      fetch(API + "/backup/running", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var btn = document.getElementById("wa-dd-disconnect");
+          var isRunning = data.backupRunning || false;
+
+          if (!isRunning) {
+            if (btn) {
+              btn.disabled = false;
+              btn.style.opacity = "1";
+              btn.style.cursor = "pointer";
+              btn.addEventListener("click", doDisconnect);
+            }
+          } else {
+            setTimeout(checkBackupBeforeDisconnect, 3000);
+          }
+        })
+        .catch(function () {
+          var btn = document.getElementById("wa-dd-disconnect");
+          if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+            btn.addEventListener("click", doDisconnect);
+          }
+        });
     }
 
     function loadStats() {

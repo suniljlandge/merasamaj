@@ -130,6 +130,18 @@ def status():
         return jsonify({"error": str(e), "status": "unavailable"}), 200
 
 
+@wa_web_bp.route("/backup/running", methods=["GET"])
+@_require_auth
+def backup_running():
+    """Check if backup is currently in progress for the current user."""
+    user_id = _get_user_id()
+    try:
+        running = wa.is_backup_running(user_id)
+        return jsonify({"backupRunning": running})
+    except Exception:
+        return jsonify({"backupRunning": False})
+
+
 @wa_web_bp.route("/disconnect", methods=["POST"])
 @_require_auth
 def disconnect():
