@@ -406,6 +406,15 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
   });
 
   /**
+   * GET /api/backup/running/:userId
+   * Check if a backup is currently in progress for a user.
+   */
+  app.get("/api/backup/running/:userId", (req, res) => {
+    const running = backupService.isBackupRunning(req.params.userId);
+    res.json({ userId: req.params.userId, running });
+  });
+
+  /**
    * GET /api/backup/contacts/:userId
    * Export all backed-up contacts for a user.
    * Query: ?format=json|csv

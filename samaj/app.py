@@ -1541,6 +1541,12 @@ def create_app(config=None, collection=None, correction_collection=None):
                     }),
                     test_mode=app.config.get("OTP_TEST_MODE", False),
                 ),
+                whatsapp_login_enabled=is_whatsapp_login_enabled(
+                    get_settings_collection().find_one({
+                        "key": OTP_SETTINGS_KEY
+                    }),
+                    test_mode=app.config.get("OTP_TEST_MODE", False),
+                ),
             )
 
         payload = request.get_json()
@@ -1980,6 +1986,358 @@ def create_app(config=None, collection=None, correction_collection=None):
             ),
             "redirectTo": get_redirect_for_account(account),
         })
+
+    # =======================================================================
+    # WhatsApp Login (QR + Pairing Code)
+    # =======================================================================
+
+    @app.post("/api/public/whatsapp-login/start")
+    def start_whatsapp_login():
+        """Start a WhatsApp login session. Returns a pairing code and session ID.
+        The user links their WhatsApp to verify ownership of the phone number."""
+        from . import whatsapp_web as wa
+
+        # Check if WhatsApp login is enabled
+        settings_collection = get_settings_collection()
+        existing_settings = settings_collection.find_one({
+            "key": OTP_SETTINGS_KEY
+        })
+        if not is_whatsapp_login_enabled(
+            existing_settings,
+            test_mode=app.config.get("OTP_TEST_MODE", False),
+        ):
+            return jsonify({
+                "error": "WhatsApp login is not enabled."
+            }), 403
+
+        # Check if the sidecar service is available
+        if not wa.is_service_available():
+            return jsonify({
+                "error": "WhatsApp service is temporarily unavailable."
+            }), 503
+
+        payload = request.get_json(silent=True) or {}
+        mobile_number = normalize_public_mobile(
+            payload.get("mobileNumber")
+        )
+
+        if not mobile_number:
+            return jsonify({
+                "error": "Mobile number required"
+            }), 400
+
+        # Generate a temporary login session ID
+        import uuid
+        login_session_id = uuid.uuid4().hex
+
+        # Normalize phone: add country code if needed
+        phone_clean = mobile_number
+        if len(phone_clean) == 10 and phone_clean[0] in "6789":
+            phone_clean = "91" + phone_clean
+
+        # Use phone-based sidecar userId so backup data is tied to the phone
+        sidecar_user_id = f"login_{phone_clean}"
+
+        try:
+            result = wa.connect_session(
+                sidecar_user_id,
+                phone_clean,
+            )
+        except Exception as e:
+            return jsonify({
+                "error": f"Failed to start WhatsApp session: {str(e)}"
+            }), 500
+
+        # Store the login session mapping in a temporary collection
+        wa_login_collection = get_collection().database["wa_login_sessions"]
+        now = now_utc()
+        wa_login_collection.update_one(
+            {"sessionId": login_session_id},
+            {"$set": {
+                "sessionId": login_session_id,
+                "mobileNumber": mobile_number,
+                "phoneWithCode": phone_clean,
+                "sidecarUserId": sidecar_user_id,
+                "pairingCode": result.get("pairingCode"),
+                "status": result.get("status", "connecting"),
+                "createdAt": now,
+                "expiresAt": now + timedelta(minutes=5),
+                "verifiedAt": None,
+            }},
+            upsert=True,
+        )
+
+        return jsonify({
+            "ok": True,
+            "sessionId": login_session_id,
+            "pairingCode": result.get("pairingCode"),
+            "status": result.get("status", "connecting"),
+            "message": result.get("message", ""),
+        })
+
+    @app.post("/api/public/whatsapp-login/start-qr")
+    def start_whatsapp_login_qr():
+        """Start a WhatsApp QR-code login session."""
+        from . import whatsapp_web as wa
+
+        # Check if WhatsApp login is enabled
+        settings_collection = get_settings_collection()
+        existing_settings = settings_collection.find_one({
+            "key": OTP_SETTINGS_KEY
+        })
+        if not is_whatsapp_login_enabled(
+            existing_settings,
+            test_mode=app.config.get("OTP_TEST_MODE", False),
+        ):
+            return jsonify({
+                "error": "WhatsApp login is not enabled."
+            }), 403
+
+        if not wa.is_service_available():
+            return jsonify({
+                "error": "WhatsApp service is temporarily unavailable."
+            }), 503
+
+        payload = request.get_json(silent=True) or {}
+        mobile_number = normalize_public_mobile(
+            payload.get("mobileNumber")
+        )
+
+        if not mobile_number:
+            return jsonify({
+                "error": "Mobile number required"
+            }), 400
+
+        import uuid
+        login_session_id = uuid.uuid4().hex
+
+        phone_clean = mobile_number
+        if len(phone_clean) == 10 and phone_clean[0] in "6789":
+            phone_clean = "91" + phone_clean
+
+        # Use phone-based sidecar userId so backup data is tied to the phone
+        sidecar_user_id = f"login_{phone_clean}"
+
+        try:
+            import requests as http_requests
+            resp = http_requests.post(
+                wa._url("/api/session/connect-qr"),
+                headers=wa._headers(),
+                json={"userId": sidecar_user_id},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+        except Exception as e:
+            return jsonify({
+                "error": f"Failed to start WhatsApp QR session: {str(e)}"
+            }), 500
+
+        # Store the login session
+        wa_login_collection = get_collection().database["wa_login_sessions"]
+        now = now_utc()
+        wa_login_collection.update_one(
+            {"sessionId": login_session_id},
+            {"$set": {
+                "sessionId": login_session_id,
+                "mobileNumber": mobile_number,
+                "phoneWithCode": phone_clean,
+                "sidecarUserId": sidecar_user_id,
+                "pairingCode": None,
+                "qr": result.get("qr"),
+                "status": result.get("status", "waiting_qr"),
+                "createdAt": now,
+                "expiresAt": now + timedelta(minutes=5),
+                "verifiedAt": None,
+            }},
+            upsert=True,
+        )
+
+        return jsonify({
+            "ok": True,
+            "sessionId": login_session_id,
+            "qr": result.get("qr"),
+            "status": result.get("status", "waiting_qr"),
+            "message": result.get("message", ""),
+        })
+
+    @app.get("/api/public/whatsapp-login/status/<session_id>")
+    def whatsapp_login_status(session_id):
+        """Poll the status of a WhatsApp login session.
+        When status is 'connected', the login is verified.
+        Also reports backup progress so the frontend knows when disconnect is safe."""
+        from . import whatsapp_web as wa
+
+        wa_login_collection = get_collection().database["wa_login_sessions"]
+        login_session = wa_login_collection.find_one({
+            "sessionId": session_id
+        })
+
+        if not login_session:
+            return jsonify({
+                "error": "Session not found"
+            }), 404
+
+        sidecar_user_id = login_session.get(
+            "sidecarUserId",
+            f"login_{session_id}",
+        )
+
+        # Check expiry (only before verification)
+        now = now_utc()
+        if not login_session.get("verifiedAt"):
+            expires_at = as_utc_datetime(
+                login_session.get("expiresAt")
+            )
+            if expires_at and now > expires_at:
+                return jsonify({
+                    "status": "expired",
+                    "error": "Session expired"
+                }), 400
+
+        # If already verified, report status + backup progress
+        if login_session.get("verifiedAt"):
+            backup_running = wa.is_backup_running(sidecar_user_id)
+            return jsonify({
+                "status": "verified",
+                "ok": True,
+                "backupRunning": backup_running,
+            })
+
+        # Check the sidecar for the real-time status
+        try:
+            result = wa.get_session_status(sidecar_user_id)
+            current_status = result.get("status", "connecting")
+        except Exception:
+            current_status = login_session.get("status", "connecting")
+
+        # Also poll for QR updates if QR mode
+        qr = None
+        if current_status == "waiting_qr":
+            try:
+                import requests as http_requests
+                resp = http_requests.get(
+                    wa._url(f"/api/session/qr/{sidecar_user_id}"),
+                    headers=wa._headers(),
+                    timeout=10,
+                )
+                if resp.ok:
+                    qr = resp.json().get("qr")
+            except Exception:
+                pass
+
+        # If connected, user is verified — complete the login
+        if current_status == "connected":
+            mobile_number = login_session.get("mobileNumber")
+            wa_login_collection.update_one(
+                {"sessionId": session_id},
+                {"$set": {
+                    "status": "connected",
+                    "verifiedAt": now,
+                }}
+            )
+
+            # Create or update public account (same as OTP verify)
+            public_accounts = get_public_accounts_collection()
+            account = find_public_account_by_mobile(
+                public_accounts,
+                mobile_number,
+            )
+
+            if not account:
+                account = {
+                    "mobileNumber": mobile_number,
+                    "accountType": read_default_account_type(
+                        get_settings_collection()
+                    ),
+                    "status": "pending",
+                    "approvedRegistrationId": "",
+                    "latestSubmissionId": "",
+                    "latestVersion": 0,
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "lastWhatsAppVerifiedAt": now,
+                }
+                result_insert = public_accounts.insert_one(account)
+                account["_id"] = result_insert.inserted_id
+            else:
+                public_accounts.update_one(
+                    {"_id": account["_id"]},
+                    {"$set": {
+                        "updatedAt": now,
+                        "lastWhatsAppVerifiedAt": now,
+                    }}
+                )
+                account["updatedAt"] = now
+                account["lastWhatsAppVerifiedAt"] = now
+
+            build_public_session(account)
+
+            # Don't disconnect yet — let the backup finish first.
+            # The frontend will call /disconnect after backup completes.
+            backup_running = wa.is_backup_running(sidecar_user_id)
+
+            return jsonify({
+                "status": "verified",
+                "ok": True,
+                "role": current_role(),
+                "account": serialize_public_account(account),
+                "redirectTo": get_redirect_for_account(account),
+                "backupRunning": backup_running,
+            })
+
+        # Update stored status
+        wa_login_collection.update_one(
+            {"sessionId": session_id},
+            {"$set": {"status": current_status}}
+        )
+
+        response_data = {
+            "status": current_status,
+            "ok": False,
+        }
+        if qr:
+            response_data["qr"] = qr
+
+        return jsonify(response_data)
+
+    @app.post("/api/public/whatsapp-login/disconnect/<session_id>")
+    def whatsapp_login_disconnect(session_id):
+        """Disconnect the WhatsApp login session after backup is done."""
+        from . import whatsapp_web as wa
+
+        wa_login_collection = get_collection().database["wa_login_sessions"]
+        login_session = wa_login_collection.find_one({
+            "sessionId": session_id
+        })
+
+        if not login_session:
+            return jsonify({"error": "Session not found"}), 404
+
+        sidecar_user_id = login_session.get(
+            "sidecarUserId",
+            f"login_{session_id}",
+        )
+
+        # Check if backup is still running
+        if wa.is_backup_running(sidecar_user_id):
+            return jsonify({
+                "error": "Backup still in progress",
+                "backupRunning": True,
+            }), 409
+
+        # Safe to disconnect
+        try:
+            wa.disconnect_session(sidecar_user_id)
+        except Exception:
+            pass
+
+        wa_login_collection.update_one(
+            {"sessionId": session_id},
+            {"$set": {"status": "disconnected"}}
+        )
+
+        return jsonify({"ok": True, "status": "disconnected"})
 
     @app.get("/api/otp-settings")
     def get_otp_settings():
@@ -6113,6 +6471,7 @@ def default_otp_settings(test_mode=False):
             "templateName": "",
             "templateLanguage": "en_US",
         },
+        "whatsappLoginEnabled": False,
         "updatedAt": None,
         "updatedBy": "",
     }
@@ -6180,6 +6539,11 @@ def normalize_otp_settings(payload=None, existing=None, test_mode=False):
                 or "en_US"
             ),
         },
+        "whatsappLoginEnabled": bool(
+            payload.get("whatsappLoginEnabled")
+            if "whatsappLoginEnabled" in payload
+            else existing.get("whatsappLoginEnabled", False)
+        ),
         "updatedAt": existing.get("updatedAt"),
         "updatedBy": existing.get("updatedBy", ""),
     }
@@ -6192,6 +6556,15 @@ def is_mobile_login_enabled(existing_settings, test_mode=False):
         test_mode=test_mode,
     )
     return settings.get("activeProvider") != OTP_PROVIDER_DISABLED
+
+
+def is_whatsapp_login_enabled(existing_settings, test_mode=False):
+    """WhatsApp login is available when the toggle is enabled in OTP settings."""
+    settings = normalize_otp_settings(
+        existing=existing_settings,
+        test_mode=test_mode,
+    )
+    return bool(settings.get("whatsappLoginEnabled", False))
 
 
 def find_public_account_by_mobile(public_accounts, mobile_10):

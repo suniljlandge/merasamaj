@@ -37,6 +37,8 @@ async function loadOtpSettings() {
       body.metaWhatsApp?.templateName || "";
     document.querySelector("#metaTemplateLanguage").value =
       body.metaWhatsApp?.templateLanguage || "en_US";
+    document.querySelector("#whatsappLoginEnabled").checked =
+      body.whatsappLoginEnabled || false;
   } catch (error) {
     window.alert(error.message || "Unable to load OTP settings.");
   }
@@ -63,7 +65,8 @@ async function saveOtpSettings(event) {
           phoneNumberId: document.querySelector("#metaPhoneNumberId").value,
           templateName: document.querySelector("#metaTemplateName").value,
           templateLanguage: document.querySelector("#metaTemplateLanguage").value
-        }
+        },
+        whatsappLoginEnabled: document.querySelector("#whatsappLoginEnabled").checked
       })
     });
     const body = await response.json();

@@ -30,6 +30,9 @@ function createBackupService(db, r2, logger) {
     await profilePicHistoryCol.createIndex({ userId: 1, phone: 1, hash: 1 }, { unique: true });
   })();
 
+  // Track running backup promises by userId
+  const activeBackups = new Map();
+
   /**
    * Run a full contact + group backup for a user.
    * @param {object} sock - Active Baileys socket
@@ -37,6 +40,22 @@ function createBackupService(db, r2, logger) {
    * @param {object} options - { includeProfilePics: boolean, backupType: string }
    */
   async function runFullBackup(sock, userId, options = {}) {
+    const backupPromise = _doFullBackup(sock, userId, options);
+    activeBackups.set(userId, backupPromise);
+    backupPromise.finally(() => {
+      activeBackups.delete(userId);
+    });
+    return backupPromise;
+  }
+
+  /**
+   * Check if a backup is currently running for a user.
+   */
+  function isBackupRunning(userId) {
+    return activeBackups.has(userId);
+  }
+
+  async function _doFullBackup(sock, userId, options = {}) {
     const {
       includeProfilePics = true,
       backupType = "manual",
@@ -378,6 +397,7 @@ function createBackupService(db, r2, logger) {
 
   return {
     runFullBackup,
+    isBackupRunning,
     getBackupStatus,
     exportContacts,
     getContactProfilePicUrl,

@@ -287,6 +287,20 @@ def get_backup_status(user_id: str) -> dict:
     return resp.json()
 
 
+def is_backup_running(user_id: str) -> bool:
+    """Check if a backup is currently in progress for a user."""
+    try:
+        resp = requests.get(
+            _url(f"/api/backup/running/{user_id}"),
+            headers=_headers(),
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json().get("running", False)
+    except Exception:
+        return False
+
+
 def export_contacts(user_id: str, format: str = "json"):
     """
     Export backed-up contacts.

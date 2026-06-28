@@ -22,6 +22,15 @@
     defer
     src="{{ url_for('static', filename='login.js') }}"
   ></script>
+  {% if whatsapp_login_enabled %}
+  <script
+    src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"
+  ></script>
+  <script
+    defer
+    src="{{ url_for('static', filename='whatsapp-login.js') }}"
+  ></script>
+  {% endif %}
 </head>
 <body class="login-page">
   <main style="width:min(460px, 100%);">
@@ -38,7 +47,7 @@
       <div
         style="
           display:grid;
-          grid-template-columns:1fr 1fr;
+          grid-template-columns:1fr 1fr{% if whatsapp_login_enabled %} 1fr{% endif %};
           gap:10px;
           margin-bottom:8px;
         "
@@ -57,6 +66,41 @@
           class="button-secondary"
         >
           Login With Mobile
+        </button>
+
+        {% if whatsapp_login_enabled %}
+        <button
+          type="button"
+          id="whatsappModeButton"
+          class="button-secondary"
+        >
+          Login With WhatsApp
+        </button>
+        {% endif %}
+      </div>
+      {% elif whatsapp_login_enabled %}
+      <div
+        style="
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:10px;
+          margin-bottom:8px;
+        "
+      >
+        <button
+          type="button"
+          id="staffModeButton"
+          class="button-primary"
+        >
+          Username & Password
+        </button>
+
+        <button
+          type="button"
+          id="whatsappModeButton"
+          class="button-secondary"
+        >
+          Login With WhatsApp
         </button>
       </div>
       {% endif %}
@@ -147,6 +191,102 @@
           </div>
         </div>
       </div>
+
+      {% if whatsapp_login_enabled %}
+      <div id="whatsapp-login-panel" hidden>
+        <input
+          id="wa-mobile"
+          placeholder="Enter 10-digit mobile number"
+          autocomplete="tel"
+          inputmode="tel"
+          maxlength="10"
+        >
+
+        <p
+          class="section-note"
+          id="wa-help-text"
+          style="margin-top:-6px;"
+        >
+          Enter your mobile number linked to WhatsApp.
+        </p>
+
+        <div
+          style="
+            display:flex;
+            gap:12px;
+            flex-wrap:wrap;
+            margin-top:8px;
+          "
+          id="wa-start-buttons"
+          hidden
+        >
+          <button
+            type="button"
+            id="waStartPairingButton"
+          >
+            Get Pairing Code
+          </button>
+
+          <button
+            type="button"
+            id="waStartQrButton"
+            class="button-secondary"
+          >
+            Show QR Code
+          </button>
+        </div>
+
+        <div id="wa-pairing-panel" hidden>
+          <p class="section-note" style="margin-top:12px;">
+            Open WhatsApp on your phone &rarr; Settings &rarr; Linked Devices &rarr; Link a Device &rarr; Enter this code:
+          </p>
+          <div
+            id="wa-pairing-code"
+            style="
+              font-size:2rem;
+              font-weight:bold;
+              letter-spacing:4px;
+              text-align:center;
+              padding:16px;
+              background:#f0f0f0;
+              border-radius:8px;
+              margin:12px 0;
+              font-family:monospace;
+            "
+          ></div>
+          <p class="section-note" id="wa-pairing-status">
+            Waiting for you to link...
+          </p>
+        </div>
+
+        <div id="wa-qr-panel" hidden>
+          <p class="section-note" style="margin-top:12px;">
+            Scan this QR code with WhatsApp on your phone &rarr; Settings &rarr; Linked Devices &rarr; Link a Device:
+          </p>
+          <div
+            id="wa-qr-container"
+            style="
+              display:flex;
+              justify-content:center;
+              padding:16px;
+              margin:12px 0;
+            "
+          >
+            <canvas id="wa-qr-canvas" style="max-width:256px;max-height:256px;"></canvas>
+          </div>
+          <p class="section-note" id="wa-qr-status">
+            Waiting for scan...
+          </p>
+        </div>
+
+        <p
+          class="section-note"
+          id="wa-status-note"
+          hidden
+          style="margin-top:8px;color:#16a34a;font-weight:500;"
+        ></p>
+      </div>
+      {% endif %}
     </section>
   </main>
 

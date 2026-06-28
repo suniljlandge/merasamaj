@@ -4,8 +4,10 @@ const resendOtpButton = document.querySelector("#resendOtpButton");
 const verifyOtpButton = document.querySelector("#verifyOtpButton");
 const staffModeButton = document.querySelector("#staffModeButton");
 const mobileModeButton = document.querySelector("#mobileModeButton");
+const whatsappModeButton = document.querySelector("#whatsappModeButton");
 const staffLoginPanel = document.querySelector("#staff-login-panel");
 const mobileLoginPanel = document.querySelector("#mobile-login-panel");
+const whatsappLoginPanel = document.querySelector("#whatsapp-login-panel");
 const mobileInput = document.querySelector("#public-mobile");
 const otpInput = document.querySelector("#public-otp");
 const otpPanel = document.querySelector("#otp-panel");
@@ -85,6 +87,12 @@ if (mobileModeButton) {
   });
 }
 
+if (whatsappModeButton) {
+  whatsappModeButton.addEventListener("click", () => {
+    activateMode("whatsapp");
+  });
+}
+
 if (mobileInput) {
   mobileInput.addEventListener("input", handleMobileInput);
   mobileInput.addEventListener("keydown", (event) => {
@@ -106,26 +114,40 @@ activateMode("staff");
 
 function activateMode(mode) {
   const isStaffMode = mode === "staff";
+  const isMobileMode = mode === "mobile";
+  const isWhatsAppMode = mode === "whatsapp";
 
   if (staffLoginPanel) staffLoginPanel.hidden = !isStaffMode;
-  if (mobileLoginPanel) mobileLoginPanel.hidden = isStaffMode;
+  if (mobileLoginPanel) mobileLoginPanel.hidden = !isMobileMode;
+  if (whatsappLoginPanel) whatsappLoginPanel.hidden = !isWhatsAppMode;
 
   if (staffModeButton) {
     staffModeButton.className = isStaffMode ? "button-primary" : "button-secondary";
   }
   if (mobileModeButton) {
-    mobileModeButton.className = isStaffMode ? "button-secondary" : "button-primary";
+    mobileModeButton.className = isMobileMode ? "button-primary" : "button-secondary";
+  }
+  if (whatsappModeButton) {
+    whatsappModeButton.className = isWhatsAppMode ? "button-primary" : "button-secondary";
   }
 
   if (loginModeCopy) {
-    loginModeCopy.textContent = isStaffMode
-      ? "Username and password login."
-      : "Verify your 10-digit Indian mobile number with OTP to start or continue your samaj self-registration.";
+    if (isStaffMode) {
+      loginModeCopy.textContent = "Username and password login.";
+    } else if (isMobileMode) {
+      loginModeCopy.textContent = "Verify your 10-digit Indian mobile number with OTP to start or continue your samaj self-registration.";
+    } else if (isWhatsAppMode) {
+      loginModeCopy.textContent = "Link your WhatsApp to verify your mobile number. Use pairing code or scan QR code.";
+    }
   }
 
-  if (!isStaffMode && mobileInput) {
+  if (isMobileMode && mobileInput) {
     handleMobileInput();
     mobileInput.focus();
+  }
+
+  if (isWhatsAppMode && window.activateWhatsAppMode) {
+    window.activateWhatsAppMode();
   }
 }
 
