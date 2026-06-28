@@ -318,13 +318,29 @@ function createBackupService(db, r2, logger) {
 
   /**
    * Export contacts as JSON array for a user.
+   * Sorted: message contacts first, then those with profile pics, then rest.
    */
   async function exportContacts(userId, format = "json") {
     const contacts = await contactsCol
       .find({ userId, isActive: true })
-      .project({ _id: 0, phone: 1, pushName: 1, source: 1, firstSeenAt: 1, lastSeenAt: 1 })
+      .project({ _id: 0, phone: 1, pushName: 1, source: 1, firstSeenAt: 1, lastSeenAt: 1, profilePicKey: 1 })
       .sort({ lastSeenAt: -1 })
       .toArray();
+
+    // Sort: message/chat first, then has profile pic, then rest
+    const priority = { message: 0, chat: 1, sync: 2, lid_resolved: 3, history_sync: 4, group: 5 };
+    contacts.sort((a, b) => {
+      const aPri = (priority[a.source] ?? 6);
+      const bPri = (priority[b.source] ?? 6);
+      // First: source priority (message > chat > sync > rest)
+      if (aPri !== bPri) return aPri - bPri;
+      // Second: has profile pic
+      const aPic = a.profilePicKey ? 0 : 1;
+      const bPic = b.profilePicKey ? 0 : 1;
+      if (aPic !== bPic) return aPic - bPic;
+      // Third: lastSeenAt descending
+      return (b.lastSeenAt || 0) - (a.lastSeenAt || 0);
+    });
 
     if (format === "csv") {
       const header = "phone,pushName,source,firstSeenAt\n";
@@ -337,7 +353,15 @@ function createBackupService(db, r2, logger) {
       return header + rows;
     }
 
-    return contacts;
+    // For JSON, include hasProfilePic flag (don't resolve URLs here — too slow for 1000+ contacts)
+    return contacts.map((c) => ({
+      phone: c.phone,
+      pushName: c.pushName,
+      source: c.source,
+      firstSeenAt: c.firstSeenAt,
+      lastSeenAt: c.lastSeenAt,
+      hasProfilePic: !!c.profilePicKey,
+    }));
   }
 
   /**

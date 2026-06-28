@@ -278,8 +278,9 @@
       pagination.style.display = "none";
     }
 
-    // Load profile pictures for visible contacts (parallel batch)
-    loadProfilePicsBatch(pageItems.map((c) => c.phone));
+    // Load profile pictures only for contacts that have them (fast — skip the rest)
+    const phonesWithPics = pageItems.filter((c) => c.hasProfilePic).map((c) => c.phone);
+    if (phonesWithPics.length) loadProfilePicsBatch(phonesWithPics);
 
     // Click handler: pic opens lightbox, rest of card opens chat
     grid.querySelectorAll(".contact-card").forEach((card) => {
