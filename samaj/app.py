@@ -3953,9 +3953,11 @@ def create_app(config=None, collection=None, correction_collection=None):
         send_via_web = payload.get("sendViaWeb", False)
         if send_via_web:
             from . import whatsapp_web as wa_web
+            # Use sidecar userId if available (from WhatsApp login), else fall back to account_id
+            wa_user_id = session.get("wa_sidecar_user_id") or str(account_id)
             try:
                 # Check if session is connected
-                status = wa_web.get_session_status(account_id)
+                status = wa_web.get_session_status(wa_user_id)
                 if status.get("status") != "connected":
                     return jsonify({
                         "error": "WhatsApp Web is not connected. Connect first or use Cloud API."
@@ -3984,7 +3986,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 # Send messages via web session (no payment required)
                 # First check daily limit
                 try:
-                    daily_stats = wa_web.get_daily_send_stats(account_id)
+                    daily_stats = wa_web.get_daily_send_stats(wa_user_id)
                     remaining = daily_stats.get("remaining", 20)
                     if len(recipients) > remaining:
                         return jsonify({
@@ -4033,12 +4035,12 @@ def create_app(config=None, collection=None, correction_collection=None):
                         # Send with or without media
                         if media_url and media_type:
                             result = wa_web.send_media_message(
-                                account_id, phone, message_text,
+                                wa_user_id, phone, message_text,
                                 media_url, media_type
                             )
                         else:
                             result = wa_web.send_personal_message(
-                                account_id, phone, message_text
+                                wa_user_id, phone, message_text
                             )
 
                         if result.get("fallbackToCloudAPI"):
