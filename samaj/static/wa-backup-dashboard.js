@@ -195,11 +195,21 @@
         '<p style="color:var(--steel);grid-column:1/-1;text-align:center;">Select a user session above to view contacts.</p>';
       document.getElementById("export-csv-btn").disabled = true;
       document.getElementById("export-json-btn").disabled = true;
+      document.getElementById("refresh-contacts-btn").disabled = true;
       return;
     }
 
     document.getElementById("export-csv-btn").disabled = false;
     document.getElementById("export-json-btn").disabled = false;
+    document.getElementById("refresh-contacts-btn").disabled = false;
+    await loadContacts();
+    loadBackupStats();
+  });
+
+  // Refresh button — reload contacts and clear cache
+  document.getElementById("refresh-contacts-btn").addEventListener("click", async () => {
+    if (!selectedUserId) return;
+    picUrlCache.clear();
     await loadContacts();
     loadBackupStats();
   });
@@ -212,6 +222,7 @@
       const resp = await fetch(`${API}/backup/export?format=json&userId=${selectedUserId}`);
       const data = await resp.json();
       allContacts = data.contacts || [];
+      // Sort by lastSeenAt (most recent first) — contacts already come sorted from API
       currentPage = 1;
       renderContacts();
     } catch (err) {

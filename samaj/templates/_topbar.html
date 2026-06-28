@@ -6,7 +6,15 @@
     <span>SAMAJ</span>
   </a>
 
-  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+  <button type="button" class="topbar-toggle" id="topbar-toggle" aria-label="Toggle menu" aria-expanded="false">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+
+  <nav class="topbar-nav" id="topbar-nav">
     {% if request.path != '/' %}
     <a href="/" class="button-secondary">Home</a>
     {% endif %}
@@ -51,5 +59,18 @@
     <a href="/logout" class="button-ghost" id="logoutButton">Logout</a>
 
     <span class="topbar-status" id="connection-status"></span>
-  </div>
+  </nav>
 </header>
+
+<script>
+(function() {
+  var toggle = document.getElementById("topbar-toggle");
+  var nav = document.getElementById("topbar-nav");
+  if (toggle && nav) {
+    toggle.addEventListener("click", function() {
+      var open = nav.classList.toggle("topbar-nav--open");
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
+})();
+</script>

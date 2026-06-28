@@ -54,6 +54,27 @@ button {
   border-bottom: 1px solid var(--hairline);
 }
 
+.topbar-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  color: var(--ink);
+  border-radius: 6px;
+}
+
+.topbar-toggle:hover {
+  background: var(--surface-soft);
+}
+
+.topbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -1100,21 +1121,38 @@ body {
 
 @media (max-width: 768px) {
 
-  /* TOPBAR */
+  /* TOPBAR — collapsible mobile menu */
 
   .topbar {
-    flex-direction: row;
-    align-items: flex-start;
-    justify-content: space-between;
-
-    gap: 12px;
-
-    padding:
-      12px 14px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    min-height: 48px;
   }
 
-  .brand {
-    flex-shrink: 0;
+  .topbar-toggle {
+    display: block;
+  }
+
+  .topbar-nav {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--hairline);
+    margin-top: 8px;
+  }
+
+  .topbar-nav--open {
+    display: flex;
+  }
+
+  .topbar-nav .button-secondary,
+  .topbar-nav .button-ghost {
+    text-align: left;
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .brand span {
