@@ -190,6 +190,7 @@ function renderQrCode(qrData) {
 
   // Use the QRCode library loaded from CDN
   if (typeof QRCode !== "undefined" && QRCode.toCanvas) {
+    waQrCanvas.style.display = "";
     QRCode.toCanvas(waQrCanvas, qrData, {
       width: 256,
       margin: 2,
@@ -197,16 +198,37 @@ function renderQrCode(qrData) {
     }, function (error) {
       if (error) {
         console.error("QR render error:", error);
+        renderQrFallback(qrData);
+      }
+    });
+  } else if (typeof QRCode !== "undefined" && QRCode.toDataURL) {
+    // Alternative API: toDataURL
+    QRCode.toDataURL(qrData, { width: 256, margin: 2 }, function (error, url) {
+      if (error) { renderQrFallback(qrData); return; }
+      waQrCanvas.style.display = "none";
+      var container = document.querySelector("#wa-qr-container");
+      if (container) {
+        container.innerHTML = '<img src="' + url + '" alt="QR Code" style="max-width:256px;border-radius:8px;">';
       }
     });
   } else {
-    // Fallback: show raw text
-    waQrCanvas.style.display = "none";
-    var container = document.querySelector("#wa-qr-container");
-    if (container) {
-      container.innerHTML = '<p style="word-break:break-all;font-size:0.75rem;">' +
-        qrData + '</p>';
-    }
+    // Library not loaded — try loading it dynamically
+    var script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
+    script.onload = function () { renderQrCode(qrData); };
+    script.onerror = function () { renderQrFallback(qrData); };
+    document.head.appendChild(script);
+  }
+}
+
+function renderQrFallback(qrData) {
+  // Last resort: generate QR using a public API as image
+  waQrCanvas.style.display = "none";
+  var container = document.querySelector("#wa-qr-container");
+  if (container) {
+    var encodedData = encodeURIComponent(qrData);
+    container.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=' +
+      encodedData + '" alt="QR Code" style="max-width:256px;border-radius:8px;">';
   }
 }
 
