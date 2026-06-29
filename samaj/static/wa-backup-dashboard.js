@@ -441,11 +441,20 @@
       const resp = await fetch(`${API}/backup/profile-pic-history/${phone}?userId=${selectedUserId}`);
       const data = await resp.json();
       if (data.history && data.history.length > 0) {
+        // Reuse the already-displayed cached URL for the newest pic so its <img>
+        // src doesn't change (a fresh signed URL would force a needless reload/flicker).
+        if (cachedUrl) {
+          data.history[0] = { ...data.history[0], url: cachedUrl };
+        }
+
+        // If there's only one picture and we're already showing it, skip re-render
+        // entirely to avoid swapping the <img> (which causes the reload flicker).
+        const onlyOneAndShown = data.history.length === 1 && cachedUrl && !data.history[0].capturedAt;
         history = data.history;
         currentIdx = 0;
         // Preload first few images for instant switching
         history.slice(0, 4).forEach((entry) => { const i = new Image(); i.src = entry.url; });
-        if (document.getElementById("profile-pic-modal")) renderModal();
+        if (!onlyOneAndShown && document.getElementById("profile-pic-modal")) renderModal();
       }
     } catch {}
   }
