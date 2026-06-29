@@ -743,6 +743,14 @@
     btn.disabled = true;
     btn.textContent = "⏳ Requesting...";
 
+    // Capture current message count so we can detect when older ones arrive
+    let beforeCount = 0;
+    try {
+      const beforeResp = await fetch(`${API}/messages/${phone}?userId=${selectedUserId}&limit=500`);
+      const beforeData = await beforeResp.json();
+      beforeCount = (beforeData.messages || []).length;
+    } catch {}
+
     try {
       const resp = await fetch(`${API}/messages/fetch-history`, {
         method: "POST",
@@ -752,15 +760,39 @@
       const data = await resp.json();
       if (data.error) {
         btn.textContent = "⚠ " + data.error;
-        setTimeout(() => { btn.textContent = "↑ Load older messages"; btn.disabled = false; }, 3000);
+        setTimeout(() => { btn.textContent = "↑ Load older messages"; btn.disabled = false; }, 4000);
         return;
       }
-      btn.textContent = "✓ Requested! Refreshing...";
-      // Wait for messages to arrive, then reload the chat
-      setTimeout(() => openChatPopup(phone), 3000);
+
+      // Poll for new messages — on-demand sync arrives asynchronously (can take 10-30s)
+      btn.textContent = "⏳ Waiting for phone…";
+      let attempts = 0;
+      const maxAttempts = 8; // ~32s total
+      const poll = async () => {
+        attempts++;
+        try {
+          const r = await fetch(`${API}/messages/${phone}?userId=${selectedUserId}&limit=500`);
+          const d = await r.json();
+          const nowCount = (d.messages || []).length;
+          if (nowCount > beforeCount) {
+            // Older messages arrived — reload the chat
+            openChatPopup(phone);
+            return;
+          }
+        } catch {}
+
+        if (attempts >= maxAttempts) {
+          btn.textContent = "No older messages available";
+          btn.title = "WhatsApp returned no older history. The phone may be offline, or there are no more messages to sync.";
+          setTimeout(() => { btn.textContent = "↑ Load older messages"; btn.disabled = false; }, 5000);
+          return;
+        }
+        setTimeout(poll, 4000);
+      };
+      setTimeout(poll, 4000);
     } catch (err) {
       btn.textContent = "⚠ " + err.message;
-      setTimeout(() => { btn.textContent = "↑ Load older messages"; btn.disabled = false; }, 3000);
+      setTimeout(() => { btn.textContent = "↑ Load older messages"; btn.disabled = false; }, 4000);
     }
   }
 

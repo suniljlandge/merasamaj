@@ -806,8 +806,11 @@ function createSessionManager(db, logger, { onConnected } = {}) {
 
     // History sync — Baileys v6 fires this with bulk chat/contact data
     sock.ev.on("messaging-history.set", async (data) => {
-      const { chats: syncChats, contacts: syncContacts, messages: syncMessages } = data;
-      logger.info({ userId, chats: syncChats?.length, contacts: syncContacts?.length, messages: syncMessages?.length }, "History sync received");
+      const { chats: syncChats, contacts: syncContacts, messages: syncMessages, syncType, progress, isLatest } = data;
+      logger.info(
+        { userId, chats: syncChats?.length, contacts: syncContacts?.length, messages: syncMessages?.length, syncType, progress, isLatest },
+        "History sync received"
+      );
 
       // Process contacts from history
       if (syncContacts && syncContacts.length > 0) {

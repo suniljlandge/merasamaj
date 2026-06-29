@@ -304,6 +304,10 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
         return res.status(400).json({ error: "No active session for this user" });
       }
 
+      if (typeof sock.fetchMessageHistory !== "function") {
+        return res.status(501).json({ error: "This WhatsApp library version does not support on-demand history fetch" });
+      }
+
       // Find the oldest message we have for this contact
       const oldestMsg = await db.collection("wa_messages")
         .findOne(
@@ -322,18 +326,29 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
         id: oldestMsg.odgId,
         fromMe: oldestMsg.fromMe || false,
       };
-      const msgTimestamp = oldestMsg.timestamp
-        ? Math.floor(new Date(oldestMsg.timestamp).getTime() / 1000)
-        : Math.floor(Date.now() / 1000);
+      // WhatsApp expects the oldest message timestamp in MILLISECONDS
+      const msgTimestampMs = oldestMsg.timestamp
+        ? new Date(oldestMsg.timestamp).getTime()
+        : Date.now();
 
-      // Request older messages from WhatsApp (max 50 per call)
-      await sock.fetchMessageHistory(50, msgKey, msgTimestamp);
+      logger.info(
+        { userId, phone, oldestMsgId: oldestMsg.odgId, msgTimestampMs },
+        "Requesting on-demand history sync"
+      );
+
+      // Request older messages from WhatsApp (max 50 per call).
+      // Results arrive asynchronously via messaging-history.set (syncType ON_DEMAND).
+      const requestId = await sock.fetchMessageHistory(50, msgKey, msgTimestampMs);
 
       res.json({
         success: true,
-        message: "History fetch requested. Messages will arrive shortly and be stored automatically.",
+        requestId,
+        oldestTimestamp: oldestMsg.timestamp,
+        message:
+          "History fetch requested. The phone must be online; messages arrive within ~10-30s and are stored automatically.",
       });
     } catch (err) {
+      logger.error({ err: err.message }, "fetch-history failed");
       res.status(500).json({ error: err.message });
     }
   });
