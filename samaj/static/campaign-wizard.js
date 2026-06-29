@@ -523,20 +523,26 @@
           escapeHtml(String(members)) +
           "</span>" +
           renderSalutationToggle(id, salutation) +
-          '<span class="cm-mobile-display text-xs text-slate-500 whitespace-nowrap" data-recipient-id="' +
+          '<span class="cm-mobile-display text-sm font-semibold ' +
+          (revealedContacts[id] ? 'text-emerald-700' : 'text-slate-700') +
+          ' whitespace-nowrap tracking-wide" data-recipient-id="' +
           escapeHtml(id) +
           '">' +
           escapeHtml(
             revealedContacts[id] || recipient.mobileMasked || maskMobile(recipient.mobileNumber || "")
           ) +
           "</span>" +
-          '<button type="button" class="cm-reveal-btn ml-1 text-slate-400 hover:text-emerald-600 transition" ' +
+          '<button type="button" class="cm-reveal-btn ml-1.5 p-1 rounded-full ' +
+          (revealedContacts[id]
+            ? 'bg-emerald-100 text-emerald-600'
+            : 'bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600') +
+          ' transition" ' +
           'data-recipient-id="' + escapeHtml(id) + '" ' +
           'title="' + (revealedContacts[id] ? 'Number revealed' : 'View full number') + '" ' +
           'aria-label="' + (revealedContacts[id] ? 'Number revealed' : 'View full number') + '">' +
           (revealedContacts[id]
-            ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>'
-            : '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>') +
+            ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>'
+            : '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>') +
           "</button>" +
           "</label>"
         );
@@ -632,9 +638,18 @@
     // If already revealed, do nothing (already visible).
     if (revealedContacts[id]) return;
 
-    // Show loading state on the button.
-    btn.style.opacity = "0.5";
+    // Show loading state — pulse the number and spin the eye icon.
+    var mobileSpan = elRecipients.querySelector(
+      '.cm-mobile-display[data-recipient-id="' + id + '"]'
+    );
+    if (mobileSpan) {
+      mobileSpan.textContent = "Loading...";
+      mobileSpan.classList.add("animate-pulse");
+    }
     btn.style.pointerEvents = "none";
+    btn.innerHTML =
+      '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
+      '<path stroke-linecap="round" stroke-linejoin="round" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16 8 8 0 010-16z"/></svg>';
 
     fetch("/api/campaigns/reveal-contact", {
       method: "POST",
@@ -644,9 +659,19 @@
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        if (mobileSpan) mobileSpan.classList.remove("animate-pulse");
+
         if (data.error) {
-          btn.style.opacity = "1";
+          // Restore masked number on failure.
+          var recipient = findRecipientById(id);
+          if (mobileSpan) {
+            mobileSpan.textContent = recipient
+              ? (recipient.mobileMasked || maskMobile(recipient.mobileNumber || ""))
+              : "****";
+          }
           btn.style.pointerEvents = "";
+          btn.innerHTML =
+            '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
           return;
         }
 
@@ -663,7 +688,6 @@
           delete revealedContacts[data.evictedId];
           var evictIdx = revealedOrder.indexOf(data.evictedId);
           if (evictIdx !== -1) revealedOrder.splice(evictIdx, 1);
-          // Update the evicted row's display back to masked.
           updateMobileDisplay(data.evictedId, null);
         }
 
@@ -678,8 +702,16 @@
         updateMobileDisplay(id, data.mobile);
       })
       .catch(function () {
-        btn.style.opacity = "1";
+        if (mobileSpan) {
+          mobileSpan.classList.remove("animate-pulse");
+          var recipient = findRecipientById(id);
+          mobileSpan.textContent = recipient
+            ? (recipient.mobileMasked || maskMobile(recipient.mobileNumber || ""))
+            : "****";
+        }
         btn.style.pointerEvents = "";
+        btn.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
       });
   }
 
@@ -699,6 +731,7 @@
     if (mobileSpan) {
       if (fullMobile) {
         mobileSpan.textContent = fullMobile;
+        mobileSpan.className = "cm-mobile-display text-sm font-semibold text-emerald-700 whitespace-nowrap tracking-wide";
       } else {
         // Re-mask: find the recipient object to get the masked version.
         var recipient = findRecipientById(recipientId);
@@ -706,6 +739,7 @@
           ? (recipient.mobileMasked || maskMobile(recipient.mobileNumber || ""))
           : "****";
         mobileSpan.textContent = masked;
+        mobileSpan.className = "cm-mobile-display text-sm font-semibold text-slate-700 whitespace-nowrap tracking-wide";
       }
     }
 
@@ -715,13 +749,15 @@
       if (fullMobile) {
         revealBtn.title = "Number revealed";
         revealBtn.setAttribute("aria-label", "Number revealed");
+        revealBtn.className = "cm-reveal-btn ml-1.5 p-1 rounded-full bg-emerald-100 text-emerald-600 transition";
         revealBtn.innerHTML =
-          '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+          '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
       } else {
         revealBtn.title = "View full number";
         revealBtn.setAttribute("aria-label", "View full number");
+        revealBtn.className = "cm-reveal-btn ml-1.5 p-1 rounded-full bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition";
         revealBtn.innerHTML =
-          '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+          '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
       }
     }
   }
