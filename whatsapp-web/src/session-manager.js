@@ -701,6 +701,13 @@ function createSessionManager(db, logger, { onConnected } = {}) {
         // Store the message
         try {
           const msgContent = msg.message || {};
+
+          // Skip protocol messages, reactions, and edits (they have no readable content)
+          if (msgContent.protocolMessage || msgContent.reactionMessage ||
+              msgContent.editedMessage || msgContent.pollUpdateMessage) {
+            // Still fall through to LID mapping below
+          } else {
+
           // Handle nested message types (ephemeral, viewOnce, etc.)
           const innerMsg =
             msgContent.ephemeralMessage?.message ||
@@ -727,10 +734,14 @@ function createSessionManager(db, logger, { onConnected } = {}) {
             (innerMsg.stickerMessage || msgContent.stickerMessage) ? "sticker" :
             null;
 
+          // Only store if there's actual content
+          if (text || mediaType) {
           // Extract media metadata for on-demand download
           let mediaInfo = null;
           const mediaMsg = msgContent.imageMessage || msgContent.videoMessage ||
-            msgContent.audioMessage || msgContent.documentMessage || msgContent.stickerMessage;
+            msgContent.audioMessage || msgContent.documentMessage || msgContent.stickerMessage ||
+            innerMsg.imageMessage || innerMsg.videoMessage ||
+            innerMsg.audioMessage || innerMsg.documentMessage || innerMsg.stickerMessage;
           if (mediaMsg && mediaType) {
             mediaInfo = {
               mimetype: mediaMsg.mimetype || null,
@@ -763,6 +774,8 @@ function createSessionManager(db, logger, { onConnected } = {}) {
             { $set: msgDoc },
             { upsert: true }
           );
+          } // end if (text || mediaType)
+          } // end else (not protocol message)
         } catch {}
 
         // Also capture LID → phone number mapping if available
@@ -864,6 +877,13 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           }
 
           const msgContent = msg.message || {};
+
+          // Skip protocol messages, reactions, and edits (they have no readable content)
+          if (msgContent.protocolMessage || msgContent.reactionMessage ||
+              msgContent.editedMessage || msgContent.pollUpdateMessage) {
+            continue;
+          }
+
           // Handle nested message types (ephemeral, viewOnce, etc.)
           const innerMsg =
             msgContent.ephemeralMessage?.message ||
@@ -890,6 +910,24 @@ function createSessionManager(db, logger, { onConnected } = {}) {
             (innerMsg.stickerMessage || msgContent.stickerMessage) ? "sticker" :
             null;
 
+          // Skip empty stubs — messages with no text and no media content
+          if (!text && !mediaType) continue;
+
+          // Extract media metadata for on-demand download
+          let mediaInfo = null;
+          const mediaMsg = innerMsg.imageMessage || innerMsg.videoMessage ||
+            innerMsg.audioMessage || innerMsg.documentMessage || innerMsg.stickerMessage ||
+            msgContent.imageMessage || msgContent.videoMessage ||
+            msgContent.audioMessage || msgContent.documentMessage || msgContent.stickerMessage;
+          if (mediaMsg && mediaType) {
+            mediaInfo = {
+              mimetype: mediaMsg.mimetype || null,
+              fileLength: mediaMsg.fileLength ? Number(mediaMsg.fileLength) : null,
+              fileName: mediaMsg.fileName || null,
+              _hasMedia: true,
+            };
+          }
+
           msgBatch.push({
             updateOne: {
               filter: { odgId: msg.key?.id, userId, phone },
@@ -901,10 +939,13 @@ function createSessionManager(db, logger, { onConnected } = {}) {
                   fromMe: msg.key?.fromMe || false,
                   text: text || (mediaType ? `[${mediaType}]` : ""),
                   mediaType,
+                  mediaInfo,
+                  mediaUrl: null,
                   timestamp: msg.messageTimestamp
                     ? new Date(Number(msg.messageTimestamp) * 1000)
                     : new Date(),
                   pushName: msg.pushName || null,
+                  _rawMessage: mediaType ? JSON.stringify(msg) : null,
                 },
               },
               upsert: true,

@@ -662,7 +662,7 @@
       }
 
       // Filter out empty messages (history sync stubs with no content)
-      const displayMessages = messages.filter((m) => m.text || m.mediaType || m.mediaUrl);
+      const displayMessages = messages.filter((m) => m.text || m.mediaType || m.mediaUrl || (m.mediaInfo && m.mediaInfo._hasMedia));
 
       if (displayMessages.length === 0) {
         msgContainer.innerHTML = '<p style="text-align:center;color:#94a3b8;font-size:13px;margin:auto;">No readable messages found. Messages will appear here as new ones arrive.</p>';
@@ -709,6 +709,18 @@
         </div>`;
       }).join("");
 
+      // Add "Load older messages" button at the top
+      const loadOlderBtn = `<div style="text-align:center;padding:8px 0;">
+        <button type="button" id="chat-load-older" data-phone="${escHtml(phone)}" style="padding:6px 16px;font-size:12px;font-weight:500;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;color:#475569;">↑ Load older messages</button>
+      </div>`;
+      msgContainer.innerHTML = loadOlderBtn + msgContainer.innerHTML;
+
+      // Wire load-older button
+      const loadOlderEl = document.getElementById("chat-load-older");
+      if (loadOlderEl) {
+        loadOlderEl.addEventListener("click", () => fetchOlderMessages(loadOlderEl.dataset.phone, loadOlderEl));
+      }
+
       // Wire download buttons
       msgContainer.querySelectorAll(".media-download-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
@@ -724,6 +736,31 @@
       if (msgContainer) {
         msgContainer.innerHTML = `<p style="text-align:center;color:#ef4444;font-size:13px;margin:auto;">Error: ${err.message}</p>`;
       }
+    }
+  }
+
+  async function fetchOlderMessages(phone, btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Requesting...";
+
+    try {
+      const resp = await fetch(`${API}/messages/fetch-history`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: selectedUserId, phone }),
+      });
+      const data = await resp.json();
+      if (data.error) {
+        btn.textContent = "⚠ " + data.error;
+        setTimeout(() => { btn.textContent = "↑ Load older messages"; btn.disabled = false; }, 3000);
+        return;
+      }
+      btn.textContent = "✓ Requested! Refreshing...";
+      // Wait for messages to arrive, then reload the chat
+      setTimeout(() => openChatPopup(phone), 3000);
+    } catch (err) {
+      btn.textContent = "⚠ " + err.message;
+      setTimeout(() => { btn.textContent = "↑ Load older messages"; btn.disabled = false; }, 3000);
     }
   }
 

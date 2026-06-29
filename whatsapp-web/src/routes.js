@@ -235,8 +235,31 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
       const { userId, phone } = req.params;
       const limit = Math.min(parseInt(req.query.limit || "100", 10), 500);
 
-      const messages = await db.collection("wa_messages")
+      // Build list of phone identifiers to search (handles LID mappings)
+      const phoneVariants = [phone];
+      // Check if there are any LID mappings for this phone
+      const lidMappings = await db.collection("wa_lid_mappings")
         .find({ userId, phone })
+        .toArray();
+      for (const mapping of lidMappings) {
+        // Messages might be stored under the raw LID number if resolution failed at ingest time
+        const lidNum = (mapping.lid || "").replace("@lid", "");
+        if (lidNum && !phoneVariants.includes(lidNum)) {
+          phoneVariants.push(lidNum);
+        }
+      }
+
+      const messages = await db.collection("wa_messages")
+        .find({
+          userId,
+          phone: phoneVariants.length === 1 ? phone : { $in: phoneVariants },
+          // Only return messages with actual content (skip empty stubs)
+          $or: [
+            { text: { $nin: [null, ""] } },
+            { mediaType: { $ne: null } },
+            { mediaUrl: { $nin: [null, ""] } },
+          ],
+        })
         .sort({ timestamp: -1 })
         .limit(limit)
         .toArray();
@@ -256,6 +279,59 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
           pushName: m.pushName,
         })),
         total: messages.length,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/messages/fetch-history
+   * Request older messages from WhatsApp for a contact (on-demand, like scrolling up in web.whatsapp.com).
+   * Body: { userId, phone }
+   * Messages arrive asynchronously via messaging-history.set and are stored in wa_messages.
+   * Returns: { success, message }
+   */
+  app.post("/api/messages/fetch-history", async (req, res) => {
+    try {
+      const { userId, phone } = req.body;
+      if (!userId || !phone) {
+        return res.status(400).json({ error: "userId and phone required" });
+      }
+
+      const sock = sessionManager.getSocket(userId);
+      if (!sock) {
+        return res.status(400).json({ error: "No active session for this user" });
+      }
+
+      // Find the oldest message we have for this contact
+      const oldestMsg = await db.collection("wa_messages")
+        .findOne(
+          { userId, phone },
+          { sort: { timestamp: 1 }, projection: { odgId: 1, timestamp: 1, fromMe: 1 } }
+        );
+
+      if (!oldestMsg) {
+        return res.status(404).json({ error: "No messages found to paginate from" });
+      }
+
+      // Build the message key that Baileys expects
+      const jid = phone + "@s.whatsapp.net";
+      const msgKey = {
+        remoteJid: jid,
+        id: oldestMsg.odgId,
+        fromMe: oldestMsg.fromMe || false,
+      };
+      const msgTimestamp = oldestMsg.timestamp
+        ? Math.floor(new Date(oldestMsg.timestamp).getTime() / 1000)
+        : Math.floor(Date.now() / 1000);
+
+      // Request older messages from WhatsApp (max 50 per call)
+      await sock.fetchMessageHistory(50, msgKey, msgTimestamp);
+
+      res.json({
+        success: true,
+        message: "History fetch requested. Messages will arrive shortly and be stored automatically.",
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

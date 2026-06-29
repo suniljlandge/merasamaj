@@ -421,6 +421,26 @@ def get_messages(phone):
         return jsonify({"error": str(e), "messages": []}), 200
 
 
+@wa_web_bp.route("/messages/fetch-history", methods=["POST"])
+@_require_super_admin
+def fetch_message_history():
+    """Request older messages from WhatsApp for a contact (super admin only)."""
+    data = request.get_json(force=True)
+    user_id = data.get("userId") or _get_user_id()
+    phone = data.get("phone", "")
+    try:
+        resp = http_requests.post(
+            wa._url("/api/messages/fetch-history"),
+            headers=wa._headers(),
+            json={"userId": user_id, "phone": phone},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @wa_web_bp.route("/messages/download-media", methods=["POST"])
 @_require_super_admin
 def download_media():
