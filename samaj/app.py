@@ -3894,6 +3894,68 @@ def create_app(config=None, collection=None, correction_collection=None):
             "templates": get_ad_templates(),
         })
 
+    @app.post("/api/campaigns/reveal-contact")
+    @require_campaigner
+    def campaign_reveal_contact():
+        """Reveal the full (unmasked) mobile number for a single registration.
+
+        The campaigner may view up to 10 full contact numbers at a time. The
+        server tracks which registration ids are currently revealed in the
+        session. When a new reveal would exceed the limit of 10, the oldest
+        revealed id is evicted (its number would need re-revealing).
+
+        Privacy: the full number is returned one at a time so the client never
+        holds a bulk contact list. The session-based window cap of 10 ensures
+        minimal exposure at any point.
+
+        Request JSON: {"registrationId": "<id>"}
+        Response JSON: {"mobile": "<full number>", "registrationId": "<id>",
+                        "evictedId": "<id or null>"}
+        """
+        MAX_REVEALED = 10
+
+        payload = request.get_json(silent=True) or {}
+        registration_id = str(payload.get("registrationId") or "").strip()
+
+        if not registration_id:
+            return jsonify({"error": "registrationId is required."}), 400
+
+        # Session-based sliding window of revealed ids (list, oldest first).
+        revealed = session.get("revealed_contacts") or []
+        if not isinstance(revealed, list):
+            revealed = []
+
+        # If already revealed, move to end (refresh) and return the number.
+        evicted_id = None
+        if registration_id not in revealed:
+            if len(revealed) >= MAX_REVEALED:
+                evicted_id = revealed.pop(0)
+            revealed.append(registration_id)
+        else:
+            # Move to end to keep it "fresh"
+            revealed.remove(registration_id)
+            revealed.append(registration_id)
+
+        session["revealed_contacts"] = revealed
+
+        # Resolve the full mobile from the registrations collection.
+        try:
+            doc_id = ObjectId(registration_id)
+        except Exception:
+            doc_id = registration_id
+
+        doc = get_collection().find_one({"_id": doc_id})
+        if not doc:
+            return jsonify({"error": "Registration not found."}), 404
+
+        full_mobile = doc.get("mobileNumber") or ""
+
+        return jsonify({
+            "mobile": full_mobile,
+            "registrationId": registration_id,
+            "evictedId": evicted_id,
+        })
+
     @app.post("/api/campaigns/create-with-payment")
     @require_campaigner
     def create_campaign_with_payment_route():

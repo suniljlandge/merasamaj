@@ -110,6 +110,16 @@
   var REPORT_REFRESH_MS = 5000;
 
   /* ---------------------------------------------------------- */
+  /* Contact reveal state (sliding window of 10).               */
+  /* revealedContacts: registrationId -> full mobile string.     */
+  /* revealedOrder: array of registrationIds in reveal order     */
+  /* (oldest first). Max length = MAX_REVEALED.                 */
+  /* ---------------------------------------------------------- */
+  var MAX_REVEALED = 10;
+  var revealedContacts = {};
+  var revealedOrder = [];
+
+  /* ---------------------------------------------------------- */
   /* Small helpers                                              */
   /* ---------------------------------------------------------- */
 
@@ -513,11 +523,21 @@
           escapeHtml(String(members)) +
           "</span>" +
           renderSalutationToggle(id, salutation) +
-          '<span class="text-xs text-slate-500 whitespace-nowrap">' +
+          '<span class="cm-mobile-display text-xs text-slate-500 whitespace-nowrap" data-recipient-id="' +
+          escapeHtml(id) +
+          '">' +
           escapeHtml(
-            recipient.mobileMasked || maskMobile(recipient.mobileNumber || "")
+            revealedContacts[id] || recipient.mobileMasked || maskMobile(recipient.mobileNumber || "")
           ) +
           "</span>" +
+          '<button type="button" class="cm-reveal-btn ml-1 text-slate-400 hover:text-emerald-600 transition" ' +
+          'data-recipient-id="' + escapeHtml(id) + '" ' +
+          'title="' + (revealedContacts[id] ? 'Number revealed' : 'View full number') + '" ' +
+          'aria-label="' + (revealedContacts[id] ? 'Number revealed' : 'View full number') + '">' +
+          (revealedContacts[id]
+            ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>'
+            : '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>') +
+          "</button>" +
           "</label>"
         );
       })
@@ -536,6 +556,13 @@
       elRecipients.querySelectorAll(".cm-sal-btn"),
       function (btn) {
         btn.addEventListener("click", onSalutationToggle);
+      }
+    );
+
+    Array.prototype.forEach.call(
+      elRecipients.querySelectorAll(".cm-reveal-btn"),
+      function (btn) {
+        btn.addEventListener("click", onRevealContact);
       }
     );
   }
@@ -586,6 +613,117 @@
     btn.classList.toggle("bg-emerald-100", !isSahParivaar);
     btn.classList.toggle("text-emerald-700", !isSahParivaar);
     btn.classList.toggle("border-emerald-300", !isSahParivaar);
+  }
+
+  /* ---------------------------------------------------------- */
+  /* Contact reveal — eye icon click handler.                   */
+  /* Calls the backend to get the full number for one contact.  */
+  /* Maintains a sliding window of MAX_REVEALED (10) reveals;   */
+  /* the oldest reveal is masked back when the limit is reached.*/
+  /* ---------------------------------------------------------- */
+  function onRevealContact(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var btn = event.currentTarget;
+    var id = btn.getAttribute("data-recipient-id");
+
+    if (!id) return;
+
+    // If already revealed, do nothing (already visible).
+    if (revealedContacts[id]) return;
+
+    // Show loading state on the button.
+    btn.style.opacity = "0.5";
+    btn.style.pointerEvents = "none";
+
+    fetch("/api/campaigns/reveal-contact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ registrationId: id }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          btn.style.opacity = "1";
+          btn.style.pointerEvents = "";
+          return;
+        }
+
+        // Store the revealed mobile.
+        revealedContacts[id] = data.mobile;
+
+        // Update local order tracking.
+        var idx = revealedOrder.indexOf(id);
+        if (idx !== -1) revealedOrder.splice(idx, 1);
+        revealedOrder.push(id);
+
+        // If an eviction happened (server enforced), mask it locally.
+        if (data.evictedId && data.evictedId !== id) {
+          delete revealedContacts[data.evictedId];
+          var evictIdx = revealedOrder.indexOf(data.evictedId);
+          if (evictIdx !== -1) revealedOrder.splice(evictIdx, 1);
+          // Update the evicted row's display back to masked.
+          updateMobileDisplay(data.evictedId, null);
+        }
+
+        // Also enforce locally: if somehow we exceed MAX_REVEALED.
+        while (revealedOrder.length > MAX_REVEALED) {
+          var oldest = revealedOrder.shift();
+          delete revealedContacts[oldest];
+          updateMobileDisplay(oldest, null);
+        }
+
+        // Update this row to show the full number.
+        updateMobileDisplay(id, data.mobile);
+      })
+      .catch(function () {
+        btn.style.opacity = "1";
+        btn.style.pointerEvents = "";
+      });
+  }
+
+  /* Update a single row's mobile display and eye icon state     */
+  /* without re-rendering the entire list.                       */
+  function updateMobileDisplay(recipientId, fullMobile) {
+    if (!elRecipients) return;
+
+    // Find the mobile span for this recipient.
+    var mobileSpan = elRecipients.querySelector(
+      '.cm-mobile-display[data-recipient-id="' + recipientId + '"]'
+    );
+    var revealBtn = elRecipients.querySelector(
+      '.cm-reveal-btn[data-recipient-id="' + recipientId + '"]'
+    );
+
+    if (mobileSpan) {
+      if (fullMobile) {
+        mobileSpan.textContent = fullMobile;
+      } else {
+        // Re-mask: find the recipient object to get the masked version.
+        var recipient = findRecipientById(recipientId);
+        var masked = recipient
+          ? (recipient.mobileMasked || maskMobile(recipient.mobileNumber || ""))
+          : "****";
+        mobileSpan.textContent = masked;
+      }
+    }
+
+    if (revealBtn) {
+      revealBtn.style.opacity = "1";
+      revealBtn.style.pointerEvents = "";
+      if (fullMobile) {
+        revealBtn.title = "Number revealed";
+        revealBtn.setAttribute("aria-label", "Number revealed");
+        revealBtn.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+      } else {
+        revealBtn.title = "View full number";
+        revealBtn.setAttribute("aria-label", "View full number");
+        revealBtn.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+      }
+    }
   }
 
   /* Find a recipient object (from the current preview list) by id. */
@@ -2502,6 +2640,10 @@
     window.CampaignWizard.selectedRecipients = [];
     window.CampaignWizard.salutations = {};
     window.CampaignWizard.audienceFilters = null;
+
+    /* Clear contact reveal state on wizard reset. */
+    revealedContacts = {};
+    revealedOrder = [];
 
     /* Re-render filters to a pristine state. */
     populateDistricts();
