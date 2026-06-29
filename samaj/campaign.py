@@ -157,12 +157,15 @@ def normalize_wa_number(mobile):
 # recipient and resolved into the {salutation} template variable at send time.
 #   - "shri-sau"     -> addresses the head of family couple (Mr. & Mrs.)
 #   - "sah-parivaar" -> addresses the whole family ("and family")
+#   - "shri"         -> addresses only the head of family (Mr.)
 SALUTATION_SHRI_SAU = "shri-sau"
 SALUTATION_SAH_PARIVAAR = "sah-parivaar"
+SALUTATION_SHRI = "shri"
 
 _SALUTATION_TEXT = {
     SALUTATION_SHRI_SAU: "श्री व सौ.",
     SALUTATION_SAH_PARIVAAR: "सह परिवार",
+    SALUTATION_SHRI: "श्री",
 }
 
 # Default salutation used when a recipient has no explicit choice.

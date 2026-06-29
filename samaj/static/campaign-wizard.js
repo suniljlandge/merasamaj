@@ -465,14 +465,20 @@
   /* so every selected recipient always carries a valid value.     */
   var SALUTATION_SHRI_SAU = "shri-sau";
   var SALUTATION_SAH_PARIVAAR = "sah-parivaar";
+  var SALUTATION_SHRI = "shri";
   var SALUTATION_LABELS = {};
   SALUTATION_LABELS[SALUTATION_SHRI_SAU] = "श्री व सौ.";
   SALUTATION_LABELS[SALUTATION_SAH_PARIVAAR] = "सह परिवार";
+  SALUTATION_LABELS[SALUTATION_SHRI] = "श्री";
+
+  /* Cycle order for the salutation toggle button. */
+  var SALUTATION_CYCLE = [SALUTATION_SHRI_SAU, SALUTATION_SAH_PARIVAAR, SALUTATION_SHRI];
 
   function getSalutation(id) {
-    return state.salutations[id] === SALUTATION_SAH_PARIVAAR
-      ? SALUTATION_SAH_PARIVAAR
-      : SALUTATION_SHRI_SAU;
+    var val = state.salutations[id];
+    if (val === SALUTATION_SAH_PARIVAAR) return SALUTATION_SAH_PARIVAAR;
+    if (val === SALUTATION_SHRI) return SALUTATION_SHRI;
+    return SALUTATION_SHRI_SAU;
   }
 
   function renderRecipients() {
@@ -523,15 +529,11 @@
           escapeHtml(String(members)) +
           "</span>" +
           renderSalutationToggle(id, salutation) +
-          '<span class="cm-mobile-display text-sm font-semibold ' +
-          (revealedContacts[id] ? 'text-emerald-700' : 'text-slate-700') +
-          ' whitespace-nowrap tracking-wide" data-recipient-id="' +
-          escapeHtml(id) +
-          '">' +
-          escapeHtml(
-            revealedContacts[id] || recipient.mobileMasked || maskMobile(recipient.mobileNumber || "")
-          ) +
-          "</span>" +
+          (revealedContacts[id]
+            ? '<a href="tel:' + escapeHtml(revealedContacts[id]) + '" class="cm-mobile-display text-sm font-semibold text-emerald-700 whitespace-nowrap tracking-wide underline decoration-emerald-300 hover:decoration-emerald-500" data-recipient-id="' + escapeHtml(id) + '">' +
+              escapeHtml(revealedContacts[id]) + '</a>'
+            : '<span class="cm-mobile-display text-sm font-semibold text-slate-700 whitespace-nowrap tracking-wide" data-recipient-id="' + escapeHtml(id) + '">' +
+              escapeHtml(recipient.mobileMasked || maskMobile(recipient.mobileNumber || "")) + '</span>') +
           '<button type="button" class="cm-reveal-btn ml-1.5 p-1 rounded-full ' +
           (revealedContacts[id]
             ? 'bg-emerald-100 text-emerald-600'
@@ -573,15 +575,19 @@
     );
   }
 
-  /* Build the two-state salutation toggle for a recipient row.    */
+  /* Build the three-state salutation toggle for a recipient row.   */
   /* It is a real <button> (type="button") so clicking it does not */
   /* toggle the surrounding row checkbox.                          */
   function renderSalutationToggle(id, salutation) {
-    var isSahParivaar = salutation === SALUTATION_SAH_PARIVAAR;
     var label = SALUTATION_LABELS[salutation];
-    var activeCls = isSahParivaar
-      ? "bg-indigo-100 text-indigo-700 border-indigo-300"
-      : "bg-emerald-100 text-emerald-700 border-emerald-300";
+    var activeCls;
+    if (salutation === SALUTATION_SAH_PARIVAAR) {
+      activeCls = "bg-indigo-100 text-indigo-700 border-indigo-300";
+    } else if (salutation === SALUTATION_SHRI) {
+      activeCls = "bg-amber-100 text-amber-700 border-amber-300";
+    } else {
+      activeCls = "bg-emerald-100 text-emerald-700 border-emerald-300";
+    }
     return (
       '<button type="button" class="cm-sal-btn shrink-0 text-xs ' +
       "font-medium border rounded-full px-2.5 py-0.5 whitespace-nowrap " +
@@ -591,34 +597,41 @@
       escapeHtml(id) +
       '" data-salutation="' +
       escapeHtml(salutation) +
-      '" title="Tap to switch salutation (Shri-Sau / Sah-Parivaar)">' +
+      '" title="Tap to switch salutation (श्री व सौ. / सह परिवार / श्री)">' +
       escapeHtml(label) +
       "</button>"
     );
   }
 
-  /* Flip a recipient's salutation between the two options and      */
+  /* Cycle a recipient's salutation through the three options and   */
   /* re-render just that button in place.                          */
   function onSalutationToggle(event) {
     event.preventDefault();
     event.stopPropagation();
     var btn = event.currentTarget;
     var id = btn.getAttribute("data-recipient-id");
-    var next =
-      getSalutation(id) === SALUTATION_SHRI_SAU
-        ? SALUTATION_SAH_PARIVAAR
-        : SALUTATION_SHRI_SAU;
+    var current = getSalutation(id);
+    var currentIdx = SALUTATION_CYCLE.indexOf(current);
+    var nextIdx = (currentIdx + 1) % SALUTATION_CYCLE.length;
+    var next = SALUTATION_CYCLE[nextIdx];
     state.salutations[id] = next;
 
-    var isSahParivaar = next === SALUTATION_SAH_PARIVAAR;
     btn.setAttribute("data-salutation", next);
     btn.textContent = SALUTATION_LABELS[next];
-    btn.classList.toggle("bg-indigo-100", isSahParivaar);
-    btn.classList.toggle("text-indigo-700", isSahParivaar);
-    btn.classList.toggle("border-indigo-300", isSahParivaar);
-    btn.classList.toggle("bg-emerald-100", !isSahParivaar);
-    btn.classList.toggle("text-emerald-700", !isSahParivaar);
-    btn.classList.toggle("border-emerald-300", !isSahParivaar);
+
+    // Remove all salutation color classes, then apply the correct one.
+    btn.classList.remove(
+      "bg-indigo-100", "text-indigo-700", "border-indigo-300",
+      "bg-emerald-100", "text-emerald-700", "border-emerald-300",
+      "bg-amber-100", "text-amber-700", "border-amber-300"
+    );
+    if (next === SALUTATION_SAH_PARIVAAR) {
+      btn.classList.add("bg-indigo-100", "text-indigo-700", "border-indigo-300");
+    } else if (next === SALUTATION_SHRI) {
+      btn.classList.add("bg-amber-100", "text-amber-700", "border-amber-300");
+    } else {
+      btn.classList.add("bg-emerald-100", "text-emerald-700", "border-emerald-300");
+    }
   }
 
   /* ---------------------------------------------------------- */
@@ -716,30 +729,39 @@
   }
 
   /* Update a single row's mobile display and eye icon state     */
-  /* without re-rendering the entire list.                       */
+  /* without re-rendering the entire list. Swaps between a plain */
+  /* <span> (masked) and a clickable <a href="tel:"> (revealed). */
   function updateMobileDisplay(recipientId, fullMobile) {
     if (!elRecipients) return;
 
-    // Find the mobile span for this recipient.
-    var mobileSpan = elRecipients.querySelector(
+    // Find the mobile element for this recipient (could be <span> or <a>).
+    var mobileEl = elRecipients.querySelector(
       '.cm-mobile-display[data-recipient-id="' + recipientId + '"]'
     );
     var revealBtn = elRecipients.querySelector(
       '.cm-reveal-btn[data-recipient-id="' + recipientId + '"]'
     );
 
-    if (mobileSpan) {
+    if (mobileEl) {
       if (fullMobile) {
-        mobileSpan.textContent = fullMobile;
-        mobileSpan.className = "cm-mobile-display text-sm font-semibold text-emerald-700 whitespace-nowrap tracking-wide";
+        // Replace with a tel: link.
+        var link = document.createElement("a");
+        link.href = "tel:" + fullMobile;
+        link.className = "cm-mobile-display text-sm font-semibold text-emerald-700 whitespace-nowrap tracking-wide underline decoration-emerald-300 hover:decoration-emerald-500";
+        link.setAttribute("data-recipient-id", recipientId);
+        link.textContent = fullMobile;
+        mobileEl.parentNode.replaceChild(link, mobileEl);
       } else {
-        // Re-mask: find the recipient object to get the masked version.
+        // Replace with a plain masked span.
         var recipient = findRecipientById(recipientId);
         var masked = recipient
           ? (recipient.mobileMasked || maskMobile(recipient.mobileNumber || ""))
           : "****";
-        mobileSpan.textContent = masked;
-        mobileSpan.className = "cm-mobile-display text-sm font-semibold text-slate-700 whitespace-nowrap tracking-wide";
+        var span = document.createElement("span");
+        span.className = "cm-mobile-display text-sm font-semibold text-slate-700 whitespace-nowrap tracking-wide";
+        span.setAttribute("data-recipient-id", recipientId);
+        span.textContent = masked;
+        mobileEl.parentNode.replaceChild(span, mobileEl);
       }
     }
 
