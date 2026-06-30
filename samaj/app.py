@@ -234,6 +234,12 @@ def create_app(config=None, collection=None, correction_collection=None):
         if not require_auth():
             return redirect("/login")
 
+        # Campaigner sessions land on the campaign manager, not self-register.
+        # is_pending_public_session() is True for campaigners (their status is
+        # never "approved"), so this check must come first.
+        if is_campaigner_session():
+            return redirect("/campaign-manager")
+
         if is_pending_public_session():
             return redirect(
                 "/self-register"
@@ -307,6 +313,10 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         if not is_public_session():
             return redirect("/login")
+
+        # Campaigners never use the self-registration form.
+        if is_campaigner_session():
+            return redirect("/campaign-manager")
 
         if session.get("public_status") == "approved":
             return redirect("/directory")
@@ -1180,7 +1190,9 @@ def create_app(config=None, collection=None, correction_collection=None):
         if not require_auth():
             return redirect("/login")
 
-        if is_pending_public_session():
+        # Campaigners get read-only directory access, so don't bounce them to
+        # self-register. Other pending public sessions still go there.
+        if is_pending_public_session() and not is_campaigner_session():
             return redirect("/self-register")
 
         if not can_access_directory():
@@ -1525,6 +1537,9 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         if request.method == "GET":
             if require_auth():
+                if is_campaigner_session():
+                    return redirect("/campaign-manager")
+
                 if is_pending_public_session():
                     return redirect("/self-register")
 
