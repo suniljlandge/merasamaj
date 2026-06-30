@@ -9,7 +9,14 @@ const crypto = require("crypto");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 
 const PROFILE_PIC_DELAY = parseInt(
-  process.env.PROFILE_PIC_FETCH_DELAY_MS || "2500",
+  process.env.PROFILE_PIC_FETCH_DELAY_MS || "300",
+  10
+);
+
+// How many profile pictures to fetch/upload in parallel. Bounded to respect
+// WhatsApp rate limits while massively cutting total backup time vs. sequential.
+const PROFILE_PIC_CONCURRENCY = parseInt(
+  process.env.PROFILE_PIC_CONCURRENCY || "6",
   10
 );
 
@@ -181,10 +188,9 @@ function createBackupService(db, r2, logger) {
     if (includeProfilePics && r2.isEnabled) {
       const contacts = await contactsCol.find({ userId, isActive: true }).toArray();
 
-      for (const contact of contacts) {
+      // Process one contact's profile picture. Returns nothing; updates `results`.
+      const processOne = async (contact) => {
         try {
-          await sleep(PROFILE_PIC_DELAY);
-
           const jid = contact.phone + "@s.whatsapp.net";
           let picUrl;
           try {
@@ -192,19 +198,19 @@ function createBackupService(db, r2, logger) {
           } catch (picErr) {
             // 404 = no pic, 401 = privacy blocked
             results.profilePics.skipped++;
-            continue;
+            return;
           }
 
           if (!picUrl) {
             results.profilePics.skipped++;
-            continue;
+            return;
           }
 
           // Download image
           const response = await fetch(picUrl);
           if (!response.ok) {
             results.profilePics.failed++;
-            continue;
+            return;
           }
           const buffer = Buffer.from(await response.arrayBuffer());
 
@@ -216,7 +222,7 @@ function createBackupService(db, r2, logger) {
 
           if (contact.profilePicHash === newHash) {
             results.profilePics.skipped++;
-            continue;
+            return;
           }
 
           // Upload to R2 with timestamp-based key (preserves history)
@@ -266,7 +272,21 @@ function createBackupService(db, r2, logger) {
             "Profile pic backup error"
           );
         }
-      }
+      };
+
+      // Run with bounded concurrency: a fixed number of workers pull from a
+      // shared queue. A small stagger delay between each request keeps us
+      // under WhatsApp's rate limits without the old 2.5s-per-contact cost.
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < contacts.length) {
+          const idx = cursor++;
+          await processOne(contacts[idx]);
+          if (PROFILE_PIC_DELAY > 0) await sleep(PROFILE_PIC_DELAY);
+        }
+      };
+      const workerCount = Math.max(1, Math.min(PROFILE_PIC_CONCURRENCY, contacts.length));
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
     }
 
     // --- 3. Log the backup ---
@@ -303,6 +323,7 @@ function createBackupService(db, r2, logger) {
     const groupCount = await groupsCol.countDocuments({ userId });
 
     return {
+      running: activeBackups.has(userId),
       lastBackup: lastBackup
         ? {
             type: lastBackup.backupType,

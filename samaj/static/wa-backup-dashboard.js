@@ -109,6 +109,14 @@
       progressText.textContent = "Starting backup...";
     }
 
+    // Capture the previous backup completion time so we can detect a NEW one.
+    // (Without this, an old backup log makes the poll falsely report "done".)
+    let prevCompletedAt = null;
+    try {
+      const pre = await (await fetch(`${API}/backup/status?userId=${userId}`)).json();
+      prevCompletedAt = pre?.lastBackup?.completedAt || null;
+    } catch {}
+
     try {
       const resp = await fetch(`${API}/backup/start`, {
         method: "POST",
@@ -119,34 +127,57 @@
 
       if (data.success) {
         btn.textContent = "✓ Running";
-        if (progressFill) progressFill.style.width = "50%";
+        if (progressFill) progressFill.style.width = "40%";
         if (progressText) progressText.textContent = "Backup running in background...";
 
-        // Poll for completion
+        const finish = (text) => {
+          if (progressFill) progressFill.style.width = "100%";
+          if (progressText) progressText.textContent = text;
+          btn.textContent = "Run Backup";
+          btn.disabled = false;
+          setTimeout(() => loadSessions(), 1000);
+        };
+
+        // Poll for completion. Backups can take several minutes for large
+        // contact lists, so allow a generous window (~10 min) and detect
+        // completion via the `running` flag flipping false + a fresh log.
         let checks = 0;
+        const maxChecks = 200; // 200 × 3s = 10 minutes
+        let sawRunning = false;
         const pollInterval = setInterval(async () => {
           checks++;
-          if (checks > 30) {
+          if (checks > maxChecks) {
             clearInterval(pollInterval);
-            btn.textContent = "Run Backup";
-            btn.disabled = false;
-            if (progressFill) progressFill.style.width = "100%";
-            if (progressText) progressText.textContent = "Backup completed (or timed out). Refresh to see results.";
-            setTimeout(() => loadSessions(), 2000);
+            finish("Backup is taking a while — still running in background. Refresh later to see results.");
             return;
           }
 
           try {
             const statusResp = await fetch(`${API}/backup/status?userId=${userId}`);
             const statusData = await statusResp.json();
-            if (statusData.lastBackup) {
-              clearInterval(pollInterval);
-              if (progressFill) progressFill.style.width = "100%";
-              if (progressText) progressText.textContent = `✓ Done — ${statusData.totalContacts} contacts, ${statusData.totalGroups} groups`;
-              btn.textContent = "Run Backup";
-              btn.disabled = false;
-              setTimeout(() => loadSessions(), 1000);
+
+            if (statusData.running) {
+              sawRunning = true;
+              // Creep the progress bar forward while running (40% → 90%)
+              if (progressFill) {
+                const pct = Math.min(90, 40 + checks * 2);
+                progressFill.style.width = pct + "%";
+              }
+              if (progressText) progressText.textContent = `Backing up… ${statusData.totalContacts || 0} contacts so far`;
+              return;
             }
+
+            // Not running. Did a NEW backup log appear?
+            const completedAt = statusData?.lastBackup?.completedAt || null;
+            const isNew = completedAt && completedAt !== prevCompletedAt;
+
+            if (isNew || sawRunning) {
+              clearInterval(pollInterval);
+              const r = statusData?.lastBackup?.results?.profilePics;
+              const picNote = r ? ` · ${r.uploaded} pics` : "";
+              finish(`✓ Done — ${statusData.totalContacts} contacts, ${statusData.totalGroups} groups${picNote}`);
+            }
+            // else: backup hasn't registered as running yet — keep polling.
           } catch {}
         }, 3000);
       } else {
