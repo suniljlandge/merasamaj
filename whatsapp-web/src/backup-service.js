@@ -24,6 +24,7 @@ function createBackupService(db, r2, logger) {
   const contactsCol = db.collection("wa_contact_backups");
   const groupsCol = db.collection("wa_group_backups");
   const backupLogCol = db.collection("wa_backup_log");
+  const messagesCol = db.collection("wa_messages");
 
   const profilePicHistoryCol = db.collection("wa_profile_pic_history");
 
@@ -182,6 +183,37 @@ function createBackupService(db, r2, logger) {
       }
     } catch (err) {
       logger.error({ userId, err: err.message }, "Error fetching chats/groups");
+    }
+
+    // --- 1b. Backfill missing contact names from stored message pushNames ---
+    // Many history-synced contacts have no name, but their messages often carry
+    // a pushName (the sender's WhatsApp display name). Recover those here.
+    try {
+      const named = await messagesCol
+        .aggregate([
+          { $match: { userId, pushName: { $nin: [null, ""] } } },
+          { $sort: { timestamp: -1 } },
+          { $group: { _id: "$phone", pushName: { $first: "$pushName" } } },
+        ])
+        .toArray();
+
+      let recovered = 0;
+      for (const row of named) {
+        if (!row._id || !row.pushName) continue;
+        const upd = await contactsCol.updateOne(
+          {
+            userId,
+            phone: row._id,
+            $or: [{ pushName: null }, { pushName: "" }, { pushName: { $exists: false } }],
+          },
+          { $set: { pushName: row.pushName } }
+        );
+        if (upd.modifiedCount) recovered++;
+      }
+      if (recovered) logger.info({ userId, recovered }, "Recovered contact names from messages");
+      results.namesRecovered = recovered;
+    } catch (err) {
+      logger.error({ userId, err: err.message }, "Name backfill error");
     }
 
     // --- 2. Backup profile pictures ---

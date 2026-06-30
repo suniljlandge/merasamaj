@@ -482,22 +482,31 @@ function createSessionManager(db, logger, { onConnected } = {}) {
 
         if (!phone || !/^\d+$/.test(phone)) continue;
 
-        // Save contact
+        // Save contact. Only write pushName/verifiedName when present so a
+        // nameless sync event can't overwrite a previously-captured name.
+        const cName = contact.notify || contact.name || null;
         try {
+          const $set = {
+            userId,
+            phone,
+            lid: lid || (jid.endsWith("@lid") ? jid : null),
+            source: "sync",
+            lastSeenAt: new Date(),
+            isActive: true,
+          };
+          if (cName) $set.pushName = cName;
+          if (contact.verifiedName) $set.verifiedName = contact.verifiedName;
+
           await contactsCol.updateOne(
             { userId, phone },
             {
-              $set: {
-                userId,
-                phone,
-                pushName: contact.notify || contact.name || null,
-                verifiedName: contact.verifiedName || null,
-                lid: lid || (jid.endsWith("@lid") ? jid : null),
-                source: "sync",
-                lastSeenAt: new Date(),
-                isActive: true,
+              $set,
+              $setOnInsert: {
+                firstSeenAt: new Date(),
+                profilePicKey: null,
+                profilePicHash: null,
+                ...(cName ? {} : { pushName: null }),
               },
-              $setOnInsert: { firstSeenAt: new Date(), profilePicKey: null, profilePicHash: null },
             },
             { upsert: true }
           );
@@ -511,7 +520,7 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           try {
             await lidMappingsCol.updateOne(
               { lid: lidJid },
-              { $set: { lid: lidJid, phone, userId, name: contact.notify || contact.name || null, updatedAt: new Date() } },
+              { $set: { lid: lidJid, phone, userId, name: cName, updatedAt: new Date() } },
               { upsert: true }
             );
           } catch {}
@@ -579,18 +588,25 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           if (isIndividual) {
             const phone = jid.replace("@s.whatsapp.net", "");
             if (phone && /^\d+$/.test(phone)) {
+              const chatName = chat.name || null;
+              const $setC = {
+                userId,
+                phone,
+                source: "chat",
+                lastSeenAt: new Date(),
+                isActive: true,
+              };
+              if (chatName) $setC.pushName = chatName;
               await contactsCol.updateOne(
                 { userId, phone },
                 {
-                  $set: {
-                    userId,
-                    phone,
-                    pushName: chat.name || null,
-                    source: "chat",
-                    lastSeenAt: new Date(),
-                    isActive: true,
+                  $set: $setC,
+                  $setOnInsert: {
+                    firstSeenAt: new Date(),
+                    profilePicKey: null,
+                    profilePicHash: null,
+                    ...(chatName ? {} : { pushName: null }),
                   },
-                  $setOnInsert: { firstSeenAt: new Date(), profilePicKey: null, profilePicHash: null },
                 },
                 { upsert: true }
               );
@@ -820,18 +836,29 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           const phone = jid.replace("@s.whatsapp.net", "");
           if (!phone || !/^\d+$/.test(phone)) continue;
 
+          // Only write a name when this batch actually carries one — otherwise
+          // a nameless batch (e.g. RECENT/chats) would wipe a name captured by
+          // an earlier PUSH_NAME batch, leaving the contact "Unknown".
+          const name = contact.notify || contact.name || null;
+          const $set = {
+            userId, phone,
+            source: "history_sync",
+            lastSeenAt: new Date(),
+            isActive: true,
+          };
+          if (name) $set.pushName = name;
+
           try {
             await contactsCol.updateOne(
               { userId, phone },
               {
-                $set: {
-                  userId, phone,
-                  pushName: contact.notify || contact.name || null,
-                  source: "history_sync",
-                  lastSeenAt: new Date(),
-                  isActive: true,
+                $set,
+                $setOnInsert: {
+                  firstSeenAt: new Date(),
+                  profilePicKey: null,
+                  profilePicHash: null,
+                  ...(name ? {} : { pushName: null }),
                 },
-                $setOnInsert: { firstSeenAt: new Date(), profilePicKey: null, profilePicHash: null },
               },
               { upsert: true }
             );
