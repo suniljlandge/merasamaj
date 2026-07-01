@@ -52,6 +52,10 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       syncFullHistory: true,
       shouldSyncHistoryMessage: () => true,
       logger: logger.child({ module: "baileys", userId }),
+      // Drop retry requests for messages older than 5 minutes — avoids
+      // infinite Bad MAC retry storms after restarts for stale offline messages.
+      maxMsgRetryCount: 1,
+      getMessage: async () => undefined,
     });
 
     // Store socket
@@ -171,6 +175,8 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       syncFullHistory: true,
       shouldSyncHistoryMessage: () => true,
       logger: logger.child({ module: "baileys", userId }),
+      maxMsgRetryCount: 1,
+      getMessage: async () => undefined,
     });
 
     activeSockets.set(userId, sock);
@@ -268,6 +274,8 @@ function createSessionManager(db, logger, { onConnected } = {}) {
       syncFullHistory: true,
       shouldSyncHistoryMessage: () => true,
       logger: logger.child({ module: "baileys", userId }),
+      maxMsgRetryCount: 1,
+      getMessage: async () => undefined,
     });
 
     activeSockets.set(userId, sock);
@@ -541,16 +549,33 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     sock.ev.on("contacts.update", async (updates) => {
       for (const update of updates) {
         const jid = update.id || "";
-        if (!jid.endsWith("@s.whatsapp.net")) continue;
-        const phone = jid.replace("@s.whatsapp.net", "");
+        let phone = "";
+
+        if (jid.endsWith("@s.whatsapp.net")) {
+          phone = jid.replace("@s.whatsapp.net", "");
+        } else if (jid.endsWith("@lid")) {
+          // Resolve LID → phone via lid_mappings
+          const mapping = await db.collection("wa_lid_mappings").findOne({ lid: jid });
+          if (mapping) phone = mapping.phone;
+        }
+
         if (!phone || !/^\d+$/.test(phone)) continue;
 
         const $set = { lastSeenAt: new Date() };
         if (update.notify) $set.pushName = update.notify;
         if (update.verifiedName) $set.verifiedName = update.verifiedName;
 
+        if (!update.notify && !update.verifiedName) continue; // nothing to update
+
         try {
-          await contactsCol.updateOne({ userId, phone }, { $set });
+          await contactsCol.updateOne(
+            { userId, phone },
+            {
+              $set: { userId, phone, isActive: true, ...$set },
+              $setOnInsert: { firstSeenAt: new Date(), profilePicKey: null, profilePicHash: null },
+            },
+            { upsert: true }
+          );
         } catch {}
       }
     });

@@ -1,12 +1,12 @@
-# Graph Report - SAMAJ  (2026-06-29)
+# Graph Report - SAMAJ  (2026-07-01)
 
 ## Corpus Check
-- 72 files · ~249,177 words
+- 74 files · ~255,270 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1675 nodes · 2994 edges · 263 communities detected
-- Extraction: 77% EXTRACTED · 23% INFERRED · 0% AMBIGUOUS · INFERRED: 702 edges (avg confidence: 0.73)
+- 1748 nodes · 3061 edges · 312 communities detected
+- Extraction: 76% EXTRACTED · 24% INFERRED · 0% AMBIGUOUS · INFERRED: 723 edges (avg confidence: 0.73)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -39,10 +39,10 @@
 - [[_COMMUNITY_Community 26|Community 26]]
 - [[_COMMUNITY_Community 27|Community 27]]
 - [[_COMMUNITY_Community 28|Community 28]]
+- [[_COMMUNITY_Community 29|Community 29]]
+- [[_COMMUNITY_Community 30|Community 30]]
+- [[_COMMUNITY_Community 31|Community 31]]
 - [[_COMMUNITY_Community 32|Community 32]]
-- [[_COMMUNITY_Community 33|Community 33]]
-- [[_COMMUNITY_Community 34|Community 34]]
-- [[_COMMUNITY_Community 35|Community 35]]
 - [[_COMMUNITY_Community 36|Community 36]]
 - [[_COMMUNITY_Community 37|Community 37]]
 - [[_COMMUNITY_Community 38|Community 38]]
@@ -273,6 +273,55 @@
 - [[_COMMUNITY_Community 263|Community 263]]
 - [[_COMMUNITY_Community 264|Community 264]]
 - [[_COMMUNITY_Community 265|Community 265]]
+- [[_COMMUNITY_Community 266|Community 266]]
+- [[_COMMUNITY_Community 267|Community 267]]
+- [[_COMMUNITY_Community 268|Community 268]]
+- [[_COMMUNITY_Community 269|Community 269]]
+- [[_COMMUNITY_Community 270|Community 270]]
+- [[_COMMUNITY_Community 271|Community 271]]
+- [[_COMMUNITY_Community 272|Community 272]]
+- [[_COMMUNITY_Community 273|Community 273]]
+- [[_COMMUNITY_Community 274|Community 274]]
+- [[_COMMUNITY_Community 275|Community 275]]
+- [[_COMMUNITY_Community 276|Community 276]]
+- [[_COMMUNITY_Community 277|Community 277]]
+- [[_COMMUNITY_Community 278|Community 278]]
+- [[_COMMUNITY_Community 279|Community 279]]
+- [[_COMMUNITY_Community 280|Community 280]]
+- [[_COMMUNITY_Community 281|Community 281]]
+- [[_COMMUNITY_Community 282|Community 282]]
+- [[_COMMUNITY_Community 283|Community 283]]
+- [[_COMMUNITY_Community 284|Community 284]]
+- [[_COMMUNITY_Community 285|Community 285]]
+- [[_COMMUNITY_Community 286|Community 286]]
+- [[_COMMUNITY_Community 287|Community 287]]
+- [[_COMMUNITY_Community 288|Community 288]]
+- [[_COMMUNITY_Community 289|Community 289]]
+- [[_COMMUNITY_Community 290|Community 290]]
+- [[_COMMUNITY_Community 291|Community 291]]
+- [[_COMMUNITY_Community 292|Community 292]]
+- [[_COMMUNITY_Community 293|Community 293]]
+- [[_COMMUNITY_Community 294|Community 294]]
+- [[_COMMUNITY_Community 295|Community 295]]
+- [[_COMMUNITY_Community 296|Community 296]]
+- [[_COMMUNITY_Community 297|Community 297]]
+- [[_COMMUNITY_Community 298|Community 298]]
+- [[_COMMUNITY_Community 299|Community 299]]
+- [[_COMMUNITY_Community 300|Community 300]]
+- [[_COMMUNITY_Community 301|Community 301]]
+- [[_COMMUNITY_Community 302|Community 302]]
+- [[_COMMUNITY_Community 303|Community 303]]
+- [[_COMMUNITY_Community 304|Community 304]]
+- [[_COMMUNITY_Community 305|Community 305]]
+- [[_COMMUNITY_Community 306|Community 306]]
+- [[_COMMUNITY_Community 307|Community 307]]
+- [[_COMMUNITY_Community 308|Community 308]]
+- [[_COMMUNITY_Community 309|Community 309]]
+- [[_COMMUNITY_Community 310|Community 310]]
+- [[_COMMUNITY_Community 311|Community 311]]
+- [[_COMMUNITY_Community 312|Community 312]]
+- [[_COMMUNITY_Community 313|Community 313]]
+- [[_COMMUNITY_Community 314|Community 314]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `FakeDatabase` - 163 edges
@@ -283,342 +332,342 @@
 6. `validate_campaign_status_transition()` - 25 edges
 7. `create_app()` - 24 edges
 8. `create_campaign_with_upi()` - 24 edges
-9. `get_hof_by_area()` - 23 edges
-10. `_get_user_id()` - 23 edges
+9. `_get_user_id()` - 24 edges
+10. `get_hof_by_area()` - 23 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `create_app()` --calls--> `get_database()`  [INFERRED]
   samaj\app.py → samaj\db.py
-- `validate_campaign_status_transition()` --calls--> `test_valid_iff_in_allowed_transition_set()`  [INFERRED]
-  samaj\campaign.py → tests\test_campaign_payment_properties.py
-- `validate_campaign_status_transition()` --calls--> `test_error_present_exactly_when_invalid()`  [INFERRED]
-  samaj\campaign.py → tests\test_campaign_payment_properties.py
-- `validate_campaign_status_transition()` --calls--> `test_sending_requires_payment_verified()`  [INFERRED]
-  samaj\campaign.py → tests\test_campaign_payment_properties.py
-- `validate_campaign_status_transition()` --calls--> `test_terminal_states_have_no_outgoing_transitions()`  [INFERRED]
-  samaj\campaign.py → tests\test_campaign_payment_properties.py
+- `normalize_wa_number()` --calls--> `test_valid_inputs_produce_12_char_wa_number()`  [INFERRED]
+  samaj\campaign.py → tests\test_campaign_properties.py
+- `normalize_wa_number()` --calls--> `test_normalization_is_idempotent()`  [INFERRED]
+  samaj\campaign.py → tests\test_campaign_properties.py
+- `Unit tests for the standalone redirect routing function.` --uses--> `FakeDatabase`  [INFERRED]
+  tests\test_campaigner_routing.py → tests\test_user_management.py
+- `Integration tests for verify-otp account type routing.` --uses--> `FakeDatabase`  [INFERRED]
+  tests\test_campaigner_routing.py → tests\test_user_management.py
 
 ## Communities
 
 ### Community 0 - "Community 0"
 Cohesion: 0.02
-Nodes (118): confirm_upi_payment(), create_campaign_with_upi(), Create a campaign and generate a UPI payment link for it.      Validates the r, Record the user-submitted UPI transaction reference for a campaign.      After, Admin action: confirm a UPI payment and trigger campaign sending.      Marks t, submit_upi_reference(), Tests for Campaign Manager environment configuration (Task 13.2).  Verifies th, The UPI_ID and UPI_PAYEE_NAME env vars must be wired into app.config. (+110 more)
+Nodes (102): confirm_upi_payment(), create_campaign_with_upi(), Create a campaign and generate a UPI payment link for it.      Validates the r, Record the user-submitted UPI transaction reference for a campaign.      After, Admin action: confirm a UPI payment and trigger campaign sending.      Marks t, submit_upi_reference(), Tests for Campaign Manager environment configuration (Task 13.2).  Verifies th, The UPI_ID and UPI_PAYEE_NAME env vars must be wired into app.config. (+94 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.02
-Nodes (134): send_otp_message(), createBackupService(), sleep(), init(), suggest(), main(), activateMode(), clearOtpStatus() (+126 more)
+Cohesion: 0.03
+Nodes (126): init(), suggest(), loadOtpSettings(), saveOtpSettings(), send_template_graph(), CampaignReportEndpointTests, Tests for the GET /api/campaigns/<id>/report endpoint.  Covers @require_campai, applyPicToEl() (+118 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.02
-Nodes (73): Replace placeholders in template variables with recipient data.      Recognize, resolve_body_vars(), get_redirect_for_account(), Determine the post-OTP redirect target for a public_account.      Routing rule, _fake_matches(), _FakeCollection, formatted_indian_mobile(), Property-based tests for campaign phone normalization and template variable res (+65 more)
-
-### Community 3 - "Community 3"
-Cohesion: 0.03
-Nodes (79): _address_en(), build_campaign_report(), build_upi_link(), _family_members_count(), get_ad_templates(), get_campaign_messages_collection(), get_campaign_payments_collection(), get_campaigns_collection() (+71 more)
-
-### Community 4 - "Community 4"
 Cohesion: 0.04
 Nodes (21): create_app(), env_flag(), find_public_account_by_mobile(), Look up a public_account by its 10-digit mobile, tolerating legacy formats., execute_campaign_send(), load_whatsapp_settings(), Load Meta WhatsApp delivery credentials from the settings collection.      Rea, Send a paid campaign's WhatsApp template messages to every recipient.      Cal (+13 more)
 
-### Community 5 - "Community 5"
+### Community 3 - "Community 3"
 Cohesion: 0.04
-Nodes (67): add_family_tree_edge(), append_audit_event(), _applicant_full_name(), _bilingual_en(), _bilingual_mr(), build_bilingual_name(), build_directory_export_rows(), build_family_tree_graph_data() (+59 more)
+Nodes (68): add_family_tree_edge(), append_audit_event(), _applicant_full_name(), _bilingual_en(), _bilingual_mr(), build_bilingual_name(), build_directory_export_rows(), build_family_tree_graph_data() (+60 more)
 
-### Community 6 - "Community 6"
+### Community 4 - "Community 4"
 Cohesion: 0.06
 Nodes (94): applyFilters(), buildQuery(), checkboxRow(), checkWebSendOption(), clearError(), clearPaymentError(), clearTemplateNavError(), deselectRecipientId() (+86 more)
 
+### Community 5 - "Community 5"
+Cohesion: 0.03
+Nodes (52): Resolve a salutation toggle answer into its display text.      Accepts one of, Replace placeholders in template variables with recipient data.      Recognize, resolve_body_vars(), salutation_text(), test_output_entries_are_all_strings(), test_output_length_equals_input_length(), Tests for resolve_body_vars() — template variable resolution.  Validates Requi, Requirement 13.4: Missing name key -> empty string. (+44 more)
+
+### Community 6 - "Community 6"
+Cohesion: 0.04
+Nodes (71): _address_en(), build_campaign_report(), build_upi_link(), _family_members_count(), get_ad_templates(), get_campaign_messages_collection(), get_campaign_payments_collection(), get_campaigns_collection() (+63 more)
+
 ### Community 7 - "Community 7"
 Cohesion: 0.06
-Nodes (67): build_corrected_phrase(), Return the configured default account type for new mobile signups.      Reads, read_default_account_type(), _collect_bilingual_correction(), collect_transliteration_corrections(), load_corrections(), normalize_source(), save_corrections() (+59 more)
+Nodes (67): build_corrected_phrase(), WhatsApp login is available when the toggle is enabled in OTP settings., read_default_account_type(), _collect_bilingual_correction(), collect_transliteration_corrections(), load_corrections(), normalize_source(), save_corrections() (+59 more)
 
 ### Community 8 - "Community 8"
+Cohesion: 0.06
+Nodes (48): get_areas_with_counts(), Compute available areas with family counts for the Area filter dropdown., classify_area(), get_redirect_for_account(), Determine the post-OTP redirect target for a public_account.      Routing rule, _en(), _expected_area_counts(), _fake_matches() (+40 more)
+
+### Community 9 - "Community 9"
 Cohesion: 0.07
 Nodes (45): activateWizardStep(), activateWizardStepForErrors(), buildRelationshipTargetOptions(), clamp(), clearFieldErrors(), clearMessage(), createTemporaryPersonId(), escapeAttribute() (+37 more)
 
-### Community 9 - "Community 9"
+### Community 10 - "Community 10"
 Cohesion: 0.06
 Nodes (11): normalize_wa_number(), Normalize an Indian mobile number to WhatsApp format (91XXXXXXXXXX).      Stri, Unit tests for normalize_wa_number() phone normalization utility., A number already in 91XXXXXXXXXX format should pass through., Numbers starting with 0-5 after prefix removal are invalid., Output must be exactly 12 chars matching 91[6-9]\\d{9}., Tests for phone number normalization to WhatsApp format., TestNormalizeWaNumber (+3 more)
 
-### Community 10 - "Community 10"
-Cohesion: 0.08
-Nodes (27): apply_projection(), apply_update(), FakeCursor, FakeDeleteResult, FakeInsertResult, FakeUpdateResult, matches_query(), change_role() (+19 more)
-
 ### Community 11 - "Community 11"
-Cohesion: 0.09
-Nodes (8): CampaignAreasEndpointTests, CampaignListAndDetailEndpointTests, CampaignSurnameGroupsEndpointTests, CampaignTemplatesEndpointTests, Tests for the GET /api/campaigns/areas endpoint (Requirements 3.3, 3.4)., Tests for the GET /api/campaigns/surname-groups endpoint     (Requirement 3.1)., Tests for the GET /api/campaigns/templates endpoint     (Requirements 4.1, 4.2), Tests for GET /api/campaigns and GET /api/campaigns/<id> endpoints     (Require
+Cohesion: 0.06
+Nodes (12): AudiencePreviewEndpointTests, _bilingual(), _make_hof(), Tests for the GET /api/campaigns/audience-preview endpoint.  Covers @require_c, CampaignAreasEndpointTests, CampaignListAndDetailEndpointTests, CampaignSurnameGroupsEndpointTests, CampaignTemplatesEndpointTests (+4 more)
 
 ### Community 12 - "Community 12"
+Cohesion: 0.1
+Nodes (28): createBackupService(), sleep(), main(), createNullClient(), createR2Client(), createRoutes(), createSessionManager(), fail() (+20 more)
+
+### Community 13 - "Community 13"
+Cohesion: 0.09
+Nodes (21): apply_projection(), apply_update(), FakeCursor, FakeDeleteResult, FakeInsertResult, FakeUpdateResult, matches_query(), _extract_hash() (+13 more)
+
+### Community 14 - "Community 14"
+Cohesion: 0.09
+Nodes (13): Validate whether a campaign status transition is permitted.      Args:, validate_campaign_status_transition(), test_error_present_exactly_when_invalid(), test_sending_requires_payment_verified(), test_terminal_states_have_no_outgoing_transitions(), test_valid_iff_in_allowed_transition_set(), Tests for samaj/campaign.py — status constants and state machine validation., Terminal state: 'failed' has no outgoing transitions. (+5 more)
+
+### Community 15 - "Community 15"
 Cohesion: 0.14
 Nodes (27): _build_watermark_overlay(), _column_widths(), _draw_footer(), _font(), _hard_break(), _harden(), _is_deva(), _latin_font() (+19 more)
 
-### Community 13 - "Community 13"
-Cohesion: 0.16
-Nodes (25): get_areas_with_counts(), Compute available areas with family counts for the Area filter dropdown., classify_area(), _en(), _expected_area_counts(), Extract English text from a bilingual {en, mr} field or plain string., Independently recompute distinct-mobile counts per area, mirroring the     dist, test_family_count_equals_distinct_classified_mobiles() (+17 more)
+### Community 16 - "Community 16"
+Cohesion: 0.12
+Nodes (12): CampaignEndToEndFlowTests, CampaignerLoginRedirectTests, CampaignManagerIntegrationBase, CampaignSessionIsolationTests, End-to-end integration tests for the Campaign Manager flow (task 13.3).  These, Login as a staff admin for payment confirmation., Scenario 1: login as campaigner -> redirect to /campaign-manager., Scenarios 2 & 3: audience -> create -> UPI pay -> admin confirm -> report. (+4 more)
 
-### Community 14 - "Community 14"
+### Community 17 - "Community 17"
 Cohesion: 0.16
 Nodes (24): collectConfigFromForm(), downloadExport(), escapeHtml(), escapeHtmlAttribute(), fillSelect(), fillSortOptions(), initialize(), loadExportColumns() (+16 more)
 
-### Community 15 - "Community 15"
-Cohesion: 0.24
-Nodes (21): get_hof_by_area(), Query registrations and return HOF (Head of Family) records for selection., _bilingual(), FakeCollection, make_hof(), _matches(), Tests for samaj.campaign.get_hof_by_area — audience builder filtering.  Covers, sample_docs() (+13 more)
-
-### Community 16 - "Community 16"
+### Community 18 - "Community 18"
 Cohesion: 0.16
 Nodes (13): calculateFamilyMembersCount(), closeInvitationModal(), createInvitationModal(), deleteMember(), escapeAttribute(), escapeHtml(), loadMemberDirectory(), maskMobile() (+5 more)
 
-### Community 17 - "Community 17"
+### Community 19 - "Community 19"
 Cohesion: 0.27
 Nodes (15): get_distinct_surname_groups(), Return distinct surnameGroup values for the surname filter dropdown.      Quer, FakeCollection, make_doc(), _matches(), Tests for samaj.campaign.get_distinct_surname_groups — surname dropdown.  Cove, sample_docs(), test_combined_district_taluka_filter() (+7 more)
 
-### Community 18 - "Community 18"
+### Community 20 - "Community 20"
 Cohesion: 0.3
 Nodes (15): bilingual(), escapeAttr(), escapeHtml(), init(), joinName(), loadMembers(), maskMobile(), membersCount() (+7 more)
 
-### Community 19 - "Community 19"
+### Community 21 - "Community 21"
+Cohesion: 0.23
+Nodes (7): _FakeResponse, Unit tests for send_single_template_message() WhatsApp delivery (Task 7.3).  C, Minimal stand-in for a requests.Response object., _send(), TestSendSingleTemplateMessageFailure, TestSendSingleTemplateMessageRateLimit, TestSendSingleTemplateMessageSuccess
+
+### Community 22 - "Community 22"
 Cohesion: 0.24
 Nodes (12): escapeHtml(), escapeHtmlAttribute(), formatFullName(), formatMemberName(), formatStatus(), loadReviewQueue(), openSubmissionViewer(), renderDetailRow() (+4 more)
 
-### Community 20 - "Community 20"
+### Community 23 - "Community 23"
 Cohesion: 0.19
 Nodes (4): _Base, OtpRateLimitTests, Tests for OTP request rate limiting and the global new-signup default account t, SignupDefaultTests
 
-### Community 21 - "Community 21"
-Cohesion: 0.31
-Nodes (11): canChangePassword(), canDeleteUser(), escapeHtml(), escapeHtmlAttribute(), formatDate(), formatRole(), handleUserCreate(), initializeUserManagement() (+3 more)
-
-### Community 22 - "Community 22"
-Cohesion: 0.26
-Nodes (11): createDisplayGraph(), createStyledEdges(), createStyledNodes(), escapeHtml(), FamilyMemberNode(), FlowApp(), isSpouseRelation(), loadTree() (+3 more)
-
-### Community 23 - "Community 23"
-Cohesion: 0.23
-Nodes (8): activateTab(), loadAddressAreas(), loadAreaDetail(), renderResult(), renderUnaligned(), runApply(), runScan(), saveOneRow()
-
 ### Community 24 - "Community 24"
-Cohesion: 0.41
-Nodes (11): getWaMobile(), handleWaMobileInput(), hideWaPanels(), pollWaStatus(), renderQrCode(), renderQrFallback(), setWaStatus(), startWaStatusPolling() (+3 more)
+Cohesion: 0.31
+Nodes (11): Resolve selected registration ids into recipient dicts server-side.      Full, resolve_recipients_by_ids(), _doc(), FakeCollection, _matches(), Tests for samaj.campaign.resolve_recipients_by_ids.  The campaign wizard sends, test_dedups_by_mobile_number(), test_empty_input_returns_empty() (+3 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.26
-Nodes (4): AudiencePreviewEndpointTests, _bilingual(), _make_hof(), Tests for the GET /api/campaigns/audience-preview endpoint.  Covers @require_c
+Nodes (11): createDisplayGraph(), createStyledEdges(), createStyledNodes(), escapeHtml(), FamilyMemberNode(), FlowApp(), isSpouseRelation(), loadTree() (+3 more)
 
 ### Community 26 - "Community 26"
+Cohesion: 0.31
+Nodes (11): canChangePassword(), canDeleteUser(), escapeHtml(), escapeHtmlAttribute(), formatDate(), formatRole(), handleUserCreate(), initializeUserManagement() (+3 more)
+
+### Community 27 - "Community 27"
+Cohesion: 0.23
+Nodes (8): activateTab(), loadAddressAreas(), loadAreaDetail(), renderResult(), renderUnaligned(), runApply(), runScan(), saveOneRow()
+
+### Community 28 - "Community 28"
+Cohesion: 0.32
+Nodes (10): activateMode(), clearOtpStatus(), getNormalizedMobile(), handleMobileInput(), postOtpAction(), requestOtp(), resendOtp(), setOtpStatus() (+2 more)
+
+### Community 29 - "Community 29"
+Cohesion: 0.41
+Nodes (11): getWaMobile(), handleWaMobileInput(), hideWaPanels(), pollWaStatus(), renderQrCode(), renderQrFallback(), setWaStatus(), startWaStatusPolling() (+3 more)
+
+### Community 30 - "Community 30"
 Cohesion: 0.33
 Nodes (3): normalize_public_mobile(), Normalize a public-account / OTP mobile number to a bare 10-digit form.      P, NormalizePublicMobileTests
 
-### Community 27 - "Community 27"
+### Community 31 - "Community 31"
 Cohesion: 0.39
 Nodes (6): createStyledEdges(), createStyledNodes(), escapeHtml(), FlowApp(), loadTree(), renderError()
 
-### Community 28 - "Community 28"
+### Community 32 - "Community 32"
 Cohesion: 0.83
 Nodes (3): activateTab(), logout(), resetWizard()
 
-### Community 32 - "Community 32"
-Cohesion: 1.0
-Nodes (1): Map personId -> display name for resolving relationship links.
-
-### Community 33 - "Community 33"
-Cohesion: 1.0
-Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
-
-### Community 34 - "Community 34"
-Cohesion: 1.0
-Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
-
-### Community 35 - "Community 35"
-Cohesion: 1.0
-Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
-
 ### Community 36 - "Community 36"
 Cohesion: 1.0
-Nodes (1): Return True when the current session is a public session whose stored     accou
+Nodes (1): Map personId -> display name for resolving relationship links.
 
 ### Community 37 - "Community 37"
 Cohesion: 1.0
-Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
+Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
 
 ### Community 38 - "Community 38"
 Cohesion: 1.0
-Nodes (1): Return the configured default account type for new mobile signups.      Reads
+Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
 
 ### Community 39 - "Community 39"
 Cohesion: 1.0
-Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
+Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
 
 ### Community 40 - "Community 40"
 Cohesion: 1.0
-Nodes (1): WhatsApp login is available when the toggle is enabled in OTP settings.
+Nodes (1): Return True when the current session is a public session whose stored     accou
 
 ### Community 41 - "Community 41"
 Cohesion: 1.0
-Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
 
 ### Community 42 - "Community 42"
 Cohesion: 1.0
-Nodes (1): Return the stored role config merged over defaults.
+Nodes (1): Return the configured default account type for new mobile signups.      Reads
 
 ### Community 43 - "Community 43"
 Cohesion: 1.0
-Nodes (1): Check whether a role has a capability per the configurable matrix.
+Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
 
 ### Community 44 - "Community 44"
 Cohesion: 1.0
-Nodes (1): Map personId -> display name for resolving relationship links.
+Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
 
 ### Community 45 - "Community 45"
 Cohesion: 1.0
-Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
+Nodes (1): Return the stored role config merged over defaults.
 
 ### Community 46 - "Community 46"
 Cohesion: 1.0
-Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
+Nodes (1): Check whether a role has a capability per the configurable matrix.
 
 ### Community 47 - "Community 47"
 Cohesion: 1.0
-Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
+Nodes (1): Resolve a salutation toggle answer into its display text.      Accepts one of
 
 ### Community 48 - "Community 48"
 Cohesion: 1.0
-Nodes (1): Return True when the current session is a public session whose stored     accou
+Nodes (1): Replace placeholders in template variables with recipient data.      Recognize
 
 ### Community 49 - "Community 49"
 Cohesion: 1.0
-Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
+Nodes (1): Return the list of available WhatsApp ad templates for the campaign wizard.
 
 ### Community 50 - "Community 50"
 Cohesion: 1.0
-Nodes (1): Return the configured default account type for new mobile signups.      Reads
+Nodes (1): Extract the English text from a bilingual {en, mr} field (or plain string).
 
 ### Community 51 - "Community 51"
 Cohesion: 1.0
-Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
+Nodes (1): Build a display name from firstName/middleName/lastName English parts.
 
 ### Community 52 - "Community 52"
 Cohesion: 1.0
-Nodes (1): WhatsApp login is available when the toggle is enabled in OTP settings.
+Nodes (1): Query registrations and return HOF (Head of Family) records for selection.
 
 ### Community 53 - "Community 53"
 Cohesion: 1.0
-Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+Nodes (1): Return the total number of members in a family record.      A family's total i
 
 ### Community 54 - "Community 54"
 Cohesion: 1.0
-Nodes (1): Return the stored role config merged over defaults.
+Nodes (1): Resolve selected registration ids into recipient dicts server-side.      Full
 
 ### Community 55 - "Community 55"
 Cohesion: 1.0
-Nodes (1): Check whether a role has a capability per the configurable matrix.
+Nodes (1): Compute available areas with family counts for the Area filter dropdown.
 
 ### Community 56 - "Community 56"
 Cohesion: 1.0
-Nodes (1): Decorator to require login.
+Nodes (1): Return distinct surnameGroup values for the surname filter dropdown.      Quer
 
 ### Community 57 - "Community 57"
 Cohesion: 1.0
-Nodes (1): Check if WhatsApp Web sidecar is available.
+Nodes (1): Return the configured UPI ID (VPA) for receiving payments.      Reads from Fla
 
 ### Community 58 - "Community 58"
 Cohesion: 1.0
-Nodes (1): Start OTP-based WhatsApp login.
+Nodes (1): Return the configured UPI payee display name.      Reads from Flask app config
 
 ### Community 59 - "Community 59"
 Cohesion: 1.0
-Nodes (1): Get current session status.
+Nodes (1): Return True when a UPI ID is configured for receiving payments.
 
 ### Community 60 - "Community 60"
 Cohesion: 1.0
-Nodes (1): Poll for latest QR code.
+Nodes (1): Build a UPI deep-link URL for the given amount and note.      Format: upi://pa
 
 ### Community 61 - "Community 61"
 Cohesion: 1.0
-Nodes (1): Get current session status.
+Nodes (1): Create a campaign and generate a UPI payment link for it.      Validates the r
 
 ### Community 62 - "Community 62"
 Cohesion: 1.0
-Nodes (1): Disconnect WhatsApp session.
+Nodes (1): Record the user-submitted UPI transaction reference for a campaign.      After
 
 ### Community 63 - "Community 63"
 Cohesion: 1.0
-Nodes (1): Upload a media file for campaign messages. Max 32 MB.     Stores file on disk (
+Nodes (1): Admin action: confirm a UPI payment and trigger campaign sending.      Marks t
 
 ### Community 64 - "Community 64"
 Cohesion: 1.0
-Nodes (1): Serve uploaded media files.
+Nodes (1): Admin action: reject a UPI payment submission.      Marks the payment as rejec
 
 ### Community 65 - "Community 65"
 Cohesion: 1.0
-Nodes (1): Send a personal message via WhatsApp Web session.     Falls back to Cloud API i
+Nodes (1): Truncate an error description to at most 500 characters (Requirement 7.3).
 
 ### Community 66 - "Community 66"
 Cohesion: 1.0
-Nodes (1): Default routing engine configuration.
+Nodes (1): Send one WhatsApp template message via the Meta Graph API v24.0.      POSTs a
 
 ### Community 67 - "Community 67"
 Cohesion: 1.0
-Nodes (1): Decorator to require manage_wa_web capability (super admin).
+Nodes (1): Return the 'app_settings' MongoDB collection (OTP / WhatsApp settings).
 
 ### Community 68 - "Community 68"
 Cohesion: 1.0
-Nodes (1): Trigger a contact + group + profile pic backup (super admin only).
+Nodes (1): Load Meta WhatsApp delivery credentials from the settings collection.      Rea
 
 ### Community 69 - "Community 69"
 Cohesion: 1.0
-Nodes (1): Create a custom template (pending approval).
+Nodes (1): Best-effort conversion of a value to ObjectId, returning the raw value     unch
 
 ### Community 70 - "Community 70"
 Cohesion: 1.0
-Nodes (1): Get a signed URL for a contact's profile picture (super admin only).
+Nodes (1): Send a paid campaign's WhatsApp template messages to every recipient.      Cal
 
 ### Community 71 - "Community 71"
 Cohesion: 1.0
-Nodes (1): Get all historical profile pictures for a contact (super admin only).
+Nodes (1): Mask a mobile number so only the last 4 digits remain visible.      Every char
 
 ### Community 72 - "Community 72"
 Cohesion: 1.0
-Nodes (1): Get signed URLs for multiple contacts in one request (super admin only).
+Nodes (1): Return the UTC delivery-attempt timestamp for a campaign_message.      Prefers
 
 ### Community 73 - "Community 73"
 Cohesion: 1.0
-Nodes (1): Get chat messages for a contact (super admin only).
+Nodes (1): Build a delivery report for a single campaign.      Aggregates the campaign_me
 
 ### Community 74 - "Community 74"
 Cohesion: 1.0
-Nodes (1): Download media for a message on-demand (super admin only).
+Nodes (1): List custom templates. Users see only their own + approved ones.
 
 ### Community 75 - "Community 75"
 Cohesion: 1.0
-Nodes (1): List custom templates. Users see only their own + approved ones.
+Nodes (1): Create a custom template (pending approval).
 
 ### Community 76 - "Community 76"
 Cohesion: 1.0
-Nodes (1): Create a custom template (pending approval).
+Nodes (1): Approve a custom template (super admin/admin only).
 
 ### Community 77 - "Community 77"
 Cohesion: 1.0
-Nodes (1): Approve a custom template (super admin/admin only).
+Nodes (1): Default routing engine configuration.
 
 ### Community 78 - "Community 78"
 Cohesion: 1.0
-Nodes (1): Reject a custom template (super admin/admin only).
+Nodes (1): Delete a custom template. Users can delete their own, admins can delete any.
 
 ### Community 79 - "Community 79"
 Cohesion: 1.0
-Nodes (1): Delete a custom template. Users can delete their own, admins can delete any.
+Nodes (1): Get the app_settings collection.
 
 ### Community 80 - "Community 80"
 Cohesion: 1.0
-Nodes (1): Get the app_settings collection.
+Nodes (1): Default routing engine configuration.
 
 ### Community 81 - "Community 81"
 Cohesion: 1.0
-Nodes (1): Default routing engine configuration.
+Nodes (1): Save routing engine configuration (super admin only).
 
 ### Community 82 - "Community 82"
 Cohesion: 1.0
-Nodes (1): Get the current routing engine configuration (super admin only).
+Nodes (1): Save routing engine configuration (super admin only).
 
 ### Community 83 - "Community 83"
 Cohesion: 1.0
@@ -658,804 +707,992 @@ Nodes (1): Mobile (OTP) login is available unless the active provider is disable
 
 ### Community 92 - "Community 92"
 Cohesion: 1.0
-Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+Nodes (1): WhatsApp login is available when the toggle is enabled in OTP settings.
 
 ### Community 93 - "Community 93"
 Cohesion: 1.0
-Nodes (1): Return the stored role config merged over defaults.
+Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
 
 ### Community 94 - "Community 94"
 Cohesion: 1.0
-Nodes (1): Check whether a role has a capability per the configurable matrix.
+Nodes (1): Return the stored role config merged over defaults.
 
 ### Community 95 - "Community 95"
 Cohesion: 1.0
-Nodes (1): Get a signed URL for a contact's backed-up profile picture.      Args:
+Nodes (1): Check whether a role has a capability per the configurable matrix.
 
 ### Community 96 - "Community 96"
 Cohesion: 1.0
-Nodes (1): Get all historical profile pictures for a contact (newest first).      Args:
+Nodes (1): Map personId -> display name for resolving relationship links.
 
 ### Community 97 - "Community 97"
 Cohesion: 1.0
-Nodes (1): Get signed URLs for multiple contacts' profile pictures in one call.      Args
+Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
 
 ### Community 98 - "Community 98"
 Cohesion: 1.0
-Nodes (1): List custom templates. Users see only their own + approved ones.
+Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
 
 ### Community 99 - "Community 99"
 Cohesion: 1.0
-Nodes (1): Create a custom template (pending approval).
+Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
 
 ### Community 100 - "Community 100"
 Cohesion: 1.0
-Nodes (1): Approve a custom template (super admin/admin only).
+Nodes (1): Return True when the current session is a public session whose stored     accou
 
 ### Community 101 - "Community 101"
 Cohesion: 1.0
-Nodes (1): Get the current routing engine configuration (super admin only).
+Nodes (1): Return the configured default account type for new mobile signups.      Reads
 
 ### Community 102 - "Community 102"
 Cohesion: 1.0
-Nodes (1): Delete a custom template. Users can delete their own, admins can delete any.
+Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
 
 ### Community 103 - "Community 103"
 Cohesion: 1.0
-Nodes (1): Get the app_settings collection.
+Nodes (1): WhatsApp login is available when the toggle is enabled in OTP settings.
 
 ### Community 104 - "Community 104"
 Cohesion: 1.0
-Nodes (1): Get the current routing engine configuration (super admin only).
+Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
 
 ### Community 105 - "Community 105"
 Cohesion: 1.0
-Nodes (1): Save routing engine configuration (super admin only).
+Nodes (1): Return the stored role config merged over defaults.
 
 ### Community 106 - "Community 106"
 Cohesion: 1.0
-Nodes (1): Get all WA web sessions with backup stats (super admin view).
+Nodes (1): Check whether a role has a capability per the configurable matrix.
 
 ### Community 107 - "Community 107"
 Cohesion: 1.0
-Nodes (1): Map personId -> display name for resolving relationship links.
+Nodes (1): Decorator to require login.
 
 ### Community 108 - "Community 108"
 Cohesion: 1.0
-Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
+Nodes (1): Check if WhatsApp Web sidecar is available.
 
 ### Community 109 - "Community 109"
 Cohesion: 1.0
-Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
+Nodes (1): Start OTP-based WhatsApp login.
 
 ### Community 110 - "Community 110"
 Cohesion: 1.0
-Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
+Nodes (1): Get current session status.
 
 ### Community 111 - "Community 111"
 Cohesion: 1.0
-Nodes (1): Return True when the current session is a public session whose stored     accou
+Nodes (1): Poll for latest QR code.
 
 ### Community 112 - "Community 112"
 Cohesion: 1.0
-Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
+Nodes (1): Get current session status.
 
 ### Community 113 - "Community 113"
 Cohesion: 1.0
-Nodes (1): Return the configured default account type for new mobile signups.      Reads
+Nodes (1): Disconnect WhatsApp session.
 
 ### Community 114 - "Community 114"
 Cohesion: 1.0
-Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
+Nodes (1): Upload a media file for campaign messages. Max 32 MB.     Stores file on disk (
 
 ### Community 115 - "Community 115"
 Cohesion: 1.0
-Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+Nodes (1): Serve uploaded media files.
 
 ### Community 116 - "Community 116"
 Cohesion: 1.0
-Nodes (1): Return the stored role config merged over defaults.
+Nodes (1): Send a personal message via WhatsApp Web session.     Falls back to Cloud API i
 
 ### Community 117 - "Community 117"
 Cohesion: 1.0
-Nodes (1): Check whether a role has a capability per the configurable matrix.
+Nodes (1): Default routing engine configuration.
 
 ### Community 118 - "Community 118"
 Cohesion: 1.0
-Nodes (1): Get the app_settings collection.
+Nodes (1): Decorator to require manage_wa_web capability (super admin).
 
 ### Community 119 - "Community 119"
 Cohesion: 1.0
-Nodes (1): Default routing engine configuration.
+Nodes (1): Trigger a contact + group + profile pic backup (super admin only).
 
 ### Community 120 - "Community 120"
 Cohesion: 1.0
-Nodes (1): Get the current routing engine configuration (super admin only).
+Nodes (1): Create a custom template (pending approval).
 
 ### Community 121 - "Community 121"
 Cohesion: 1.0
-Nodes (1): Save routing engine configuration (super admin only).
+Nodes (1): Get a signed URL for a contact's profile picture (super admin only).
 
 ### Community 122 - "Community 122"
 Cohesion: 1.0
-Nodes (1): Get all WA web sessions with backup stats (super admin view).
+Nodes (1): Get all historical profile pictures for a contact (super admin only).
 
 ### Community 123 - "Community 123"
 Cohesion: 1.0
-Nodes (1): Map personId -> display name for resolving relationship links.
+Nodes (1): Get signed URLs for multiple contacts in one request (super admin only).
 
 ### Community 124 - "Community 124"
 Cohesion: 1.0
-Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
+Nodes (1): Get chat messages for a contact (super admin only).
 
 ### Community 125 - "Community 125"
 Cohesion: 1.0
-Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
+Nodes (1): Download media for a message on-demand (super admin only).
 
 ### Community 126 - "Community 126"
 Cohesion: 1.0
-Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
+Nodes (1): List custom templates. Users see only their own + approved ones.
 
 ### Community 127 - "Community 127"
 Cohesion: 1.0
-Nodes (1): Return True when the current session is a public session whose stored     accou
+Nodes (1): Create a custom template (pending approval).
 
 ### Community 128 - "Community 128"
 Cohesion: 1.0
-Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
+Nodes (1): Approve a custom template (super admin/admin only).
 
 ### Community 129 - "Community 129"
 Cohesion: 1.0
-Nodes (1): Return the configured default account type for new mobile signups.      Reads
+Nodes (1): Reject a custom template (super admin/admin only).
 
 ### Community 130 - "Community 130"
 Cohesion: 1.0
-Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
+Nodes (1): Delete a custom template. Users can delete their own, admins can delete any.
 
 ### Community 131 - "Community 131"
 Cohesion: 1.0
-Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+Nodes (1): Default routing engine configuration.
 
 ### Community 132 - "Community 132"
 Cohesion: 1.0
-Nodes (1): Return the stored role config merged over defaults.
+Nodes (1): Get the current routing engine configuration (super admin only).
 
 ### Community 133 - "Community 133"
 Cohesion: 1.0
-Nodes (1): Check whether a role has a capability per the configurable matrix.
+Nodes (1): Get all WA web sessions with backup stats (super admin view).
 
 ### Community 134 - "Community 134"
 Cohesion: 1.0
-Nodes (1): Get today's send statistics.
+Nodes (1): Map personId -> display name for resolving relationship links.
 
 ### Community 135 - "Community 135"
 Cohesion: 1.0
-Nodes (1): Decorator to require manage_wa_web capability (super admin).
+Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
 
 ### Community 136 - "Community 136"
 Cohesion: 1.0
-Nodes (1): Get a signed URL for a contact's profile picture.
+Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
 
 ### Community 137 - "Community 137"
 Cohesion: 1.0
-Nodes (1): Get a signed URL for a contact's profile picture (super admin only).
+Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
 
 ### Community 138 - "Community 138"
 Cohesion: 1.0
-Nodes (1): Export contacts as JSON or CSV (super admin only).
+Nodes (1): Return True when the current session is a public session whose stored     accou
 
 ### Community 139 - "Community 139"
 Cohesion: 1.0
-Nodes (1): Get a signed URL for a contact's profile picture (super admin only).
+Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
 
 ### Community 140 - "Community 140"
 Cohesion: 1.0
-Nodes (1): List custom templates. Users see only their own + approved ones.
+Nodes (1): Return the configured default account type for new mobile signups.      Reads
 
 ### Community 141 - "Community 141"
 Cohesion: 1.0
-Nodes (1): Approve a custom template (super admin/admin only).
+Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
 
 ### Community 142 - "Community 142"
 Cohesion: 1.0
-Nodes (1): Reject a custom template (super admin/admin only).
+Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
 
 ### Community 143 - "Community 143"
 Cohesion: 1.0
-Nodes (1): Get the app_settings collection.
+Nodes (1): Return the stored role config merged over defaults.
 
 ### Community 144 - "Community 144"
 Cohesion: 1.0
-Nodes (1): Default routing engine configuration.
+Nodes (1): Check whether a role has a capability per the configurable matrix.
 
 ### Community 145 - "Community 145"
 Cohesion: 1.0
-Nodes (1): Save routing engine configuration (super admin only).
+Nodes (1): Get a signed URL for a contact's backed-up profile picture.      Args:
 
 ### Community 146 - "Community 146"
 Cohesion: 1.0
-Nodes (1): Get all WA web sessions with backup stats (super admin view).
+Nodes (1): Get all historical profile pictures for a contact (newest first).      Args:
 
 ### Community 147 - "Community 147"
 Cohesion: 1.0
-Nodes (1): Map personId -> display name for resolving relationship links.
+Nodes (1): Get signed URLs for multiple contacts' profile pictures in one call.      Args
 
 ### Community 148 - "Community 148"
 Cohesion: 1.0
-Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
+Nodes (1): List custom templates. Users see only their own + approved ones.
 
 ### Community 149 - "Community 149"
 Cohesion: 1.0
-Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
+Nodes (1): Create a custom template (pending approval).
 
 ### Community 150 - "Community 150"
 Cohesion: 1.0
-Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
+Nodes (1): Approve a custom template (super admin/admin only).
 
 ### Community 151 - "Community 151"
 Cohesion: 1.0
-Nodes (1): Return True when the current session is a public session whose stored     accou
+Nodes (1): Get the current routing engine configuration (super admin only).
 
 ### Community 152 - "Community 152"
 Cohesion: 1.0
-Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
+Nodes (1): Delete a custom template. Users can delete their own, admins can delete any.
 
 ### Community 153 - "Community 153"
 Cohesion: 1.0
-Nodes (1): Return the configured default account type for new mobile signups.      Reads
+Nodes (1): Get the app_settings collection.
 
 ### Community 154 - "Community 154"
 Cohesion: 1.0
-Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
+Nodes (1): Get the current routing engine configuration (super admin only).
 
 ### Community 155 - "Community 155"
 Cohesion: 1.0
-Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+Nodes (1): Save routing engine configuration (super admin only).
 
 ### Community 156 - "Community 156"
 Cohesion: 1.0
-Nodes (1): Return the stored role config merged over defaults.
+Nodes (1): Map personId -> display name for resolving relationship links.
 
 ### Community 157 - "Community 157"
 Cohesion: 1.0
-Nodes (1): Check whether a role has a capability per the configurable matrix.
+Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
 
 ### Community 158 - "Community 158"
 Cohesion: 1.0
-Nodes (1): Start a contact + group backup in the background.      Args:         user_id:
+Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
 
 ### Community 159 - "Community 159"
 Cohesion: 1.0
-Nodes (1): Get backup status and stats for a user.      Returns:         dict with keys:
+Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
 
 ### Community 160 - "Community 160"
 Cohesion: 1.0
-Nodes (1): Get a signed URL for a contact's backed-up profile picture.      Args:
+Nodes (1): Return True when the current session is a public session whose stored     accou
 
 ### Community 161 - "Community 161"
 Cohesion: 1.0
-Nodes (1): Get the app_settings collection.
+Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
 
 ### Community 162 - "Community 162"
 Cohesion: 1.0
-Nodes (1): Default routing engine configuration.
+Nodes (1): Return the configured default account type for new mobile signups.      Reads
 
 ### Community 163 - "Community 163"
 Cohesion: 1.0
-Nodes (1): Get the current routing engine configuration (super admin only).
+Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
 
 ### Community 164 - "Community 164"
 Cohesion: 1.0
-Nodes (1): Save routing engine configuration (super admin only).
+Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
 
 ### Community 165 - "Community 165"
 Cohesion: 1.0
-Nodes (1): Get all WA web sessions with backup stats (super admin view).
+Nodes (1): Return the stored role config merged over defaults.
 
 ### Community 166 - "Community 166"
 Cohesion: 1.0
-Nodes (1): Map personId -> display name for resolving relationship links.
+Nodes (1): Check whether a role has a capability per the configurable matrix.
 
 ### Community 167 - "Community 167"
 Cohesion: 1.0
-Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
+Nodes (1): Get the app_settings collection.
 
 ### Community 168 - "Community 168"
 Cohesion: 1.0
-Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
+Nodes (1): Default routing engine configuration.
 
 ### Community 169 - "Community 169"
 Cohesion: 1.0
-Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
+Nodes (1): Get the current routing engine configuration (super admin only).
 
 ### Community 170 - "Community 170"
 Cohesion: 1.0
-Nodes (1): Return True when the current session is a public session whose stored     accou
+Nodes (1): Save routing engine configuration (super admin only).
 
 ### Community 171 - "Community 171"
 Cohesion: 1.0
-Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
+Nodes (1): Get all WA web sessions with backup stats (super admin view).
 
 ### Community 172 - "Community 172"
 Cohesion: 1.0
-Nodes (1): Return the configured default account type for new mobile signups.      Reads
+Nodes (1): Map personId -> display name for resolving relationship links.
 
 ### Community 173 - "Community 173"
 Cohesion: 1.0
-Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
+Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
 
 ### Community 174 - "Community 174"
 Cohesion: 1.0
-Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
 
 ### Community 175 - "Community 175"
 Cohesion: 1.0
-Nodes (1): Return the stored role config merged over defaults.
+Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
 
 ### Community 176 - "Community 176"
 Cohesion: 1.0
-Nodes (1): Check whether a role has a capability per the configurable matrix.
+Nodes (1): Return True when the current session is a public session whose stored     accou
 
 ### Community 177 - "Community 177"
 Cohesion: 1.0
-Nodes (1): Initiate OTP-based WhatsApp login for a user.      Args:         user_id: The
+Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
 
 ### Community 178 - "Community 178"
 Cohesion: 1.0
-Nodes (1): Get the current WhatsApp session status for a user.      Returns:         dic
+Nodes (1): Return the configured default account type for new mobile signups.      Reads
 
 ### Community 179 - "Community 179"
 Cohesion: 1.0
-Nodes (1): Disconnect and log out a user's WhatsApp Web session.
+Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
 
 ### Community 180 - "Community 180"
 Cohesion: 1.0
-Nodes (1): Decide whether a message should route via Web session or Cloud API.      Args:
+Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
 
 ### Community 181 - "Community 181"
 Cohesion: 1.0
-Nodes (1): Send a personal follow-up message via WhatsApp Web session.      Falls back to
+Nodes (1): Return the stored role config merged over defaults.
 
 ### Community 182 - "Community 182"
 Cohesion: 1.0
-Nodes (1): Get today's message send stats (for UI display).      Returns:         dict w
+Nodes (1): Check whether a role has a capability per the configurable matrix.
 
 ### Community 183 - "Community 183"
 Cohesion: 1.0
-Nodes (1): Start a contact + group backup in the background.      Args:         user_id:
+Nodes (1): Get today's send statistics.
 
 ### Community 184 - "Community 184"
 Cohesion: 1.0
-Nodes (1): Get backup status and stats for a user.      Returns:         dict with keys:
+Nodes (1): Decorator to require manage_wa_web capability (super admin).
 
 ### Community 185 - "Community 185"
 Cohesion: 1.0
-Nodes (1): Export backed-up contacts.      Args:         user_id: User ID.         form
+Nodes (1): Get a signed URL for a contact's profile picture.
 
 ### Community 186 - "Community 186"
 Cohesion: 1.0
-Nodes (1): Get a signed URL for a contact's backed-up profile picture.      Args:
+Nodes (1): Get a signed URL for a contact's profile picture (super admin only).
 
 ### Community 187 - "Community 187"
 Cohesion: 1.0
-Nodes (1): Extract current user ID from session (public account or staff).
+Nodes (1): Export contacts as JSON or CSV (super admin only).
 
 ### Community 188 - "Community 188"
 Cohesion: 1.0
-Nodes (1): Decorator to require login.
+Nodes (1): Get a signed URL for a contact's profile picture (super admin only).
 
 ### Community 189 - "Community 189"
 Cohesion: 1.0
-Nodes (1): Check if WhatsApp Web sidecar is available.
+Nodes (1): List custom templates. Users see only their own + approved ones.
 
 ### Community 190 - "Community 190"
 Cohesion: 1.0
-Nodes (1): Start OTP-based WhatsApp login.
+Nodes (1): Approve a custom template (super admin/admin only).
 
 ### Community 191 - "Community 191"
 Cohesion: 1.0
-Nodes (1): Get current session status.
+Nodes (1): Reject a custom template (super admin/admin only).
 
 ### Community 192 - "Community 192"
 Cohesion: 1.0
-Nodes (1): Disconnect WhatsApp session.
+Nodes (1): Get the app_settings collection.
 
 ### Community 193 - "Community 193"
 Cohesion: 1.0
-Nodes (1): Send a personal message via WhatsApp Web session.     Falls back to Cloud API i
+Nodes (1): Default routing engine configuration.
 
 ### Community 194 - "Community 194"
 Cohesion: 1.0
-Nodes (1): Get today's send statistics.
+Nodes (1): Save routing engine configuration (super admin only).
 
 ### Community 195 - "Community 195"
 Cohesion: 1.0
-Nodes (1): Decorator to require manage_wa_web capability (super admin).
+Nodes (1): Get all WA web sessions with backup stats (super admin view).
 
 ### Community 196 - "Community 196"
 Cohesion: 1.0
-Nodes (1): Get backup stats and last backup info.
+Nodes (1): Map personId -> display name for resolving relationship links.
 
 ### Community 197 - "Community 197"
 Cohesion: 1.0
-Nodes (1): Get backup stats and last backup info (super admin only).
+Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
 
 ### Community 198 - "Community 198"
 Cohesion: 1.0
-Nodes (1): Export contacts as JSON or CSV (super admin only).
+Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
 
 ### Community 199 - "Community 199"
 Cohesion: 1.0
-Nodes (1): Get the app_settings collection.
+Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
 
 ### Community 200 - "Community 200"
 Cohesion: 1.0
-Nodes (1): Save routing engine configuration (super admin only).
+Nodes (1): Return True when the current session is a public session whose stored     accou
 
 ### Community 201 - "Community 201"
 Cohesion: 1.0
-Nodes (1): Save routing engine configuration (super admin only).
+Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
 
 ### Community 202 - "Community 202"
 Cohesion: 1.0
-Nodes (1): Get all WA web sessions (super admin view).
+Nodes (1): Return the configured default account type for new mobile signups.      Reads
 
 ### Community 203 - "Community 203"
 Cohesion: 1.0
-Nodes (1): Trigger a contact + group + profile pic backup.
+Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
 
 ### Community 204 - "Community 204"
 Cohesion: 1.0
-Nodes (1): Get backup stats and last backup info.
+Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
 
 ### Community 205 - "Community 205"
 Cohesion: 1.0
-Nodes (1): Export contacts as JSON or CSV.
+Nodes (1): Return the stored role config merged over defaults.
 
 ### Community 206 - "Community 206"
 Cohesion: 1.0
-Nodes (1): Get a signed URL for a contact's profile picture.
+Nodes (1): Check whether a role has a capability per the configurable matrix.
 
 ### Community 207 - "Community 207"
 Cohesion: 1.0
-Nodes (1): Get the app_settings collection.
+Nodes (1): Start a contact + group backup in the background.      Args:         user_id:
 
 ### Community 208 - "Community 208"
 Cohesion: 1.0
-Nodes (1): Default routing engine configuration.
+Nodes (1): Get backup status and stats for a user.      Returns:         dict with keys:
 
 ### Community 209 - "Community 209"
 Cohesion: 1.0
-Nodes (1): Get the current routing engine configuration (super admin only).
+Nodes (1): Get a signed URL for a contact's backed-up profile picture.      Args:
 
 ### Community 210 - "Community 210"
 Cohesion: 1.0
-Nodes (1): Save routing engine configuration (super admin only).
+Nodes (1): Get the app_settings collection.
 
 ### Community 211 - "Community 211"
 Cohesion: 1.0
-Nodes (1): Disconnect WhatsApp session.
+Nodes (1): Default routing engine configuration.
 
 ### Community 212 - "Community 212"
 Cohesion: 1.0
-Nodes (1): Send a personal message via WhatsApp Web session.     Falls back to Cloud API i
+Nodes (1): Get the current routing engine configuration (super admin only).
 
 ### Community 213 - "Community 213"
 Cohesion: 1.0
-Nodes (1): Get today's send statistics.
+Nodes (1): Save routing engine configuration (super admin only).
 
 ### Community 214 - "Community 214"
 Cohesion: 1.0
-Nodes (1): Trigger a contact + group + profile pic backup.
+Nodes (1): Get all WA web sessions with backup stats (super admin view).
 
 ### Community 215 - "Community 215"
 Cohesion: 1.0
-Nodes (1): Export contacts as JSON or CSV.
+Nodes (1): Map personId -> display name for resolving relationship links.
 
 ### Community 216 - "Community 216"
 Cohesion: 1.0
-Nodes (1): Default routing engine configuration.
+Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
 
 ### Community 217 - "Community 217"
 Cohesion: 1.0
-Nodes (1): Get the current routing engine configuration (super admin only).
+Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
 
 ### Community 218 - "Community 218"
 Cohesion: 1.0
-Nodes (1): Get all WA web sessions (super admin view).
+Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
 
 ### Community 219 - "Community 219"
 Cohesion: 1.0
-Nodes (1): Map personId -> display name for resolving relationship links.
+Nodes (1): Return True when the current session is a public session whose stored     accou
 
 ### Community 220 - "Community 220"
 Cohesion: 1.0
-Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
+Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
 
 ### Community 221 - "Community 221"
 Cohesion: 1.0
-Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
+Nodes (1): Return the configured default account type for new mobile signups.      Reads
 
 ### Community 222 - "Community 222"
 Cohesion: 1.0
-Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
+Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
 
 ### Community 223 - "Community 223"
 Cohesion: 1.0
-Nodes (1): Return True when the current session is a public session whose stored     accou
+Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
 
 ### Community 224 - "Community 224"
 Cohesion: 1.0
-Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
+Nodes (1): Return the stored role config merged over defaults.
 
 ### Community 225 - "Community 225"
 Cohesion: 1.0
-Nodes (1): Return the configured default account type for new mobile signups.      Reads
+Nodes (1): Check whether a role has a capability per the configurable matrix.
 
 ### Community 226 - "Community 226"
 Cohesion: 1.0
-Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
+Nodes (1): Initiate OTP-based WhatsApp login for a user.      Args:         user_id: The
 
 ### Community 227 - "Community 227"
 Cohesion: 1.0
-Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+Nodes (1): Get the current WhatsApp session status for a user.      Returns:         dic
 
 ### Community 228 - "Community 228"
 Cohesion: 1.0
-Nodes (1): Return the stored role config merged over defaults.
+Nodes (1): Disconnect and log out a user's WhatsApp Web session.
 
 ### Community 229 - "Community 229"
 Cohesion: 1.0
-Nodes (1): Check whether a role has a capability per the configurable matrix.
+Nodes (1): Decide whether a message should route via Web session or Cloud API.      Args:
 
 ### Community 230 - "Community 230"
 Cohesion: 1.0
-Nodes (1): Return the app's MongoDB database instance via the registrations collection.
+Nodes (1): Send a personal follow-up message via WhatsApp Web session.      Falls back to
 
 ### Community 231 - "Community 231"
 Cohesion: 1.0
-Nodes (1): Return the 'campaigns' MongoDB collection.
+Nodes (1): Get today's message send stats (for UI display).      Returns:         dict w
 
 ### Community 232 - "Community 232"
 Cohesion: 1.0
-Nodes (1): Return the 'campaign_payments' MongoDB collection.
+Nodes (1): Start a contact + group backup in the background.      Args:         user_id:
 
 ### Community 233 - "Community 233"
 Cohesion: 1.0
-Nodes (1): Return the 'campaign_messages' MongoDB collection.
+Nodes (1): Get backup status and stats for a user.      Returns:         dict with keys:
 
 ### Community 234 - "Community 234"
 Cohesion: 1.0
-Nodes (1): Validate whether a campaign status transition is permitted.      Args:
+Nodes (1): Export backed-up contacts.      Args:         user_id: User ID.         form
 
 ### Community 235 - "Community 235"
 Cohesion: 1.0
-Nodes (1): Normalize an Indian mobile number to WhatsApp format (91XXXXXXXXXX).      Stri
+Nodes (1): Get a signed URL for a contact's backed-up profile picture.      Args:
 
 ### Community 236 - "Community 236"
 Cohesion: 1.0
-Nodes (1): Resolve a salutation toggle answer into its display text.      Accepts one of
+Nodes (1): Extract current user ID from session (public account or staff).
 
 ### Community 237 - "Community 237"
 Cohesion: 1.0
-Nodes (1): Replace placeholders in template variables with recipient data.      Recognize
+Nodes (1): Decorator to require login.
 
 ### Community 238 - "Community 238"
 Cohesion: 1.0
-Nodes (1): Return the list of available WhatsApp ad templates for the campaign wizard.
+Nodes (1): Check if WhatsApp Web sidecar is available.
 
 ### Community 239 - "Community 239"
 Cohesion: 1.0
-Nodes (1): Extract the English text from a bilingual {en, mr} field (or plain string).
+Nodes (1): Start OTP-based WhatsApp login.
 
 ### Community 240 - "Community 240"
 Cohesion: 1.0
-Nodes (1): Build a display name from firstName/middleName/lastName English parts.
+Nodes (1): Get current session status.
 
 ### Community 241 - "Community 241"
 Cohesion: 1.0
-Nodes (1): Query registrations and return HOF (Head of Family) records for selection.
+Nodes (1): Disconnect WhatsApp session.
 
 ### Community 242 - "Community 242"
 Cohesion: 1.0
-Nodes (1): Return the total number of members in a family record.      A family's total i
+Nodes (1): Send a personal message via WhatsApp Web session.     Falls back to Cloud API i
 
 ### Community 243 - "Community 243"
 Cohesion: 1.0
-Nodes (1): Resolve selected registration ids into recipient dicts server-side.      Full
+Nodes (1): Get today's send statistics.
 
 ### Community 244 - "Community 244"
 Cohesion: 1.0
-Nodes (1): Compute available areas with family counts for the Area filter dropdown.
+Nodes (1): Decorator to require manage_wa_web capability (super admin).
 
 ### Community 245 - "Community 245"
 Cohesion: 1.0
-Nodes (1): Return distinct surnameGroup values for the surname filter dropdown.      Quer
+Nodes (1): Get backup stats and last backup info.
 
 ### Community 246 - "Community 246"
 Cohesion: 1.0
-Nodes (1): Return the configured Razorpay key secret.      Reads from the Flask app confi
+Nodes (1): Get backup stats and last backup info (super admin only).
 
 ### Community 247 - "Community 247"
 Cohesion: 1.0
-Nodes (1): Return True when both the Razorpay key id and secret are configured.      Used
+Nodes (1): Export contacts as JSON or CSV (super admin only).
 
 ### Community 248 - "Community 248"
 Cohesion: 1.0
-Nodes (1): Verify a Razorpay payment signature using HMAC-SHA256.      Razorpay signs the
+Nodes (1): Get the app_settings collection.
 
 ### Community 249 - "Community 249"
 Cohesion: 1.0
-Nodes (1): Return the configured Razorpay key id.      Reads from the Flask app config fi
+Nodes (1): Save routing engine configuration (super admin only).
 
 ### Community 250 - "Community 250"
 Cohesion: 1.0
-Nodes (1): Build and return a Razorpay API client authenticated with the configured     ke
+Nodes (1): Save routing engine configuration (super admin only).
 
 ### Community 251 - "Community 251"
 Cohesion: 1.0
-Nodes (1): Create a Razorpay order for a campaign payment.      Args:         amount_pai
+Nodes (1): Get all WA web sessions (super admin view).
 
 ### Community 252 - "Community 252"
 Cohesion: 1.0
-Nodes (1): Create a campaign and its associated Razorpay payment order.      Validates th
+Nodes (1): Trigger a contact + group + profile pic backup.
 
 ### Community 253 - "Community 253"
 Cohesion: 1.0
-Nodes (1): Truncate an error description to at most 500 characters (Requirement 7.3).
+Nodes (1): Get backup stats and last backup info.
 
 ### Community 254 - "Community 254"
 Cohesion: 1.0
-Nodes (1): Send one WhatsApp template message via the Meta Graph API v24.0.      POSTs a
+Nodes (1): Export contacts as JSON or CSV.
 
 ### Community 255 - "Community 255"
 Cohesion: 1.0
-Nodes (1): Return the 'app_settings' MongoDB collection (OTP / WhatsApp settings).
+Nodes (1): Get a signed URL for a contact's profile picture.
 
 ### Community 256 - "Community 256"
 Cohesion: 1.0
-Nodes (1): Load Meta WhatsApp delivery credentials from the settings collection.      Rea
+Nodes (1): Get the app_settings collection.
 
 ### Community 257 - "Community 257"
 Cohesion: 1.0
-Nodes (1): Best-effort conversion of a value to ObjectId, returning the raw value     unch
+Nodes (1): Default routing engine configuration.
 
 ### Community 258 - "Community 258"
 Cohesion: 1.0
-Nodes (1): Send a paid campaign's WhatsApp template messages to every recipient.      Cal
+Nodes (1): Get the current routing engine configuration (super admin only).
 
 ### Community 259 - "Community 259"
 Cohesion: 1.0
-Nodes (1): Return the configured Razorpay webhook secret.      Reads from the Flask app c
+Nodes (1): Save routing engine configuration (super admin only).
 
 ### Community 260 - "Community 260"
 Cohesion: 1.0
-Nodes (1): Verify a Razorpay webhook signature using HMAC-SHA256.      Razorpay signs eac
+Nodes (1): Disconnect WhatsApp session.
 
 ### Community 261 - "Community 261"
 Cohesion: 1.0
-Nodes (1): Process a Razorpay webhook delivery and trigger campaign execution.      Verif
+Nodes (1): Send a personal message via WhatsApp Web session.     Falls back to Cloud API i
 
 ### Community 262 - "Community 262"
 Cohesion: 1.0
-Nodes (1): Mask a mobile number so only the last 4 digits remain visible.      Every char
+Nodes (1): Get today's send statistics.
 
 ### Community 263 - "Community 263"
 Cohesion: 1.0
-Nodes (1): Return the UTC delivery-attempt timestamp for a campaign_message.      Prefers
+Nodes (1): Trigger a contact + group + profile pic backup.
 
 ### Community 264 - "Community 264"
 Cohesion: 1.0
-Nodes (1): Build a delivery report for a single campaign.      Aggregates the campaign_me
+Nodes (1): Export contacts as JSON or CSV.
 
 ### Community 265 - "Community 265"
+Cohesion: 1.0
+Nodes (1): Default routing engine configuration.
+
+### Community 266 - "Community 266"
+Cohesion: 1.0
+Nodes (1): Get the current routing engine configuration (super admin only).
+
+### Community 267 - "Community 267"
+Cohesion: 1.0
+Nodes (1): Get all WA web sessions (super admin view).
+
+### Community 268 - "Community 268"
+Cohesion: 1.0
+Nodes (1): Map personId -> display name for resolving relationship links.
+
+### Community 269 - "Community 269"
+Cohesion: 1.0
+Nodes (1): Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').
+
+### Community 270 - "Community 270"
+Cohesion: 1.0
+Nodes (1): Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.
+
+### Community 271 - "Community 271"
+Cohesion: 1.0
+Nodes (1): Return a list of CSV rows for one registration document.      ``selected_relat
+
+### Community 272 - "Community 272"
+Cohesion: 1.0
+Nodes (1): Return True when the current session is a public session whose stored     accou
+
+### Community 273 - "Community 273"
+Cohesion: 1.0
+Nodes (1): Decorator that restricts a view to campaigner sessions. Any non-campaigner
+
+### Community 274 - "Community 274"
+Cohesion: 1.0
+Nodes (1): Return the configured default account type for new mobile signups.      Reads
+
+### Community 275 - "Community 275"
+Cohesion: 1.0
+Nodes (1): Mobile (OTP) login is available unless the active provider is disabled.
+
+### Community 276 - "Community 276"
+Cohesion: 1.0
+Nodes (1): Look up a public_account by its 10-digit mobile, tolerating legacy formats.
+
+### Community 277 - "Community 277"
+Cohesion: 1.0
+Nodes (1): Return the stored role config merged over defaults.
+
+### Community 278 - "Community 278"
+Cohesion: 1.0
+Nodes (1): Check whether a role has a capability per the configurable matrix.
+
+### Community 279 - "Community 279"
+Cohesion: 1.0
+Nodes (1): Return the app's MongoDB database instance via the registrations collection.
+
+### Community 280 - "Community 280"
+Cohesion: 1.0
+Nodes (1): Return the 'campaigns' MongoDB collection.
+
+### Community 281 - "Community 281"
+Cohesion: 1.0
+Nodes (1): Return the 'campaign_payments' MongoDB collection.
+
+### Community 282 - "Community 282"
+Cohesion: 1.0
+Nodes (1): Return the 'campaign_messages' MongoDB collection.
+
+### Community 283 - "Community 283"
+Cohesion: 1.0
+Nodes (1): Validate whether a campaign status transition is permitted.      Args:
+
+### Community 284 - "Community 284"
+Cohesion: 1.0
+Nodes (1): Normalize an Indian mobile number to WhatsApp format (91XXXXXXXXXX).      Stri
+
+### Community 285 - "Community 285"
+Cohesion: 1.0
+Nodes (1): Resolve a salutation toggle answer into its display text.      Accepts one of
+
+### Community 286 - "Community 286"
+Cohesion: 1.0
+Nodes (1): Replace placeholders in template variables with recipient data.      Recognize
+
+### Community 287 - "Community 287"
+Cohesion: 1.0
+Nodes (1): Return the list of available WhatsApp ad templates for the campaign wizard.
+
+### Community 288 - "Community 288"
+Cohesion: 1.0
+Nodes (1): Extract the English text from a bilingual {en, mr} field (or plain string).
+
+### Community 289 - "Community 289"
+Cohesion: 1.0
+Nodes (1): Build a display name from firstName/middleName/lastName English parts.
+
+### Community 290 - "Community 290"
+Cohesion: 1.0
+Nodes (1): Query registrations and return HOF (Head of Family) records for selection.
+
+### Community 291 - "Community 291"
+Cohesion: 1.0
+Nodes (1): Return the total number of members in a family record.      A family's total i
+
+### Community 292 - "Community 292"
+Cohesion: 1.0
+Nodes (1): Resolve selected registration ids into recipient dicts server-side.      Full
+
+### Community 293 - "Community 293"
+Cohesion: 1.0
+Nodes (1): Compute available areas with family counts for the Area filter dropdown.
+
+### Community 294 - "Community 294"
+Cohesion: 1.0
+Nodes (1): Return distinct surnameGroup values for the surname filter dropdown.      Quer
+
+### Community 295 - "Community 295"
+Cohesion: 1.0
+Nodes (1): Return the configured Razorpay key secret.      Reads from the Flask app confi
+
+### Community 296 - "Community 296"
+Cohesion: 1.0
+Nodes (1): Return True when both the Razorpay key id and secret are configured.      Used
+
+### Community 297 - "Community 297"
+Cohesion: 1.0
+Nodes (1): Verify a Razorpay payment signature using HMAC-SHA256.      Razorpay signs the
+
+### Community 298 - "Community 298"
+Cohesion: 1.0
+Nodes (1): Return the configured Razorpay key id.      Reads from the Flask app config fi
+
+### Community 299 - "Community 299"
+Cohesion: 1.0
+Nodes (1): Build and return a Razorpay API client authenticated with the configured     ke
+
+### Community 300 - "Community 300"
+Cohesion: 1.0
+Nodes (1): Create a Razorpay order for a campaign payment.      Args:         amount_pai
+
+### Community 301 - "Community 301"
+Cohesion: 1.0
+Nodes (1): Create a campaign and its associated Razorpay payment order.      Validates th
+
+### Community 302 - "Community 302"
+Cohesion: 1.0
+Nodes (1): Truncate an error description to at most 500 characters (Requirement 7.3).
+
+### Community 303 - "Community 303"
+Cohesion: 1.0
+Nodes (1): Send one WhatsApp template message via the Meta Graph API v24.0.      POSTs a
+
+### Community 304 - "Community 304"
+Cohesion: 1.0
+Nodes (1): Return the 'app_settings' MongoDB collection (OTP / WhatsApp settings).
+
+### Community 305 - "Community 305"
+Cohesion: 1.0
+Nodes (1): Load Meta WhatsApp delivery credentials from the settings collection.      Rea
+
+### Community 306 - "Community 306"
+Cohesion: 1.0
+Nodes (1): Best-effort conversion of a value to ObjectId, returning the raw value     unch
+
+### Community 307 - "Community 307"
+Cohesion: 1.0
+Nodes (1): Send a paid campaign's WhatsApp template messages to every recipient.      Cal
+
+### Community 308 - "Community 308"
+Cohesion: 1.0
+Nodes (1): Return the configured Razorpay webhook secret.      Reads from the Flask app c
+
+### Community 309 - "Community 309"
+Cohesion: 1.0
+Nodes (1): Verify a Razorpay webhook signature using HMAC-SHA256.      Razorpay signs eac
+
+### Community 310 - "Community 310"
+Cohesion: 1.0
+Nodes (1): Process a Razorpay webhook delivery and trigger campaign execution.      Verif
+
+### Community 311 - "Community 311"
+Cohesion: 1.0
+Nodes (1): Mask a mobile number so only the last 4 digits remain visible.      Every char
+
+### Community 312 - "Community 312"
+Cohesion: 1.0
+Nodes (1): Return the UTC delivery-attempt timestamp for a campaign_message.      Prefers
+
+### Community 313 - "Community 313"
+Cohesion: 1.0
+Nodes (1): Build a delivery report for a single campaign.      Aggregates the campaign_me
+
+### Community 314 - "Community 314"
 Cohesion: 1.0
 Nodes (1): Unit tests for verify_razorpay_signature().  Covers valid/invalid HMAC-SHA256
 
 ## Knowledge Gaps
-- **441 isolated node(s):** `Uses your existing Google-based transliteration endpoint logic.     Replace lat`, `Map personId -> display name for resolving relationship links.`, `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`, `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`, `Return a list of CSV rows for one registration document.      ``selected_relat` (+436 more)
+- **490 isolated node(s):** `Uses your existing Google-based transliteration endpoint logic.     Replace lat`, `TN Lookup diagnostic test script Run: python test_tn_lookup.py [mobile1] [mobil`, `Map personId -> display name for resolving relationship links.`, `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`, `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.` (+485 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 32`** (1 nodes): `Map personId -> display name for resolving relationship links.`
+- **Thin community `Community 36`** (1 nodes): `Map personId -> display name for resolving relationship links.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 33`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
+- **Thin community `Community 37`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 34`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
+- **Thin community `Community 38`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 35`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
+- **Thin community `Community 39`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 36`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
+- **Thin community `Community 40`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 37`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
+- **Thin community `Community 41`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 38`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
+- **Thin community `Community 42`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 39`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
+- **Thin community `Community 43`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 40`** (1 nodes): `WhatsApp login is available when the toggle is enabled in OTP settings.`
+- **Thin community `Community 44`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 41`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
+- **Thin community `Community 45`** (1 nodes): `Return the stored role config merged over defaults.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 42`** (1 nodes): `Return the stored role config merged over defaults.`
+- **Thin community `Community 46`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 43`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
+- **Thin community `Community 47`** (1 nodes): `Resolve a salutation toggle answer into its display text.      Accepts one of`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 44`** (1 nodes): `Map personId -> display name for resolving relationship links.`
+- **Thin community `Community 48`** (1 nodes): `Replace placeholders in template variables with recipient data.      Recognize`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 45`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
+- **Thin community `Community 49`** (1 nodes): `Return the list of available WhatsApp ad templates for the campaign wizard.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 46`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
+- **Thin community `Community 50`** (1 nodes): `Extract the English text from a bilingual {en, mr} field (or plain string).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 47`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
+- **Thin community `Community 51`** (1 nodes): `Build a display name from firstName/middleName/lastName English parts.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 48`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
+- **Thin community `Community 52`** (1 nodes): `Query registrations and return HOF (Head of Family) records for selection.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 49`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
+- **Thin community `Community 53`** (1 nodes): `Return the total number of members in a family record.      A family's total i`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 50`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
+- **Thin community `Community 54`** (1 nodes): `Resolve selected registration ids into recipient dicts server-side.      Full`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 51`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
+- **Thin community `Community 55`** (1 nodes): `Compute available areas with family counts for the Area filter dropdown.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 52`** (1 nodes): `WhatsApp login is available when the toggle is enabled in OTP settings.`
+- **Thin community `Community 56`** (1 nodes): `Return distinct surnameGroup values for the surname filter dropdown.      Quer`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 53`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
+- **Thin community `Community 57`** (1 nodes): `Return the configured UPI ID (VPA) for receiving payments.      Reads from Fla`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 54`** (1 nodes): `Return the stored role config merged over defaults.`
+- **Thin community `Community 58`** (1 nodes): `Return the configured UPI payee display name.      Reads from Flask app config`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 55`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
+- **Thin community `Community 59`** (1 nodes): `Return True when a UPI ID is configured for receiving payments.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 56`** (1 nodes): `Decorator to require login.`
+- **Thin community `Community 60`** (1 nodes): `Build a UPI deep-link URL for the given amount and note.      Format: upi://pa`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 57`** (1 nodes): `Check if WhatsApp Web sidecar is available.`
+- **Thin community `Community 61`** (1 nodes): `Create a campaign and generate a UPI payment link for it.      Validates the r`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 58`** (1 nodes): `Start OTP-based WhatsApp login.`
+- **Thin community `Community 62`** (1 nodes): `Record the user-submitted UPI transaction reference for a campaign.      After`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 59`** (1 nodes): `Get current session status.`
+- **Thin community `Community 63`** (1 nodes): `Admin action: confirm a UPI payment and trigger campaign sending.      Marks t`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 60`** (1 nodes): `Poll for latest QR code.`
+- **Thin community `Community 64`** (1 nodes): `Admin action: reject a UPI payment submission.      Marks the payment as rejec`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 61`** (1 nodes): `Get current session status.`
+- **Thin community `Community 65`** (1 nodes): `Truncate an error description to at most 500 characters (Requirement 7.3).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 62`** (1 nodes): `Disconnect WhatsApp session.`
+- **Thin community `Community 66`** (1 nodes): `Send one WhatsApp template message via the Meta Graph API v24.0.      POSTs a`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 63`** (1 nodes): `Upload a media file for campaign messages. Max 32 MB.     Stores file on disk (`
+- **Thin community `Community 67`** (1 nodes): `Return the 'app_settings' MongoDB collection (OTP / WhatsApp settings).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 64`** (1 nodes): `Serve uploaded media files.`
+- **Thin community `Community 68`** (1 nodes): `Load Meta WhatsApp delivery credentials from the settings collection.      Rea`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 65`** (1 nodes): `Send a personal message via WhatsApp Web session.     Falls back to Cloud API i`
+- **Thin community `Community 69`** (1 nodes): `Best-effort conversion of a value to ObjectId, returning the raw value     unch`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 66`** (1 nodes): `Default routing engine configuration.`
+- **Thin community `Community 70`** (1 nodes): `Send a paid campaign's WhatsApp template messages to every recipient.      Cal`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 67`** (1 nodes): `Decorator to require manage_wa_web capability (super admin).`
+- **Thin community `Community 71`** (1 nodes): `Mask a mobile number so only the last 4 digits remain visible.      Every char`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 68`** (1 nodes): `Trigger a contact + group + profile pic backup (super admin only).`
+- **Thin community `Community 72`** (1 nodes): `Return the UTC delivery-attempt timestamp for a campaign_message.      Prefers`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 69`** (1 nodes): `Create a custom template (pending approval).`
+- **Thin community `Community 73`** (1 nodes): `Build a delivery report for a single campaign.      Aggregates the campaign_me`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 70`** (1 nodes): `Get a signed URL for a contact's profile picture (super admin only).`
+- **Thin community `Community 74`** (1 nodes): `List custom templates. Users see only their own + approved ones.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 71`** (1 nodes): `Get all historical profile pictures for a contact (super admin only).`
+- **Thin community `Community 75`** (1 nodes): `Create a custom template (pending approval).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 72`** (1 nodes): `Get signed URLs for multiple contacts in one request (super admin only).`
+- **Thin community `Community 76`** (1 nodes): `Approve a custom template (super admin/admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 73`** (1 nodes): `Get chat messages for a contact (super admin only).`
+- **Thin community `Community 77`** (1 nodes): `Default routing engine configuration.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 74`** (1 nodes): `Download media for a message on-demand (super admin only).`
+- **Thin community `Community 78`** (1 nodes): `Delete a custom template. Users can delete their own, admins can delete any.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 75`** (1 nodes): `List custom templates. Users see only their own + approved ones.`
+- **Thin community `Community 79`** (1 nodes): `Get the app_settings collection.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 76`** (1 nodes): `Create a custom template (pending approval).`
+- **Thin community `Community 80`** (1 nodes): `Default routing engine configuration.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 77`** (1 nodes): `Approve a custom template (super admin/admin only).`
+- **Thin community `Community 81`** (1 nodes): `Save routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 78`** (1 nodes): `Reject a custom template (super admin/admin only).`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 79`** (1 nodes): `Delete a custom template. Users can delete their own, admins can delete any.`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 80`** (1 nodes): `Get the app_settings collection.`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 81`** (1 nodes): `Default routing engine configuration.`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 82`** (1 nodes): `Get the current routing engine configuration (super admin only).`
+- **Thin community `Community 82`** (1 nodes): `Save routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 83`** (1 nodes): `Get all WA web sessions with backup stats (super admin view).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1475,364 +1712,462 @@ Nodes (1): Unit tests for verify_razorpay_signature().  Covers valid/invalid HMA
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 91`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 92`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
+- **Thin community `Community 92`** (1 nodes): `WhatsApp login is available when the toggle is enabled in OTP settings.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 93`** (1 nodes): `Return the stored role config merged over defaults.`
+- **Thin community `Community 93`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 94`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
+- **Thin community `Community 94`** (1 nodes): `Return the stored role config merged over defaults.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 95`** (1 nodes): `Get a signed URL for a contact's backed-up profile picture.      Args:`
+- **Thin community `Community 95`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 96`** (1 nodes): `Get all historical profile pictures for a contact (newest first).      Args:`
+- **Thin community `Community 96`** (1 nodes): `Map personId -> display name for resolving relationship links.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 97`** (1 nodes): `Get signed URLs for multiple contacts' profile pictures in one call.      Args`
+- **Thin community `Community 97`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 98`** (1 nodes): `List custom templates. Users see only their own + approved ones.`
+- **Thin community `Community 98`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 99`** (1 nodes): `Create a custom template (pending approval).`
+- **Thin community `Community 99`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 100`** (1 nodes): `Approve a custom template (super admin/admin only).`
+- **Thin community `Community 100`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 101`** (1 nodes): `Get the current routing engine configuration (super admin only).`
+- **Thin community `Community 101`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 102`** (1 nodes): `Delete a custom template. Users can delete their own, admins can delete any.`
+- **Thin community `Community 102`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 103`** (1 nodes): `Get the app_settings collection.`
+- **Thin community `Community 103`** (1 nodes): `WhatsApp login is available when the toggle is enabled in OTP settings.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 104`** (1 nodes): `Get the current routing engine configuration (super admin only).`
+- **Thin community `Community 104`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 105`** (1 nodes): `Save routing engine configuration (super admin only).`
+- **Thin community `Community 105`** (1 nodes): `Return the stored role config merged over defaults.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 106`** (1 nodes): `Get all WA web sessions with backup stats (super admin view).`
+- **Thin community `Community 106`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 107`** (1 nodes): `Map personId -> display name for resolving relationship links.`
+- **Thin community `Community 107`** (1 nodes): `Decorator to require login.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 108`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
+- **Thin community `Community 108`** (1 nodes): `Check if WhatsApp Web sidecar is available.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 109`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
+- **Thin community `Community 109`** (1 nodes): `Start OTP-based WhatsApp login.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 110`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
+- **Thin community `Community 110`** (1 nodes): `Get current session status.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 111`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
+- **Thin community `Community 111`** (1 nodes): `Poll for latest QR code.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 112`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
+- **Thin community `Community 112`** (1 nodes): `Get current session status.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 113`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
+- **Thin community `Community 113`** (1 nodes): `Disconnect WhatsApp session.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 114`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
+- **Thin community `Community 114`** (1 nodes): `Upload a media file for campaign messages. Max 32 MB.     Stores file on disk (`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 115`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
+- **Thin community `Community 115`** (1 nodes): `Serve uploaded media files.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 116`** (1 nodes): `Return the stored role config merged over defaults.`
+- **Thin community `Community 116`** (1 nodes): `Send a personal message via WhatsApp Web session.     Falls back to Cloud API i`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 117`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
+- **Thin community `Community 117`** (1 nodes): `Default routing engine configuration.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 118`** (1 nodes): `Get the app_settings collection.`
+- **Thin community `Community 118`** (1 nodes): `Decorator to require manage_wa_web capability (super admin).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 119`** (1 nodes): `Default routing engine configuration.`
+- **Thin community `Community 119`** (1 nodes): `Trigger a contact + group + profile pic backup (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 120`** (1 nodes): `Get the current routing engine configuration (super admin only).`
+- **Thin community `Community 120`** (1 nodes): `Create a custom template (pending approval).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 121`** (1 nodes): `Save routing engine configuration (super admin only).`
+- **Thin community `Community 121`** (1 nodes): `Get a signed URL for a contact's profile picture (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 122`** (1 nodes): `Get all WA web sessions with backup stats (super admin view).`
+- **Thin community `Community 122`** (1 nodes): `Get all historical profile pictures for a contact (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 123`** (1 nodes): `Map personId -> display name for resolving relationship links.`
+- **Thin community `Community 123`** (1 nodes): `Get signed URLs for multiple contacts in one request (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 124`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
+- **Thin community `Community 124`** (1 nodes): `Get chat messages for a contact (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 125`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
+- **Thin community `Community 125`** (1 nodes): `Download media for a message on-demand (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 126`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
+- **Thin community `Community 126`** (1 nodes): `List custom templates. Users see only their own + approved ones.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 127`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
+- **Thin community `Community 127`** (1 nodes): `Create a custom template (pending approval).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 128`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
+- **Thin community `Community 128`** (1 nodes): `Approve a custom template (super admin/admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 129`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
+- **Thin community `Community 129`** (1 nodes): `Reject a custom template (super admin/admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 130`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
+- **Thin community `Community 130`** (1 nodes): `Delete a custom template. Users can delete their own, admins can delete any.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 131`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
+- **Thin community `Community 131`** (1 nodes): `Default routing engine configuration.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 132`** (1 nodes): `Return the stored role config merged over defaults.`
+- **Thin community `Community 132`** (1 nodes): `Get the current routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 133`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
+- **Thin community `Community 133`** (1 nodes): `Get all WA web sessions with backup stats (super admin view).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 134`** (1 nodes): `Get today's send statistics.`
+- **Thin community `Community 134`** (1 nodes): `Map personId -> display name for resolving relationship links.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 135`** (1 nodes): `Decorator to require manage_wa_web capability (super admin).`
+- **Thin community `Community 135`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 136`** (1 nodes): `Get a signed URL for a contact's profile picture.`
+- **Thin community `Community 136`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 137`** (1 nodes): `Get a signed URL for a contact's profile picture (super admin only).`
+- **Thin community `Community 137`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 138`** (1 nodes): `Export contacts as JSON or CSV (super admin only).`
+- **Thin community `Community 138`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 139`** (1 nodes): `Get a signed URL for a contact's profile picture (super admin only).`
+- **Thin community `Community 139`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 140`** (1 nodes): `List custom templates. Users see only their own + approved ones.`
+- **Thin community `Community 140`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 141`** (1 nodes): `Approve a custom template (super admin/admin only).`
+- **Thin community `Community 141`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 142`** (1 nodes): `Reject a custom template (super admin/admin only).`
+- **Thin community `Community 142`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 143`** (1 nodes): `Get the app_settings collection.`
+- **Thin community `Community 143`** (1 nodes): `Return the stored role config merged over defaults.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 144`** (1 nodes): `Default routing engine configuration.`
+- **Thin community `Community 144`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 145`** (1 nodes): `Save routing engine configuration (super admin only).`
+- **Thin community `Community 145`** (1 nodes): `Get a signed URL for a contact's backed-up profile picture.      Args:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 146`** (1 nodes): `Get all WA web sessions with backup stats (super admin view).`
+- **Thin community `Community 146`** (1 nodes): `Get all historical profile pictures for a contact (newest first).      Args:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 147`** (1 nodes): `Map personId -> display name for resolving relationship links.`
+- **Thin community `Community 147`** (1 nodes): `Get signed URLs for multiple contacts' profile pictures in one call.      Args`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 148`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
+- **Thin community `Community 148`** (1 nodes): `List custom templates. Users see only their own + approved ones.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 149`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
+- **Thin community `Community 149`** (1 nodes): `Create a custom template (pending approval).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 150`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
+- **Thin community `Community 150`** (1 nodes): `Approve a custom template (super admin/admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 151`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
+- **Thin community `Community 151`** (1 nodes): `Get the current routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 152`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
+- **Thin community `Community 152`** (1 nodes): `Delete a custom template. Users can delete their own, admins can delete any.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 153`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
+- **Thin community `Community 153`** (1 nodes): `Get the app_settings collection.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 154`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
+- **Thin community `Community 154`** (1 nodes): `Get the current routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 155`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
+- **Thin community `Community 155`** (1 nodes): `Save routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 156`** (1 nodes): `Return the stored role config merged over defaults.`
+- **Thin community `Community 156`** (1 nodes): `Map personId -> display name for resolving relationship links.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 157`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
+- **Thin community `Community 157`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 158`** (1 nodes): `Start a contact + group backup in the background.      Args:         user_id:`
+- **Thin community `Community 158`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 159`** (1 nodes): `Get backup status and stats for a user.      Returns:         dict with keys:`
+- **Thin community `Community 159`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 160`** (1 nodes): `Get a signed URL for a contact's backed-up profile picture.      Args:`
+- **Thin community `Community 160`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 161`** (1 nodes): `Get the app_settings collection.`
+- **Thin community `Community 161`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 162`** (1 nodes): `Default routing engine configuration.`
+- **Thin community `Community 162`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 163`** (1 nodes): `Get the current routing engine configuration (super admin only).`
+- **Thin community `Community 163`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 164`** (1 nodes): `Save routing engine configuration (super admin only).`
+- **Thin community `Community 164`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 165`** (1 nodes): `Get all WA web sessions with backup stats (super admin view).`
+- **Thin community `Community 165`** (1 nodes): `Return the stored role config merged over defaults.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 166`** (1 nodes): `Map personId -> display name for resolving relationship links.`
+- **Thin community `Community 166`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 167`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
+- **Thin community `Community 167`** (1 nodes): `Get the app_settings collection.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 168`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
+- **Thin community `Community 168`** (1 nodes): `Default routing engine configuration.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 169`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
+- **Thin community `Community 169`** (1 nodes): `Get the current routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 170`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
+- **Thin community `Community 170`** (1 nodes): `Save routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 171`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
+- **Thin community `Community 171`** (1 nodes): `Get all WA web sessions with backup stats (super admin view).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 172`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
+- **Thin community `Community 172`** (1 nodes): `Map personId -> display name for resolving relationship links.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 173`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
+- **Thin community `Community 173`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 174`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
+- **Thin community `Community 174`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 175`** (1 nodes): `Return the stored role config merged over defaults.`
+- **Thin community `Community 175`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 176`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
+- **Thin community `Community 176`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 177`** (1 nodes): `Initiate OTP-based WhatsApp login for a user.      Args:         user_id: The`
+- **Thin community `Community 177`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 178`** (1 nodes): `Get the current WhatsApp session status for a user.      Returns:         dic`
+- **Thin community `Community 178`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 179`** (1 nodes): `Disconnect and log out a user's WhatsApp Web session.`
+- **Thin community `Community 179`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 180`** (1 nodes): `Decide whether a message should route via Web session or Cloud API.      Args:`
+- **Thin community `Community 180`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 181`** (1 nodes): `Send a personal follow-up message via WhatsApp Web session.      Falls back to`
+- **Thin community `Community 181`** (1 nodes): `Return the stored role config merged over defaults.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 182`** (1 nodes): `Get today's message send stats (for UI display).      Returns:         dict w`
+- **Thin community `Community 182`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 183`** (1 nodes): `Start a contact + group backup in the background.      Args:         user_id:`
+- **Thin community `Community 183`** (1 nodes): `Get today's send statistics.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 184`** (1 nodes): `Get backup status and stats for a user.      Returns:         dict with keys:`
+- **Thin community `Community 184`** (1 nodes): `Decorator to require manage_wa_web capability (super admin).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 185`** (1 nodes): `Export backed-up contacts.      Args:         user_id: User ID.         form`
+- **Thin community `Community 185`** (1 nodes): `Get a signed URL for a contact's profile picture.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 186`** (1 nodes): `Get a signed URL for a contact's backed-up profile picture.      Args:`
+- **Thin community `Community 186`** (1 nodes): `Get a signed URL for a contact's profile picture (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 187`** (1 nodes): `Extract current user ID from session (public account or staff).`
+- **Thin community `Community 187`** (1 nodes): `Export contacts as JSON or CSV (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 188`** (1 nodes): `Decorator to require login.`
+- **Thin community `Community 188`** (1 nodes): `Get a signed URL for a contact's profile picture (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 189`** (1 nodes): `Check if WhatsApp Web sidecar is available.`
+- **Thin community `Community 189`** (1 nodes): `List custom templates. Users see only their own + approved ones.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 190`** (1 nodes): `Start OTP-based WhatsApp login.`
+- **Thin community `Community 190`** (1 nodes): `Approve a custom template (super admin/admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 191`** (1 nodes): `Get current session status.`
+- **Thin community `Community 191`** (1 nodes): `Reject a custom template (super admin/admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 192`** (1 nodes): `Disconnect WhatsApp session.`
+- **Thin community `Community 192`** (1 nodes): `Get the app_settings collection.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 193`** (1 nodes): `Send a personal message via WhatsApp Web session.     Falls back to Cloud API i`
+- **Thin community `Community 193`** (1 nodes): `Default routing engine configuration.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 194`** (1 nodes): `Get today's send statistics.`
+- **Thin community `Community 194`** (1 nodes): `Save routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 195`** (1 nodes): `Decorator to require manage_wa_web capability (super admin).`
+- **Thin community `Community 195`** (1 nodes): `Get all WA web sessions with backup stats (super admin view).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 196`** (1 nodes): `Get backup stats and last backup info.`
+- **Thin community `Community 196`** (1 nodes): `Map personId -> display name for resolving relationship links.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 197`** (1 nodes): `Get backup stats and last backup info (super admin only).`
+- **Thin community `Community 197`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 198`** (1 nodes): `Export contacts as JSON or CSV (super admin only).`
+- **Thin community `Community 198`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 199`** (1 nodes): `Get the app_settings collection.`
+- **Thin community `Community 199`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 200`** (1 nodes): `Save routing engine configuration (super admin only).`
+- **Thin community `Community 200`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 201`** (1 nodes): `Save routing engine configuration (super admin only).`
+- **Thin community `Community 201`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 202`** (1 nodes): `Get all WA web sessions (super admin view).`
+- **Thin community `Community 202`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 203`** (1 nodes): `Trigger a contact + group + profile pic backup.`
+- **Thin community `Community 203`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 204`** (1 nodes): `Get backup stats and last backup info.`
+- **Thin community `Community 204`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 205`** (1 nodes): `Export contacts as JSON or CSV.`
+- **Thin community `Community 205`** (1 nodes): `Return the stored role config merged over defaults.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 206`** (1 nodes): `Get a signed URL for a contact's profile picture.`
+- **Thin community `Community 206`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 207`** (1 nodes): `Get the app_settings collection.`
+- **Thin community `Community 207`** (1 nodes): `Start a contact + group backup in the background.      Args:         user_id:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 208`** (1 nodes): `Default routing engine configuration.`
+- **Thin community `Community 208`** (1 nodes): `Get backup status and stats for a user.      Returns:         dict with keys:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 209`** (1 nodes): `Get the current routing engine configuration (super admin only).`
+- **Thin community `Community 209`** (1 nodes): `Get a signed URL for a contact's backed-up profile picture.      Args:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 210`** (1 nodes): `Save routing engine configuration (super admin only).`
+- **Thin community `Community 210`** (1 nodes): `Get the app_settings collection.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 211`** (1 nodes): `Disconnect WhatsApp session.`
+- **Thin community `Community 211`** (1 nodes): `Default routing engine configuration.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 212`** (1 nodes): `Send a personal message via WhatsApp Web session.     Falls back to Cloud API i`
+- **Thin community `Community 212`** (1 nodes): `Get the current routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 213`** (1 nodes): `Get today's send statistics.`
+- **Thin community `Community 213`** (1 nodes): `Save routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 214`** (1 nodes): `Trigger a contact + group + profile pic backup.`
+- **Thin community `Community 214`** (1 nodes): `Get all WA web sessions with backup stats (super admin view).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 215`** (1 nodes): `Export contacts as JSON or CSV.`
+- **Thin community `Community 215`** (1 nodes): `Map personId -> display name for resolving relationship links.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 216`** (1 nodes): `Default routing engine configuration.`
+- **Thin community `Community 216`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 217`** (1 nodes): `Get the current routing engine configuration (super admin only).`
+- **Thin community `Community 217`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 218`** (1 nodes): `Get all WA web sessions (super admin view).`
+- **Thin community `Community 218`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 219`** (1 nodes): `Map personId -> display name for resolving relationship links.`
+- **Thin community `Community 219`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 220`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
+- **Thin community `Community 220`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 221`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
+- **Thin community `Community 221`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 222`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
+- **Thin community `Community 222`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 223`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
+- **Thin community `Community 223`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 224`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
+- **Thin community `Community 224`** (1 nodes): `Return the stored role config merged over defaults.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 225`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
+- **Thin community `Community 225`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 226`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
+- **Thin community `Community 226`** (1 nodes): `Initiate OTP-based WhatsApp login for a user.      Args:         user_id: The`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 227`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
+- **Thin community `Community 227`** (1 nodes): `Get the current WhatsApp session status for a user.      Returns:         dic`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 228`** (1 nodes): `Return the stored role config merged over defaults.`
+- **Thin community `Community 228`** (1 nodes): `Disconnect and log out a user's WhatsApp Web session.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 229`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
+- **Thin community `Community 229`** (1 nodes): `Decide whether a message should route via Web session or Cloud API.      Args:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 230`** (1 nodes): `Return the app's MongoDB database instance via the registrations collection.`
+- **Thin community `Community 230`** (1 nodes): `Send a personal follow-up message via WhatsApp Web session.      Falls back to`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 231`** (1 nodes): `Return the 'campaigns' MongoDB collection.`
+- **Thin community `Community 231`** (1 nodes): `Get today's message send stats (for UI display).      Returns:         dict w`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 232`** (1 nodes): `Return the 'campaign_payments' MongoDB collection.`
+- **Thin community `Community 232`** (1 nodes): `Start a contact + group backup in the background.      Args:         user_id:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 233`** (1 nodes): `Return the 'campaign_messages' MongoDB collection.`
+- **Thin community `Community 233`** (1 nodes): `Get backup status and stats for a user.      Returns:         dict with keys:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 234`** (1 nodes): `Validate whether a campaign status transition is permitted.      Args:`
+- **Thin community `Community 234`** (1 nodes): `Export backed-up contacts.      Args:         user_id: User ID.         form`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 235`** (1 nodes): `Normalize an Indian mobile number to WhatsApp format (91XXXXXXXXXX).      Stri`
+- **Thin community `Community 235`** (1 nodes): `Get a signed URL for a contact's backed-up profile picture.      Args:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 236`** (1 nodes): `Resolve a salutation toggle answer into its display text.      Accepts one of`
+- **Thin community `Community 236`** (1 nodes): `Extract current user ID from session (public account or staff).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 237`** (1 nodes): `Replace placeholders in template variables with recipient data.      Recognize`
+- **Thin community `Community 237`** (1 nodes): `Decorator to require login.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 238`** (1 nodes): `Return the list of available WhatsApp ad templates for the campaign wizard.`
+- **Thin community `Community 238`** (1 nodes): `Check if WhatsApp Web sidecar is available.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 239`** (1 nodes): `Extract the English text from a bilingual {en, mr} field (or plain string).`
+- **Thin community `Community 239`** (1 nodes): `Start OTP-based WhatsApp login.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 240`** (1 nodes): `Build a display name from firstName/middleName/lastName English parts.`
+- **Thin community `Community 240`** (1 nodes): `Get current session status.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 241`** (1 nodes): `Query registrations and return HOF (Head of Family) records for selection.`
+- **Thin community `Community 241`** (1 nodes): `Disconnect WhatsApp session.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 242`** (1 nodes): `Return the total number of members in a family record.      A family's total i`
+- **Thin community `Community 242`** (1 nodes): `Send a personal message via WhatsApp Web session.     Falls back to Cloud API i`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 243`** (1 nodes): `Resolve selected registration ids into recipient dicts server-side.      Full`
+- **Thin community `Community 243`** (1 nodes): `Get today's send statistics.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 244`** (1 nodes): `Compute available areas with family counts for the Area filter dropdown.`
+- **Thin community `Community 244`** (1 nodes): `Decorator to require manage_wa_web capability (super admin).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 245`** (1 nodes): `Return distinct surnameGroup values for the surname filter dropdown.      Quer`
+- **Thin community `Community 245`** (1 nodes): `Get backup stats and last backup info.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 246`** (1 nodes): `Return the configured Razorpay key secret.      Reads from the Flask app confi`
+- **Thin community `Community 246`** (1 nodes): `Get backup stats and last backup info (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 247`** (1 nodes): `Return True when both the Razorpay key id and secret are configured.      Used`
+- **Thin community `Community 247`** (1 nodes): `Export contacts as JSON or CSV (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 248`** (1 nodes): `Verify a Razorpay payment signature using HMAC-SHA256.      Razorpay signs the`
+- **Thin community `Community 248`** (1 nodes): `Get the app_settings collection.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 249`** (1 nodes): `Return the configured Razorpay key id.      Reads from the Flask app config fi`
+- **Thin community `Community 249`** (1 nodes): `Save routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 250`** (1 nodes): `Build and return a Razorpay API client authenticated with the configured     ke`
+- **Thin community `Community 250`** (1 nodes): `Save routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 251`** (1 nodes): `Create a Razorpay order for a campaign payment.      Args:         amount_pai`
+- **Thin community `Community 251`** (1 nodes): `Get all WA web sessions (super admin view).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 252`** (1 nodes): `Create a campaign and its associated Razorpay payment order.      Validates th`
+- **Thin community `Community 252`** (1 nodes): `Trigger a contact + group + profile pic backup.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 253`** (1 nodes): `Truncate an error description to at most 500 characters (Requirement 7.3).`
+- **Thin community `Community 253`** (1 nodes): `Get backup stats and last backup info.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 254`** (1 nodes): `Send one WhatsApp template message via the Meta Graph API v24.0.      POSTs a`
+- **Thin community `Community 254`** (1 nodes): `Export contacts as JSON or CSV.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 255`** (1 nodes): `Return the 'app_settings' MongoDB collection (OTP / WhatsApp settings).`
+- **Thin community `Community 255`** (1 nodes): `Get a signed URL for a contact's profile picture.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 256`** (1 nodes): `Load Meta WhatsApp delivery credentials from the settings collection.      Rea`
+- **Thin community `Community 256`** (1 nodes): `Get the app_settings collection.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 257`** (1 nodes): `Best-effort conversion of a value to ObjectId, returning the raw value     unch`
+- **Thin community `Community 257`** (1 nodes): `Default routing engine configuration.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 258`** (1 nodes): `Send a paid campaign's WhatsApp template messages to every recipient.      Cal`
+- **Thin community `Community 258`** (1 nodes): `Get the current routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 259`** (1 nodes): `Return the configured Razorpay webhook secret.      Reads from the Flask app c`
+- **Thin community `Community 259`** (1 nodes): `Save routing engine configuration (super admin only).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 260`** (1 nodes): `Verify a Razorpay webhook signature using HMAC-SHA256.      Razorpay signs eac`
+- **Thin community `Community 260`** (1 nodes): `Disconnect WhatsApp session.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 261`** (1 nodes): `Process a Razorpay webhook delivery and trigger campaign execution.      Verif`
+- **Thin community `Community 261`** (1 nodes): `Send a personal message via WhatsApp Web session.     Falls back to Cloud API i`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 262`** (1 nodes): `Mask a mobile number so only the last 4 digits remain visible.      Every char`
+- **Thin community `Community 262`** (1 nodes): `Get today's send statistics.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 263`** (1 nodes): `Return the UTC delivery-attempt timestamp for a campaign_message.      Prefers`
+- **Thin community `Community 263`** (1 nodes): `Trigger a contact + group + profile pic backup.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 264`** (1 nodes): `Build a delivery report for a single campaign.      Aggregates the campaign_me`
+- **Thin community `Community 264`** (1 nodes): `Export contacts as JSON or CSV.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 265`** (1 nodes): `Unit tests for verify_razorpay_signature().  Covers valid/invalid HMAC-SHA256`
+- **Thin community `Community 265`** (1 nodes): `Default routing engine configuration.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 266`** (1 nodes): `Get the current routing engine configuration (super admin only).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 267`** (1 nodes): `Get all WA web sessions (super admin view).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 268`** (1 nodes): `Map personId -> display name for resolving relationship links.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 269`** (1 nodes): `Normalise a relation label into a comparable key (e.g. 'Son(beta)' -> 'son').`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 270`** (1 nodes): `Format a family member name with its relation, e.g. 'Tejas (Son(beta))'.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 271`** (1 nodes): `Return a list of CSV rows for one registration document.      ``selected_relat`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 272`** (1 nodes): `Return True when the current session is a public session whose stored     accou`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 273`** (1 nodes): `Decorator that restricts a view to campaigner sessions. Any non-campaigner`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 274`** (1 nodes): `Return the configured default account type for new mobile signups.      Reads`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 275`** (1 nodes): `Mobile (OTP) login is available unless the active provider is disabled.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 276`** (1 nodes): `Look up a public_account by its 10-digit mobile, tolerating legacy formats.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 277`** (1 nodes): `Return the stored role config merged over defaults.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 278`** (1 nodes): `Check whether a role has a capability per the configurable matrix.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 279`** (1 nodes): `Return the app's MongoDB database instance via the registrations collection.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 280`** (1 nodes): `Return the 'campaigns' MongoDB collection.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 281`** (1 nodes): `Return the 'campaign_payments' MongoDB collection.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 282`** (1 nodes): `Return the 'campaign_messages' MongoDB collection.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 283`** (1 nodes): `Validate whether a campaign status transition is permitted.      Args:`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 284`** (1 nodes): `Normalize an Indian mobile number to WhatsApp format (91XXXXXXXXXX).      Stri`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 285`** (1 nodes): `Resolve a salutation toggle answer into its display text.      Accepts one of`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 286`** (1 nodes): `Replace placeholders in template variables with recipient data.      Recognize`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 287`** (1 nodes): `Return the list of available WhatsApp ad templates for the campaign wizard.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 288`** (1 nodes): `Extract the English text from a bilingual {en, mr} field (or plain string).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 289`** (1 nodes): `Build a display name from firstName/middleName/lastName English parts.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 290`** (1 nodes): `Query registrations and return HOF (Head of Family) records for selection.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 291`** (1 nodes): `Return the total number of members in a family record.      A family's total i`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 292`** (1 nodes): `Resolve selected registration ids into recipient dicts server-side.      Full`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 293`** (1 nodes): `Compute available areas with family counts for the Area filter dropdown.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 294`** (1 nodes): `Return distinct surnameGroup values for the surname filter dropdown.      Quer`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 295`** (1 nodes): `Return the configured Razorpay key secret.      Reads from the Flask app confi`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 296`** (1 nodes): `Return True when both the Razorpay key id and secret are configured.      Used`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 297`** (1 nodes): `Verify a Razorpay payment signature using HMAC-SHA256.      Razorpay signs the`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 298`** (1 nodes): `Return the configured Razorpay key id.      Reads from the Flask app config fi`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 299`** (1 nodes): `Build and return a Razorpay API client authenticated with the configured     ke`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 300`** (1 nodes): `Create a Razorpay order for a campaign payment.      Args:         amount_pai`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 301`** (1 nodes): `Create a campaign and its associated Razorpay payment order.      Validates th`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 302`** (1 nodes): `Truncate an error description to at most 500 characters (Requirement 7.3).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 303`** (1 nodes): `Send one WhatsApp template message via the Meta Graph API v24.0.      POSTs a`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 304`** (1 nodes): `Return the 'app_settings' MongoDB collection (OTP / WhatsApp settings).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 305`** (1 nodes): `Load Meta WhatsApp delivery credentials from the settings collection.      Rea`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 306`** (1 nodes): `Best-effort conversion of a value to ObjectId, returning the raw value     unch`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 307`** (1 nodes): `Send a paid campaign's WhatsApp template messages to every recipient.      Cal`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 308`** (1 nodes): `Return the configured Razorpay webhook secret.      Reads from the Flask app c`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 309`** (1 nodes): `Verify a Razorpay webhook signature using HMAC-SHA256.      Razorpay signs eac`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 310`** (1 nodes): `Process a Razorpay webhook delivery and trigger campaign execution.      Verif`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 311`** (1 nodes): `Mask a mobile number so only the last 4 digits remain visible.      Every char`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 312`** (1 nodes): `Return the UTC delivery-attempt timestamp for a campaign_message.      Prefers`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 313`** (1 nodes): `Build a delivery report for a single campaign.      Aggregates the campaign_me`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 314`** (1 nodes): `Unit tests for verify_razorpay_signature().  Covers valid/invalid HMAC-SHA256`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `FakeDatabase` connect `Community 0` to `Community 1`, `Community 2`, `Community 4`, `Community 5`, `Community 10`, `Community 11`, `Community 13`, `Community 20`, `Community 25`, `Community 26`?**
-  _High betweenness centrality (0.142) - this node is a cross-community bridge._
-- **Why does `send_single_template_message()` connect `Community 3` to `Community 1`, `Community 4`?**
-  _High betweenness centrality (0.110) - this node is a cross-community bridge._
-- **Why does `resolve_body_vars()` connect `Community 2` to `Community 9`, `Community 3`, `Community 4`?**
-  _High betweenness centrality (0.105) - this node is a cross-community bridge._
+- **Why does `send_single_template_message()` connect `Community 6` to `Community 1`, `Community 2`, `Community 21`?**
+  _High betweenness centrality (0.111) - this node is a cross-community bridge._
+- **Why does `FakeDatabase` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 8`, `Community 11`, `Community 13`, `Community 16`, `Community 23`, `Community 30`?**
+  _High betweenness centrality (0.097) - this node is a cross-community bridge._
+- **Why does `execute_campaign_send()` connect `Community 2` to `Community 0`, `Community 5`, `Community 6`, `Community 10`, `Community 13`, `Community 14`?**
+  _High betweenness centrality (0.088) - this node is a cross-community bridge._
 - **Are the 159 inferred relationships involving `FakeDatabase` (e.g. with `GetRedirectForAccountTests` and `VerifyOtpRoutingTests`) actually correct?**
   _`FakeDatabase` has 159 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 44 inferred relationships involving `normalize_wa_number()` (e.g. with `.test_plain_10_digit_number()` and `.test_with_plus_91_prefix()`) actually correct?**
