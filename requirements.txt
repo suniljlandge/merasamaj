@@ -9,3 +9,4 @@ Pillow
 img2pdf
 pikepdf
 hypothesis
+bs4
