@@ -65,6 +65,8 @@ from .corrections import (
     save_corrections,
     )
 
+from .tn_service import resolve_true_name
+
 from . import data_tools
 from . import pdf_export
 
@@ -4437,6 +4439,105 @@ def create_app(config=None, collection=None, correction_collection=None):
             "recipients": report["recipients"],
         })
 
+    # --- True Name lookup via UPI VPA ---
+
+    def _tn_lookup_cached(mobile):
+        """Lookup with cache: returns (name, error, from_cache)."""
+        cache = get_tn_cache_collection()
+        cached = cache.find_one({"mobile": mobile})
+        if cached and cached.get("name"):
+            return cached["name"], None, True
+
+        name, err = resolve_true_name(mobile)
+
+        if name:
+            cache.update_one(
+                {"mobile": mobile},
+                {"$set": {
+                    "mobile": mobile,
+                    "name": name,
+                    "resolvedAt": now_utc(),
+                    "resolvedBy": session.get("username", ""),
+                }},
+                upsert=True,
+            )
+        return name, err, False
+
+    @app.get("/api/tn/lookup")
+    def tn_lookup():
+        """Resolve the verified account name for a mobile number via UPI VPA.
+
+        Query param: mobile (10-digit Indian mobile number)
+        Returns: {"name": "...", "mobile": "...", "cached": bool} or error.
+        """
+        if not require_auth():
+            return jsonify({"error": "Unauthorized"}), 401
+
+        if not role_can("manage_role_config"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        mobile = request.args.get("mobile", "").strip()
+
+        # Basic validation: 10-digit Indian mobile
+        if not re.fullmatch(r"[6-9]\d{9}", mobile):
+            return jsonify({"error": "Invalid mobile number. Must be 10 digits starting with 6-9."}), 400
+
+        name, err, from_cache = _tn_lookup_cached(mobile)
+
+        if err:
+            return jsonify({"error": err, "name": None, "cached": False}), 502
+
+        return jsonify({"name": name, "mobile": mobile, "cached": from_cache})
+
+    @app.post("/api/tn/batch-lookup")
+    def tn_batch_lookup():
+        """Batch resolve verified account names for multiple mobile numbers.
+
+        Body JSON: {"mobiles": ["9876543210", "9123456789", ...]}
+        Returns: {"results": [{"mobile": "...", "name": "..." or null, "error": "..." or null, "cached": bool}, ...]}
+        Max 20 numbers per request to avoid abuse.
+        """
+        if not require_auth():
+            return jsonify({"error": "Unauthorized"}), 401
+
+        if not role_can("manage_role_config"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        payload = request.get_json(silent=True) or {}
+        mobiles = payload.get("mobiles", [])
+
+        if not isinstance(mobiles, list):
+            return jsonify({"error": "mobiles must be a list"}), 400
+
+        if len(mobiles) > 20:
+            return jsonify({"error": "Maximum 20 numbers per batch request"}), 400
+
+        results = []
+        for mobile in mobiles:
+            mobile = str(mobile).strip()
+            if not re.fullmatch(r"[6-9]\d{9}", mobile):
+                results.append({"mobile": mobile, "name": None, "error": "invalid_format", "cached": False})
+                continue
+            name, err, from_cache = _tn_lookup_cached(mobile)
+            results.append({"mobile": mobile, "name": name, "error": err, "cached": from_cache})
+
+        return jsonify({"results": results})
+
+    @app.get("/api/tn/cache")
+    def tn_cache_list():
+        """Return all cached TN results so the UI can display them without extra lookups."""
+        if not require_auth():
+            return jsonify({"error": "Unauthorized"}), 401
+
+        if not role_can("manage_role_config"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        # Return a phone->name map for fast client-side lookup
+        cache = get_tn_cache_collection()
+        docs = cache.find({}, {"mobile": 1, "name": 1, "_id": 0})
+        mapping = {doc["mobile"]: doc["name"] for doc in docs if doc.get("name")}
+        return jsonify({"cache": mapping})
+
     def close_mongo():
         client = app.extensions.get("mongo_client")
 
@@ -4519,6 +4620,14 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         return database["campaign_payments"]
+
+    def get_tn_cache_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["tn_cache"]
 
     def _ensure_mongo_collections():
         (

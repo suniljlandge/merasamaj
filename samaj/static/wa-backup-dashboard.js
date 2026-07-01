@@ -10,6 +10,7 @@
   let currentPage = 1;
   const PAGE_SIZE = 24;
   let selectedUserId = null;
+  const tnNameCache = new Map(); // phone (10-digit) -> verified name
 
   // =========================================================================
   // Load Sessions
@@ -286,7 +287,16 @@
       return;
     }
 
-    grid.innerHTML = pageItems.map((c) => `
+    grid.innerHTML = pageItems.map((c) => {
+      const mobile10 = (c.phone || "").replace(/^91/, "");
+      const isIndian = /^[6-9]\d{9}$/.test(mobile10);
+      const cachedName = tnNameCache.get(mobile10);
+      const tnHtml = isIndian
+        ? (cachedName
+          ? `<p class="contact-tn" style="font-size:11px;color:#10b981;font-weight:600;margin:2px 0 0;" title="Verified UPI name (cached)">✓ ${escHtml(cachedName)}</p>`
+          : `<button type="button" class="tn-lookup-btn" data-mobile="${escHtml(mobile10)}" style="margin-top:4px;padding:2px 8px;font-size:11px;border:1px solid var(--hairline);border-radius:4px;background:var(--canvas);cursor:pointer;color:var(--brand-teal-deep);font-weight:600;">🔍 TN Lookup</button>`)
+        : "";
+      return `
       <div class="contact-card" data-phone="${escHtml(c.phone)}">
         <div class="contact-pic" id="pic-${c.phone}">
           <span style="font-size:24px;color:var(--steel);">👤</span>
@@ -295,9 +305,11 @@
           <p class="contact-name">${escHtml(c.pushName || "Unknown")}</p>
           <p class="contact-phone">+${escHtml(c.phone)}</p>
           <p class="contact-source">${escHtml(c.source || "chat")}</p>
+          ${tnHtml}
         </div>
       </div>
-    `).join("");
+    `;
+    }).join("");
 
     // Show pagination
     if (filtered.length > PAGE_SIZE) {
@@ -324,6 +336,14 @@
         if (img) openProfilePicModal(card.dataset.phone, card.querySelector(".contact-name").textContent);
       });
       card.addEventListener("click", () => openChatPopup(card.dataset.phone));
+    });
+
+    // TN Lookup buttons on each card
+    grid.querySelectorAll(".tn-lookup-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        tnLookupSingle(btn);
+      });
     });
   }
 
@@ -878,9 +898,197 @@
   }
 
   // =========================================================================
+  // TN Single Lookup (per-card button)
+  // =========================================================================
+
+  async function tnLookupSingle(btn) {
+    const mobile = btn.dataset.mobile;
+    btn.disabled = true;
+    btn.textContent = "⏳…";
+
+    try {
+      const resp = await fetch(`/api/tn/lookup?mobile=${mobile}`);
+      const data = await resp.json();
+
+      if (data.name) {
+        tnNameCache.set(mobile, data.name);
+        // Replace button with the verified name
+        btn.outerHTML = `<p class="contact-tn" style="font-size:11px;color:#10b981;font-weight:600;margin:2px 0 0;" title="Verified UPI name${data.cached ? ' (cached)' : ''}">✓ ${escHtml(data.name)}</p>`;
+      } else {
+        btn.textContent = "✗ " + (data.error || "Not found");
+        btn.style.color = "#ef4444";
+        btn.style.borderColor = "#ef4444";
+        btn.disabled = false;
+        setTimeout(() => {
+          btn.textContent = "🔍 TN Lookup";
+          btn.style.color = "";
+          btn.style.borderColor = "";
+        }, 3000);
+      }
+    } catch (err) {
+      btn.textContent = "❌ Error";
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = "🔍 TN Lookup"; }, 3000);
+    }
+  }
+
+  // Load cached TN names on page load so cards show them immediately
+  async function loadTnCache() {
+    try {
+      const resp = await fetch("/api/tn/cache");
+      const data = await resp.json();
+      const cache = data.cache || {};
+      for (const [mobile, name] of Object.entries(cache)) {
+        tnNameCache.set(mobile, name);
+      }
+    } catch {}
+  }
+
+  // =========================================================================
+  // True Name Batch Lookup
+  // =========================================================================
+
+  let tnBatchResults = [];
+
+  function parseMobiles(raw) {
+    // Accept newlines, commas, spaces, or semicolons as separators
+    return raw
+      .split(/[\n,;\s]+/)
+      .map((s) => s.replace(/[^0-9]/g, "").trim())
+      .filter((s) => s.length >= 10)
+      .map((s) => s.slice(-10)); // take last 10 digits (strip country code)
+  }
+
+  document.getElementById("tn-batch-btn").addEventListener("click", async () => {
+    const input = document.getElementById("tn-batch-input").value.trim();
+    if (!input) return;
+    const mobiles = parseMobiles(input);
+    if (!mobiles.length) {
+      document.getElementById("tn-batch-status").textContent = "No valid mobile numbers found.";
+      return;
+    }
+    await runBatchLookup(mobiles);
+  });
+
+  // "Lookup Loaded Contacts" — uses phones from the Contact Viewer
+  document.getElementById("tn-batch-contacts-btn").addEventListener("click", async () => {
+    if (!allContacts.length) return;
+    // Extract 10-digit Indian mobiles from loaded contacts (strip 91 country code)
+    const mobiles = allContacts
+      .map((c) => (c.phone || "").replace(/^91/, ""))
+      .filter((m) => /^[6-9]\d{9}$/.test(m));
+    if (!mobiles.length) {
+      document.getElementById("tn-batch-status").textContent = "No valid Indian mobile numbers in loaded contacts.";
+      return;
+    }
+    // Pre-fill the textarea for visibility
+    document.getElementById("tn-batch-input").value = mobiles.join("\n");
+    await runBatchLookup(mobiles);
+  });
+
+  async function runBatchLookup(mobiles) {
+    const btn = document.getElementById("tn-batch-btn");
+    const status = document.getElementById("tn-batch-status");
+    const tbody = document.getElementById("tn-batch-tbody");
+    const wrapper = document.getElementById("tn-batch-results-wrapper");
+    const exportRow = document.getElementById("tn-batch-export-row");
+
+    btn.disabled = true;
+    status.textContent = `Looking up ${mobiles.length} number(s)…`;
+    tbody.innerHTML = "";
+    wrapper.style.display = "none";
+    exportRow.style.display = "none";
+    tnBatchResults = [];
+
+    // Process in chunks of 20 (API limit)
+    const chunks = [];
+    for (let i = 0; i < mobiles.length; i += 20) {
+      chunks.push(mobiles.slice(i, i + 20));
+    }
+
+    let completed = 0;
+    for (const chunk of chunks) {
+      try {
+        const resp = await fetch("/api/tn/batch-lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mobiles: chunk }),
+        });
+        const data = await resp.json();
+        if (data.error) {
+          status.textContent = `Error: ${data.error}`;
+          btn.disabled = false;
+          return;
+        }
+        const batchItems = data.results || [];
+        tnBatchResults.push(...batchItems);
+        // Update local cache with resolved names
+        batchItems.forEach((r) => { if (r.name) tnNameCache.set(r.mobile, r.name); });
+      } catch (err) {
+        status.textContent = `Network error: ${err.message}`;
+        btn.disabled = false;
+        return;
+      }
+      completed += chunk.length;
+      status.textContent = `Processed ${completed} / ${mobiles.length}…`;
+    }
+
+    // Render results
+    wrapper.style.display = "block";
+    exportRow.style.display = "flex";
+
+    const successCount = tnBatchResults.filter((r) => r.name).length;
+    status.textContent = `Done — ${successCount} resolved out of ${tnBatchResults.length}`;
+
+    tbody.innerHTML = tnBatchResults.map((r) => {
+      const statusBadge = r.name
+        ? '<span style="color:#10b981;font-weight:600;font-size:12px;">✓ Found</span>'
+        : `<span style="color:#ef4444;font-size:12px;">${escHtml(r.error || "not_found")}</span>`;
+      return `
+        <tr>
+          <td style="font-family:monospace;">${escHtml(r.mobile)}</td>
+          <td style="font-weight:${r.name ? '600' : '400'};">${r.name ? escHtml(r.name) : '—'}</td>
+          <td>${statusBadge}</td>
+        </tr>`;
+    }).join("");
+
+    btn.disabled = false;
+
+    // Re-render contact cards to show newly cached names
+    renderContacts();
+  }
+
+  // Export results as CSV
+  document.getElementById("tn-export-csv-btn").addEventListener("click", () => {
+    if (!tnBatchResults.length) return;
+    const header = "Mobile,Verified Name,Status\n";
+    const rows = tnBatchResults.map((r) => {
+      const name = (r.name || "").replace(/"/g, '""');
+      const st = r.name ? "found" : (r.error || "not_found");
+      return `${r.mobile},"${name}",${st}`;
+    }).join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tn-batch-results-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Enable the "Lookup Loaded Contacts" button when contacts are loaded
+  const _origLoadContacts = loadContacts;
+  loadContacts = async function () {
+    await _origLoadContacts();
+    const btn = document.getElementById("tn-batch-contacts-btn");
+    if (btn) btn.disabled = !allContacts.length;
+  };
+
+  // =========================================================================
   // Init
   // =========================================================================
 
+  loadTnCache();
   loadSessions();
   loadTemplates();
 })();

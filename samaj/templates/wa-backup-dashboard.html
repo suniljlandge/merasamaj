@@ -107,6 +107,48 @@
         </div>
       </section>
 
+      <!-- TN Batch Lookup -->
+      <section class="directory-search-card">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Super Admin</p>
+            <h2>True Name Batch Lookup</h2>
+            <p>Resolve verified UPI account names for multiple mobile numbers at once (max 20 per batch).</p>
+          </div>
+        </div>
+
+        <div class="form-surface" style="margin-bottom:16px;">
+          <label class="field">
+            <span>Mobile numbers (one per line, or comma-separated)</span>
+            <textarea id="tn-batch-input" rows="5" placeholder="9876543210&#10;9123456789&#10;8765432109"
+              style="width:100%;padding:10px 14px;border:1px solid var(--hairline);border-radius:8px;font-size:14px;font-family:monospace;resize:vertical;"></textarea>
+          </label>
+          <div class="form-actions" style="margin-top:12px;display:flex;align-items:center;gap:12px;">
+            <button type="button" id="tn-batch-btn" class="button-primary">Lookup Names</button>
+            <button type="button" id="tn-batch-contacts-btn" class="button-secondary" disabled title="Lookup all contacts currently loaded in Contact Viewer">Lookup Loaded Contacts</button>
+            <span id="tn-batch-status" style="font-size:13px;color:var(--steel);"></span>
+          </div>
+        </div>
+
+        <!-- Results Table -->
+        <div class="directory-table-wrapper" id="tn-batch-results-wrapper" style="display:none;">
+          <table class="directory-table" id="tn-batch-table">
+            <thead>
+              <tr>
+                <th>Mobile</th>
+                <th>Verified Name</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="tn-batch-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="form-actions" style="margin-top:12px;display:none;" id="tn-batch-export-row">
+          <button type="button" id="tn-export-csv-btn" class="button-secondary">Export Results CSV</button>
+        </div>
+      </section>
+
       <!-- Template Approvals -->
       <section class="directory-search-card">
         <div class="directory-table-header">
