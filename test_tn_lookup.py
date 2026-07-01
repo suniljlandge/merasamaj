@@ -49,11 +49,12 @@ def test_pipeline():
     header("Step 1 · Fetch hash from DBATU payment gateway")
     t0 = time.time()
     try:
-        hash_val, act_email, act_fname, act_phone = m._get_hash(mobile, email, name4)
+        form_fields = m._get_hash(mobile, email, name4)
         elapsed = time.time() - t0
+        hash_val = form_fields.get('hash')
         if hash_val:
             ok(f"Hash obtained ({len(hash_val)} chars) in {elapsed:.1f}s")
-            info(f"Resolved  email={act_email}  firstname={act_fname}  phone={act_phone}")
+            info(f"txnid={form_fields.get('txnid')}  email={form_fields.get('email')}  phone={form_fields.get('phone')}")
         else:
             fail(f"Hash is None — payment page returned no <input name='hash'>")
             print(f"\n{RED}Cannot proceed without a hash. Aborting.{RESET}")
@@ -66,12 +67,12 @@ def test_pipeline():
     header("Step 2 · Get PayU payment ID")
     t0 = time.time()
     try:
-        pid = m._get_pid(act_phone, act_email, hash_val, act_fname)
+        pid = m._get_pid(form_fields)
         elapsed = time.time() - t0
         if pid:
             ok(f"PID={pid}  ({elapsed:.1f}s)")
         else:
-            fail("No PID returned — PayU did not redirect. Hash mismatch likely.")
+            fail("No PID returned — PayU did not redirect. Hash mismatch or txnid reuse limit hit.")
             return False
     except Exception as e:
         fail(f"Exception during PID fetch: {e}")

