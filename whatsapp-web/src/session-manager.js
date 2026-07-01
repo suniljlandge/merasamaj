@@ -692,11 +692,91 @@ function createSessionManager(db, logger, { onConnected } = {}) {
                   { $set: { phone: resolvedPhone } }
                 );
               } catch {}
+              // Save group participant as a contact so they appear in the contact viewer
+              if (msg.pushName) {
+                try {
+                  await contactsCol.updateOne(
+                    { userId, phone: resolvedPhone },
+                    {
+                      $set: {
+                        userId,
+                        phone: resolvedPhone,
+                        pushName: msg.pushName,
+                        source: "group_message",
+                        lastSeenAt: new Date(),
+                        isActive: true,
+                      },
+                      $setOnInsert: {
+                        firstSeenAt: new Date(),
+                        profilePicKey: null,
+                        profilePicHash: null,
+                      },
+                    },
+                    { upsert: true }
+                  );
+                } catch {}
+              }
+            }
+          } else if (participant.endsWith("@s.whatsapp.net") && msg.pushName) {
+            // Non-LID group participant — save directly
+            const resolvedPhone = participant.replace("@s.whatsapp.net", "");
+            if (resolvedPhone && /^\d+$/.test(resolvedPhone)) {
+              try {
+                await contactsCol.updateOne(
+                  { userId, phone: resolvedPhone },
+                  {
+                    $set: {
+                      userId,
+                      phone: resolvedPhone,
+                      pushName: msg.pushName,
+                      source: "group_message",
+                      lastSeenAt: new Date(),
+                      isActive: true,
+                    },
+                    $setOnInsert: {
+                      firstSeenAt: new Date(),
+                      profilePicKey: null,
+                      profilePicHash: null,
+                    },
+                  },
+                  { upsert: true }
+                );
+              } catch {}
             }
           }
           continue; // Don't store group messages as individual chats
+        } else if (jid === "status@broadcast" || jid.endsWith("@broadcast")) {
+          // Status update or broadcast list message — resolve sender from participantPn
+          const participantPn = msg.key?.participantPn || msg.participant || "";
+          const senderPhone = participantPn.endsWith("@s.whatsapp.net")
+            ? participantPn.replace("@s.whatsapp.net", "")
+            : "";
+          if (senderPhone && /^\d+$/.test(senderPhone) && msg.pushName) {
+            try {
+              await contactsCol.updateOne(
+                { userId, phone: senderPhone },
+                {
+                  $set: {
+                    userId,
+                    phone: senderPhone,
+                    pushName: msg.pushName,
+                    source: "broadcast_seen",
+                    lastSeenAt: new Date(),
+                    isActive: true,
+                  },
+                  $setOnInsert: {
+                    firstSeenAt: new Date(),
+                    profilePicKey: null,
+                    profilePicHash: null,
+                  },
+                },
+                { upsert: true }
+              );
+            } catch {}
+          }
+          continue; // Don't store status/broadcast messages themselves
         } else {
-          continue; // Skip status broadcasts
+          continue; // Unknown JID format — skip
         }
 
         if (!phone) continue;
