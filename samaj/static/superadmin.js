@@ -22,29 +22,28 @@ function initialize() {
   loadExportColumns();
   loadPublicAccounts();
   loadSignupDefault();
+  loadSidecarStatus();
 
-  if (saveConfigBtn) {
-    saveConfigBtn.addEventListener("click", saveRoleConfig);
-  }
-  if (exportBtn) {
-    exportBtn.addEventListener("click", downloadExport);
-  }
+  if (saveConfigBtn) saveConfigBtn.addEventListener("click", saveRoleConfig);
+  if (exportBtn) exportBtn.addEventListener("click", downloadExport);
+
   const saveExportColsBtn = document.querySelector("#save-export-cols-btn");
-  if (saveExportColsBtn) {
-    saveExportColsBtn.addEventListener("click", saveExportColumns);
-  }
-  const publicAccountsSearch = document.querySelector(
-    "#public-accounts-search"
-  );
-  if (publicAccountsSearch) {
-    publicAccountsSearch.addEventListener("input", renderPublicAccounts);
-  }
-  const saveSignupDefaultBtn = document.querySelector(
-    "#save-signup-default-btn"
-  );
-  if (saveSignupDefaultBtn) {
-    saveSignupDefaultBtn.addEventListener("click", saveSignupDefault);
-  }
+  if (saveExportColsBtn) saveExportColsBtn.addEventListener("click", saveExportColumns);
+
+  const publicAccountsSearch = document.querySelector("#public-accounts-search");
+  if (publicAccountsSearch) publicAccountsSearch.addEventListener("input", renderPublicAccounts);
+
+  const saveSignupDefaultBtn = document.querySelector("#save-signup-default-btn");
+  if (saveSignupDefaultBtn) saveSignupDefaultBtn.addEventListener("click", saveSignupDefault);
+
+  const sidecarRefreshBtn = document.querySelector("#sidecar-refresh-btn");
+  if (sidecarRefreshBtn) sidecarRefreshBtn.addEventListener("click", loadSidecarStatus);
+
+  const reconnectAllBtn = document.querySelector("#sidecar-reconnect-all-btn");
+  if (reconnectAllBtn) reconnectAllBtn.addEventListener("click", sidecarReconnectAll);
+
+  const sidecarStartBtn = document.querySelector("#sidecar-start-btn");
+  if (sidecarStartBtn) sidecarStartBtn.addEventListener("click", sidecarStart);
 }
 
 let exportColsState = { columns: [], roles: [], matrix: {} };
@@ -103,19 +102,15 @@ async function saveExportColumns() {
   status.textContent = "Saving...";
 
   const matrix = {};
-  exportColsState.roles.forEach((role) => {
-    matrix[role.key] = {};
+  exportColsState.roles.forEach((role) => { matrix[role.key] = {}; });
+  document.querySelectorAll("#export-cols-body input[type=checkbox]").forEach((input) => {
+    const role = input.getAttribute("data-ec-role");
+    const col = input.getAttribute("data-ec-col");
+    if (role && col) {
+      matrix[role] = matrix[role] || {};
+      matrix[role][col] = input.checked;
+    }
   });
-  document
-    .querySelectorAll("#export-cols-body input[type=checkbox]")
-    .forEach((input) => {
-      const role = input.getAttribute("data-ec-role");
-      const col = input.getAttribute("data-ec-col");
-      if (role && col) {
-        matrix[role] = matrix[role] || {};
-        matrix[role][col] = input.checked;
-      }
-    });
 
   try {
     const response = await fetch("/api/data-tools/export-config", {
@@ -124,9 +119,7 @@ async function saveExportColumns() {
       body: JSON.stringify({ matrix }),
     });
     const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error || "Unable to save.");
-    }
+    if (!response.ok) throw new Error(payload.error || "Unable to save.");
     status.textContent = "Saved.";
     window.setTimeout(() => { status.textContent = ""; }, 2500);
   } catch (error) {
@@ -139,9 +132,7 @@ async function loadRoleConfig() {
     const response = await fetch("/api/role-config");
     const payload = await response.json();
 
-    if (!response.ok) {
-      throw new Error(payload.error || "Unable to load configuration.");
-    }
+    if (!response.ok) throw new Error(payload.error || "Unable to load configuration.");
 
     configState = {
       roles: payload.roles || [],
@@ -154,9 +145,7 @@ async function loadRoleConfig() {
     renderPermissionsTable();
     renderLimits();
   } catch (error) {
-    permissionsTableBody.innerHTML = `
-      <tr><td colspan="5">${escapeHtml(error.message)}</td></tr>
-    `;
+    permissionsTableBody.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
   }
 }
 
@@ -165,20 +154,14 @@ function renderPermissionsTable() {
 
   permissionsHeaderRow.innerHTML =
     `<th>Capability</th>` +
-    roles
-      .map((role) => `<th style="text-align:center;">${escapeHtml(role.label)}</th>`)
-      .join("");
+    roles.map((role) => `<th style="text-align:center;">${escapeHtml(role.label)}</th>`).join("");
 
   permissionsTableBody.innerHTML = capabilities
     .map((capability) => {
       const cells = roles
         .map((role) => {
-          const enabled = Boolean(
-            (config.permissions[role.key] || {})[capability.key]
-          );
-          const locked =
-            (lockedCapabilities[role.key] || []).indexOf(capability.key) !== -1;
-
+          const enabled = Boolean((config.permissions[role.key] || {})[capability.key]);
+          const locked = (lockedCapabilities[role.key] || []).indexOf(capability.key) !== -1;
           return `
             <td style="text-align:center;">
               <input
@@ -188,36 +171,26 @@ function renderPermissionsTable() {
                 ${enabled ? "checked" : ""}
                 ${locked ? "disabled title='Always enabled for this role'" : ""}
               >
-            </td>
-          `;
+            </td>`;
         })
         .join("");
-
       return `
         <tr>
           <td>
             <strong>${escapeHtml(capability.label)}</strong>
-            <div style="font-size:12px;opacity:0.7;">
-              ${escapeHtml(capability.description || "")}
-            </div>
+            <div style="font-size:12px;opacity:0.7;">${escapeHtml(capability.description || "")}</div>
           </td>
           ${cells}
-        </tr>
-      `;
+        </tr>`;
     })
     .join("");
 }
 
 function renderLimits() {
   const { limits, config } = configState;
-
   limitsGrid.innerHTML = limits
     .map((limit) => {
-      const value =
-        config.limits[limit.key] !== undefined
-          ? config.limits[limit.key]
-          : limit.default;
-
+      const value = config.limits[limit.key] !== undefined ? config.limits[limit.key] : limit.default;
       return `
         <label class="field">
           <span>${escapeHtml(limit.label)}</span>
@@ -228,37 +201,28 @@ function renderLimits() {
             min="${escapeHtmlAttribute(String(limit.min))}"
             max="${escapeHtmlAttribute(String(limit.max))}"
           >
-        </label>
-      `;
+        </label>`;
     })
     .join("");
 }
 
 function collectConfigFromForm() {
   const permissions = {};
-
-  configState.roles.forEach((role) => {
-    permissions[role.key] = {};
+  configState.roles.forEach((role) => { permissions[role.key] = {}; });
+  permissionsTableBody.querySelectorAll("input[type=checkbox]").forEach((input) => {
+    const role = input.getAttribute("data-role");
+    const capability = input.getAttribute("data-capability");
+    if (role && capability) {
+      permissions[role] = permissions[role] || {};
+      permissions[role][capability] = input.checked;
+    }
   });
-
-  permissionsTableBody
-    .querySelectorAll("input[type=checkbox]")
-    .forEach((input) => {
-      const role = input.getAttribute("data-role");
-      const capability = input.getAttribute("data-capability");
-      if (role && capability) {
-        permissions[role] = permissions[role] || {};
-        permissions[role][capability] = input.checked;
-      }
-    });
 
   const limits = {};
   limitsGrid.querySelectorAll("input[data-limit]").forEach((input) => {
     const key = input.getAttribute("data-limit");
     const parsed = parseInt(input.value, 10);
-    if (key && !Number.isNaN(parsed)) {
-      limits[key] = parsed;
-    }
+    if (key && !Number.isNaN(parsed)) limits[key] = parsed;
   });
 
   return { permissions, limits };
@@ -266,27 +230,19 @@ function collectConfigFromForm() {
 
 async function saveRoleConfig() {
   configStatus.textContent = "Saving...";
-
   try {
     const response = await fetch("/api/role-config", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(collectConfigFromForm()),
     });
-
     const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(payload.error || "Unable to save configuration.");
-    }
-
+    if (!response.ok) throw new Error(payload.error || "Unable to save configuration.");
     configState.config = payload.config || configState.config;
     renderPermissionsTable();
     renderLimits();
     configStatus.textContent = "Saved.";
-    window.setTimeout(() => {
-      configStatus.textContent = "";
-    }, 2500);
+    window.setTimeout(() => { configStatus.textContent = ""; }, 2500);
   } catch (error) {
     configStatus.textContent = error.message || "Unable to save.";
   }
@@ -296,11 +252,7 @@ async function loadExportFilters() {
   try {
     const response = await fetch("/api/export/filters");
     const payload = await response.json();
-
-    if (!response.ok) {
-      return;
-    }
-
+    if (!response.ok) return;
     fillSelect("#export-state", payload.states, "All states");
     fillSelect("#export-district", payload.districts, "All districts");
     fillSelect("#export-taluka", payload.talukas, "All talukas");
@@ -315,90 +267,49 @@ async function loadExportFilters() {
 
 function fillSortOptions(options) {
   const select = document.querySelector("#export-sort");
-  if (!select) {
-    return;
-  }
+  if (!select) return;
   const list = Array.isArray(options) ? options : [];
   select.innerHTML = list
-    .map(
-      (option) =>
-        `<option value="${escapeHtmlAttribute(option.key)}">${escapeHtml(option.label)}</option>`
-    )
+    .map((option) => `<option value="${escapeHtmlAttribute(option.key)}">${escapeHtml(option.label)}</option>`)
     .join("");
 }
 
 function renderRelationCheckboxes(relations) {
   const grid = document.querySelector("#relations-grid");
-  if (!grid) {
-    return;
-  }
+  if (!grid) return;
   const list = Array.isArray(relations) ? relations : [];
-
   grid.innerHTML = list
-    .map(
-      (relation) => `
+    .map((relation) => `
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
-          <input
-            type="checkbox"
-            class="relation-checkbox"
-            value="${escapeHtmlAttribute(relation.key)}"
-            checked
-          >
+          <input type="checkbox" class="relation-checkbox" value="${escapeHtmlAttribute(relation.key)}" checked>
           <span>${escapeHtml(relation.label)}</span>
-        </label>
-      `
-    )
+        </label>`)
     .join("");
 
   const selectAll = document.querySelector("#relations-select-all");
   const clearAll = document.querySelector("#relations-clear");
-
-  if (selectAll) {
-    selectAll.addEventListener("click", () => toggleAllRelations(true));
-  }
-  if (clearAll) {
-    clearAll.addEventListener("click", () => toggleAllRelations(false));
-  }
+  if (selectAll) selectAll.addEventListener("click", () => toggleAllRelations(true));
+  if (clearAll) clearAll.addEventListener("click", () => toggleAllRelations(false));
 }
 
 function toggleAllRelations(checked) {
-  document
-    .querySelectorAll(".relation-checkbox")
-    .forEach((input) => {
-      input.checked = checked;
-    });
+  document.querySelectorAll(".relation-checkbox").forEach((input) => { input.checked = checked; });
 }
 
 function selectedRelationKeys() {
-  const checkboxes = Array.from(
-    document.querySelectorAll(".relation-checkbox")
-  );
-  if (!checkboxes.length) {
-    return { keys: [], allSelected: true };
-  }
-  const keys = checkboxes
-    .filter((input) => input.checked)
-    .map((input) => input.value);
-  return {
-    keys,
-    allSelected: keys.length === checkboxes.length,
-  };
+  const checkboxes = Array.from(document.querySelectorAll(".relation-checkbox"));
+  if (!checkboxes.length) return { keys: [], allSelected: true };
+  const keys = checkboxes.filter((input) => input.checked).map((input) => input.value);
+  return { keys, allSelected: keys.length === checkboxes.length };
 }
 
 function fillSelect(selector, values, allLabel) {
   const select = document.querySelector(selector);
-  if (!select) {
-    return;
-  }
+  if (!select) return;
   const options = Array.isArray(values) ? values : [];
   select.innerHTML =
     `<option value="">${escapeHtml(allLabel)}</option>` +
-    options
-      .map(
-        (value) =>
-          `<option value="${escapeHtmlAttribute(value)}">${escapeHtml(value)}</option>`
-      )
-      .join("");
+    options.map((value) => `<option value="${escapeHtmlAttribute(value)}">${escapeHtml(value)}</option>`).join("");
 }
 
 function downloadExport() {
@@ -406,9 +317,7 @@ function downloadExport() {
   params.set("mode", valueOf("#export-mode"));
 
   const sort = valueOf("#export-sort");
-  if (sort) {
-    params.set("sort", sort);
-  }
+  if (sort) params.set("sort", sort);
 
   const q = valueOf("#export-q").trim();
   if (q) params.set("q", q);
@@ -420,12 +329,9 @@ function downloadExport() {
     surname: "#export-surname",
     createdBy: "#export-created-by",
   };
-
   Object.keys(map).forEach((key) => {
     const value = valueOf(map[key]);
-    if (value) {
-      params.set(key, value);
-    }
+    if (value) params.set(key, value);
   });
 
   const relations = selectedRelationKeys();
@@ -433,17 +339,11 @@ function downloadExport() {
     exportStatus.textContent = "Tick at least one relation to export.";
     return;
   }
-  // Only send the relations param when it is a real subset; sending all is
-  // equivalent to no filter but keeps the URL shorter when everything is on.
-  if (!relations.allSelected) {
-    params.set("relations", relations.keys.join(","));
-  }
+  if (!relations.allSelected) params.set("relations", relations.keys.join(","));
 
   exportStatus.textContent = "Preparing download...";
   window.location.href = `/api/export?${params.toString()}`;
-  window.setTimeout(() => {
-    exportStatus.textContent = "";
-  }, 4000);
+  window.setTimeout(() => { exportStatus.textContent = ""; }, 4000);
 }
 
 function valueOf(selector) {
@@ -463,27 +363,16 @@ function escapeHtmlAttribute(value) {
 }
 
 // ---------------------------------------------------------------------------
-// Public account types (promote/demote campaigner accounts)
+// Public account types
 // ---------------------------------------------------------------------------
 
 let publicAccountsState = [];
 
-// Parse a fetch response as JSON, raising a clear message when the server
-// returned HTML instead (e.g. a 404/redirect page when the route is missing
-// or the session expired) so callers never surface the cryptic
-// "Unexpected token '<'" JSON parse error.
 async function readJsonOrThrow(response) {
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
-    if (response.status === 401 || response.status === 403) {
-      throw new Error("Your session expired. Please sign in again.");
-    }
-    if (response.status === 404) {
-      throw new Error(
-        "Endpoint not found. The server may need to be restarted to load " +
-          "the latest changes."
-      );
-    }
+    if (response.status === 401 || response.status === 403) throw new Error("Your session expired. Please sign in again.");
+    if (response.status === 404) throw new Error("Endpoint not found. The server may need to be restarted to load the latest changes.");
     throw new Error(`Unexpected server response (HTTP ${response.status}).`);
   }
   return response.json();
@@ -495,9 +384,7 @@ async function loadPublicAccounts() {
   try {
     const response = await fetch("/api/public-accounts");
     const payload = await readJsonOrThrow(response);
-    if (!response.ok) {
-      throw new Error(payload.error || "Unable to load accounts.");
-    }
+    if (!response.ok) throw new Error(payload.error || "Unable to load accounts.");
     publicAccountsState = payload.accounts || [];
     renderPublicAccounts();
   } catch (error) {
@@ -512,9 +399,7 @@ function renderPublicAccounts() {
   const searchInput = document.querySelector("#public-accounts-search");
   const term = (searchInput ? searchInput.value : "").trim().toLowerCase();
   const accounts = term
-    ? publicAccountsState.filter((account) =>
-        String(account.mobileNumber || "").toLowerCase().includes(term)
-      )
+    ? publicAccountsState.filter((account) => String(account.mobileNumber || "").toLowerCase().includes(term))
     : publicAccountsState;
 
   if (!accounts.length) {
@@ -526,9 +411,7 @@ function renderPublicAccounts() {
     .map((account) => {
       const isCampaigner = account.accountType === "campaigner";
       const nextType = isCampaigner ? "registrant" : "campaigner";
-      const buttonLabel = isCampaigner
-        ? "Make registrant"
-        : "Make campaigner";
+      const buttonLabel = isCampaigner ? "Make registrant" : "Make campaigner";
       const typeLabel = isCampaigner ? "Campaigner" : "Registrant";
       return `
         <tr>
@@ -536,12 +419,9 @@ function renderPublicAccounts() {
           <td>${escapeHtml(typeLabel)}</td>
           <td>${escapeHtml(account.status || "")}</td>
           <td style="text-align:right;">
-            <button
-              type="button"
-              class="button-ghost"
+            <button type="button" class="button-ghost"
               data-account-id="${escapeHtmlAttribute(account.id)}"
-              data-next-type="${escapeHtmlAttribute(nextType)}"
-            >
+              data-next-type="${escapeHtmlAttribute(nextType)}">
               ${escapeHtml(buttonLabel)}
             </button>
           </td>
@@ -550,9 +430,7 @@ function renderPublicAccounts() {
     .join("");
 
   body.querySelectorAll("button[data-account-id]").forEach((button) => {
-    button.addEventListener("click", () =>
-      setAccountType(button.dataset.accountId, button.dataset.nextType)
-    );
+    button.addEventListener("click", () => setAccountType(button.dataset.accountId, button.dataset.nextType));
   });
 }
 
@@ -560,22 +438,15 @@ async function setAccountType(accountId, accountType) {
   const status = document.querySelector("#public-accounts-status");
   if (status) status.textContent = "Updating...";
   try {
-    const response = await fetch(
-      `/api/public-accounts/${accountId}/account-type`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountType }),
-      }
-    );
+    const response = await fetch(`/api/public-accounts/${accountId}/account-type`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountType }),
+    });
     const payload = await readJsonOrThrow(response);
-    if (!response.ok) {
-      throw new Error(payload.error || "Unable to update account.");
-    }
+    if (!response.ok) throw new Error(payload.error || "Unable to update account.");
     const updated = payload.account;
-    publicAccountsState = publicAccountsState.map((account) =>
-      account.id === updated.id ? updated : account
-    );
+    publicAccountsState = publicAccountsState.map((account) => account.id === updated.id ? updated : account);
     renderPublicAccounts();
     if (status) status.textContent = "Saved.";
   } catch (error) {
@@ -593,9 +464,7 @@ async function loadSignupDefault() {
   try {
     const response = await fetch("/api/public-signup-settings");
     const payload = await readJsonOrThrow(response);
-    if (!response.ok) {
-      throw new Error(payload.error || "Unable to load setting.");
-    }
+    if (!response.ok) throw new Error(payload.error || "Unable to load setting.");
     select.value = payload.defaultAccountType || "registrant";
   } catch (error) {
     const status = document.querySelector("#signup-default-status");
@@ -615,12 +484,161 @@ async function saveSignupDefault() {
       body: JSON.stringify({ defaultAccountType: select.value }),
     });
     const payload = await readJsonOrThrow(response);
-    if (!response.ok) {
-      throw new Error(payload.error || "Unable to save setting.");
-    }
+    if (!response.ok) throw new Error(payload.error || "Unable to save setting.");
     select.value = payload.defaultAccountType;
     if (status) status.textContent = "Saved.";
   } catch (error) {
     if (status) status.textContent = error.message;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp Sidecar Control
+// ---------------------------------------------------------------------------
+
+const SIDECAR_STATUS_COLORS = {
+  connected: "#00ed64",
+  connecting: "#f5a623",
+  reconnecting: "#f5a623",
+  disconnected: "#c1ccd6",
+  unavailable: "#b42318",
+  ok: "#00ed64",
+};
+
+async function loadSidecarStatus() {
+  const body = document.querySelector("#sidecar-sessions-body");
+  const dot = document.querySelector("#sidecar-health-dot");
+  const healthText = document.querySelector("#sidecar-health-text");
+  const detail = document.querySelector("#sidecar-health-detail");
+  if (!body) return;
+
+  body.innerHTML = "<tr><td colspan='5'>Loading...</td></tr>";
+
+  try {
+    const resp = await fetch("/api/wa-web/sidecar/status");
+    const data = await resp.json();
+
+    const isOk = data.health === "ok";
+    if (dot) dot.style.background = isOk ? SIDECAR_STATUS_COLORS.ok : SIDECAR_STATUS_COLORS.unavailable;
+    if (healthText) healthText.textContent = isOk ? "Sidecar running" : "Sidecar unavailable";
+    if (detail) detail.textContent = isOk
+      ? `${data.activeSessions} active session${data.activeSessions !== 1 ? "s" : ""} · MongoDB connected`
+      : (data.error || "Cannot reach sidecar service");
+
+    // Show Start button only when sidecar is down
+    const startBtn = document.querySelector("#sidecar-start-btn");
+    const reconnectAllBtn = document.querySelector("#sidecar-reconnect-all-btn");
+    if (startBtn) startBtn.style.display = isOk ? "none" : "";
+    if (reconnectAllBtn) reconnectAllBtn.style.display = isOk ? "" : "none";
+
+    const sessions = data.sessions || [];
+    if (!sessions.length) {
+      body.innerHTML = "<tr><td colspan='5' style='color:var(--steel);'>No sessions found.</td></tr>";
+      return;
+    }
+
+    body.innerHTML = sessions.map((s) => {
+      const live = s.liveStatus || "unknown";
+      const liveColor = SIDECAR_STATUS_COLORS[live] || SIDECAR_STATUS_COLORS.disconnected;
+      const needsReconnect = live !== "connected" && live !== "connecting" && live !== "reconnecting";
+      return `
+        <tr>
+          <td style="font-family:monospace;font-size:13px;">${escapeHtml(s.userId)}</td>
+          <td>${escapeHtml(s.phoneNumber || "—")}</td>
+          <td><span class="status-badge status-${escapeHtmlAttribute(s.dbStatus)}">${escapeHtml(s.dbStatus)}</span></td>
+          <td>
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:${liveColor};flex-shrink:0;"></span>
+              ${escapeHtml(live)}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <button type="button" class="button-ghost sidecar-reconnect-btn"
+              data-user-id="${escapeHtmlAttribute(s.userId)}"
+              ${!needsReconnect ? "disabled title='Already connected'" : ""}>
+              Reconnect
+            </button>
+          </td>
+        </tr>`;
+    }).join("");
+
+    body.querySelectorAll(".sidecar-reconnect-btn").forEach((btn) => {
+      btn.addEventListener("click", () => sidecarReconnectOne(btn.dataset.userId, btn));
+    });
+  } catch (err) {
+    if (dot) dot.style.background = SIDECAR_STATUS_COLORS.unavailable;
+    if (healthText) healthText.textContent = "Sidecar unavailable";
+    if (detail) detail.textContent = err.message;
+    body.innerHTML = `<tr><td colspan='5' style='color:var(--danger);'>${escapeHtml(err.message)}</td></tr>`;
+    const startBtn = document.querySelector("#sidecar-start-btn");
+    const reconnectAllBtn = document.querySelector("#sidecar-reconnect-all-btn");
+    if (startBtn) startBtn.style.display = "";
+    if (reconnectAllBtn) reconnectAllBtn.style.display = "none";
+  }
+}
+
+async function sidecarReconnectOne(userId, btn) {
+  const statusEl = document.querySelector("#sidecar-action-status");
+  btn.disabled = true;
+  btn.textContent = "Reconnecting...";
+  if (statusEl) { statusEl.style.color = ""; statusEl.textContent = ""; }
+
+  try {
+    const resp = await fetch(`/api/wa-web/sidecar/reconnect/${encodeURIComponent(userId)}`, { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || "Failed");
+    if (statusEl) statusEl.textContent = `✓ Reconnect started for ${userId}`;
+    btn.textContent = "Reconnecting...";
+    setTimeout(loadSidecarStatus, 4000);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "Reconnect";
+    if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = err.message; }
+  }
+}
+
+async function sidecarStart() {
+  const btn = document.querySelector("#sidecar-start-btn");
+  const statusEl = document.querySelector("#sidecar-action-status");
+  if (btn) { btn.disabled = true; btn.textContent = "Starting..."; }
+  if (statusEl) { statusEl.textContent = "Starting sidecar, waiting for MongoDB…"; statusEl.style.color = ""; }
+
+  try {
+    // This call blocks up to ~20s on the server while waiting for health=ok
+    const resp = await fetch("/api/wa-web/sidecar/start", { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || "Failed to start");
+
+    if (data.alreadyRunning) {
+      if (statusEl) statusEl.textContent = "✓ Sidecar was already running.";
+    } else {
+      if (statusEl) statusEl.textContent = `✓ Sidecar started (health: ${data.health}). Reconnecting sessions…`;
+      // Auto-trigger reconnect-all so sessions come back immediately
+      await fetch("/api/wa-web/sidecar/reconnect-all", { method: "POST" });
+    }
+    setTimeout(loadSidecarStatus, 3000);
+  } catch (err) {
+    if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = err.message; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Start Sidecar"; }
+  }
+}
+
+async function sidecarReconnectAll() {
+  const btn = document.querySelector("#sidecar-reconnect-all-btn");
+  const statusEl = document.querySelector("#sidecar-action-status");
+  if (btn) { btn.disabled = true; btn.textContent = "Reconnecting..."; }
+  if (statusEl) { statusEl.textContent = ""; statusEl.style.color = ""; }
+
+  try {
+    const resp = await fetch("/api/wa-web/sidecar/reconnect-all", { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || "Failed");
+    if (statusEl) statusEl.textContent = "✓ Reconnecting all sessions in background...";
+    setTimeout(loadSidecarStatus, 5000);
+  } catch (err) {
+    if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = err.message; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Reconnect All"; }
   }
 }

@@ -587,6 +587,68 @@ function createRoutes(app, { sessionManager, backupService, r2, db, logger }) {
   });
 
   // =========================================================================
+  // SIDECAR MANAGEMENT (reconnect sessions without redeploying)
+  // =========================================================================
+
+  /**
+   * GET /api/sidecar/status
+   * Returns health + per-session connection status.
+   */
+  app.get("/api/sidecar/status", async (req, res) => {
+    try {
+      const sessions = await db.collection("wa_web_sessions").find({}).toArray();
+      const result = sessions.map((s) => ({
+        userId: s.userId,
+        phoneNumber: s.phoneNumber || "",
+        dbStatus: s.status,
+        liveStatus: sessionManager.getStatus(s.userId),
+      }));
+      res.json({
+        health: "ok",
+        mongodb: "connected",
+        activeSessions: sessionManager.getActiveCount(),
+        sessions: result,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/sidecar/reconnect/:userId
+   * Reconnect a specific session using stored auth state (no re-pairing needed).
+   */
+  app.post("/api/sidecar/reconnect/:userId", async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const session = await db.collection("wa_web_sessions").findOne({ userId });
+      const phoneNumber = session?.phoneNumber || "";
+      // Fire reconnect in background — don't block the HTTP response
+      sessionManager.reconnect(userId, phoneNumber).catch((err) => {
+        logger.error({ userId, err: err.message }, "Manual reconnect failed");
+      });
+      res.json({ success: true, userId, message: "Reconnect started in background" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/sidecar/reconnect-all
+   * Reconnect all sessions that have stored auth state.
+   */
+  app.post("/api/sidecar/reconnect-all", async (req, res) => {
+    try {
+      sessionManager.restoreSessions().catch((err) => {
+        logger.error({ err: err.message }, "reconnect-all failed");
+      });
+      res.json({ success: true, message: "Reconnecting all sessions in background" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // =========================================================================
   // ROUTING DECISION (for the hybrid approach)
   // =========================================================================
 

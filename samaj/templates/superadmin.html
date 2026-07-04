@@ -272,6 +272,51 @@
         </div>
       </section>
 
+      <!-- WhatsApp Sidecar Control -->
+      <section class="directory-search-card" id="sidecar-section">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">WhatsApp Web</p>
+            <h2>Sidecar Service</h2>
+            <p>
+              If contacts aren't loading or WhatsApp login shows "temporarily unavailable",
+              use these controls to reconnect sessions without redeploying.
+            </p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start;">
+            <button type="button" class="button-secondary" id="sidecar-refresh-btn">Refresh</button>
+            <button type="button" class="button-primary" id="sidecar-start-btn" style="display:none;">Start Sidecar</button>
+            <button type="button" class="button-primary" id="sidecar-reconnect-all-btn">Reconnect All</button>
+          </div>
+        </div>
+
+        <!-- Health banner -->
+        <div id="sidecar-health-banner" class="form-surface" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+          <span id="sidecar-health-dot" style="width:12px;height:12px;border-radius:50%;background:#c1ccd6;flex-shrink:0;"></span>
+          <span id="sidecar-health-text" style="font-weight:600;">Checking...</span>
+          <span id="sidecar-health-detail" style="font-size:13px;color:var(--steel);margin-left:4px;"></span>
+          <span id="sidecar-action-status" style="margin-left:auto;font-size:13px;"></span>
+        </div>
+
+        <!-- Sessions table -->
+        <div class="directory-table-wrapper">
+          <table class="directory-table">
+            <thead>
+              <tr>
+                <th>User ID</th>
+                <th>Phone</th>
+                <th>DB Status</th>
+                <th>Live Status</th>
+                <th style="text-align:right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="sidecar-sessions-body">
+              <tr><td colspan="5">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
     </main>
 
     {% include "_footer.html" %}
