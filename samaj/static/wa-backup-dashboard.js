@@ -11,6 +11,7 @@
   const PAGE_SIZE = 24;
   let selectedUserId = null;
   const tnNameCache = new Map(); // phone (10-digit) -> verified name
+  let tnAutoRunning = false;     // guard: only one auto-run at a time
 
   // =========================================================================
   // Load Sessions
@@ -273,6 +274,8 @@
       }
       currentPage = 1;
       renderContacts();
+      // Auto-resolve TN names for every Indian contact
+      autoLookupAllContacts();
     } catch (err) {
       grid.innerHTML = `<p style="color:var(--danger);grid-column:1/-1;text-align:center;">Error: ${err.message}</p>`;
     }
@@ -309,8 +312,11 @@
       const cachedName = tnNameCache.get(mobile10);
       const tnHtml = isIndian
         ? (cachedName
-          ? `<p class="contact-tn" style="font-size:11px;color:#10b981;font-weight:600;margin:2px 0 0;" title="Verified UPI name (cached)">✓ ${escHtml(cachedName)}</p>`
-          : `<button type="button" class="tn-lookup-btn" data-mobile="${escHtml(mobile10)}" style="margin-top:4px;padding:2px 8px;font-size:11px;border:1px solid var(--hairline);border-radius:4px;background:var(--canvas);cursor:pointer;color:var(--brand-teal-deep);font-weight:600;">🔍 TN Lookup</button>`)
+          ? `<p class="contact-tn" style="font-size:11px;color:#10b981;font-weight:600;margin:2px 0 0;" title="Verified UPI name">✓ ${escHtml(cachedName)}</p>`
+          : `<p class="contact-tn-pending" id="tn-${escHtml(mobile10)}" style="font-size:11px;color:var(--steel);margin:2px 0 0;">
+               <span class="tn-spinner" style="display:inline-block;width:10px;height:10px;border:2px solid var(--hairline);border-top-color:var(--brand-teal-deep);border-radius:50%;animation:tn-spin 0.7s linear infinite;vertical-align:middle;margin-right:4px;"></span>
+               <span>Looking up…</span>
+             </p>`)
         : "";
       return `
       <div class="contact-card" data-phone="${escHtml(c.phone)}">
@@ -352,14 +358,6 @@
         if (img) openProfilePicModal(card.dataset.phone, card.querySelector(".contact-name").textContent);
       });
       card.addEventListener("click", () => openChatPopup(card.dataset.phone));
-    });
-
-    // TN Lookup buttons on each card
-    grid.querySelectorAll(".tn-lookup-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        tnLookupSingle(btn);
-      });
     });
   }
 
@@ -914,7 +912,7 @@
   }
 
   // =========================================================================
-  // TN Single Lookup (per-card button)
+  // TN Single Lookup (per-card button) — kept for manual re-try if needed
   // =========================================================================
 
   async function tnLookupSingle(btn) {
@@ -948,6 +946,157 @@
     }
   }
 
+  // =========================================================================
+  // TN Auto-Lookup — resolves ALL Indian contacts automatically
+  // =========================================================================
+
+  // Inject the spinner keyframe once into the document
+  (function injectTnStyles() {
+    if (document.getElementById("tn-auto-styles")) return;
+    const style = document.createElement("style");
+    style.id = "tn-auto-styles";
+    style.textContent = `
+      @keyframes tn-spin { to { transform: rotate(360deg); } }
+      @keyframes tn-ring-dash {
+        0%   { stroke-dashoffset: 220; }
+        100% { stroke-dashoffset: 0; }
+      }
+      #tn-progress-ring { transition: stroke-dashoffset 0.4s ease; }
+    `;
+    document.head.appendChild(style);
+  })();
+
+  /**
+   * Show/update the circular progress ring in the TN section header.
+   * done=0, total=N → ring at 0 %.  done=N → ring fills and disappears.
+   */
+  function updateTnProgressRing(done, total, label) {
+    let container = document.getElementById("tn-ring-container");
+    if (!container) {
+      // Build once and insert into the TN section header
+      const header = document.querySelector("#tn-batch-btn")?.closest(".form-surface, section");
+      const insertTarget = document.querySelector(".directory-table-header:has(#tn-batch-btn)")
+                        || document.getElementById("tn-batch-btn")?.closest(".form-surface");
+      container = document.createElement("div");
+      container.id = "tn-ring-container";
+      container.style.cssText = `
+        display:inline-flex;align-items:center;gap:10px;
+        padding:6px 14px 6px 8px;
+        background:rgba(255,255,255,0.85);backdrop-filter:blur(6px);
+        border:1px solid var(--hairline);border-radius:999px;
+        box-shadow:0 2px 12px rgba(0,0,0,0.08);
+        margin-top:10px;
+        font-size:12px;color:var(--steel);font-weight:500;
+      `;
+      container.innerHTML = `
+        <svg width="32" height="32" viewBox="0 0 36 36" style="flex-shrink:0;transform:rotate(-90deg);">
+          <circle cx="18" cy="18" r="15" fill="none" stroke="var(--hairline)" stroke-width="3"/>
+          <circle id="tn-progress-ring" cx="18" cy="18" r="15" fill="none"
+            stroke="var(--brand-teal-deep,#0d9488)" stroke-width="3"
+            stroke-linecap="round"
+            stroke-dasharray="94.2"
+            stroke-dashoffset="94.2"/>
+        </svg>
+        <span id="tn-ring-label"></span>
+      `;
+      // Insert after the batch buttons row
+      const actionsRow = document.querySelector(".form-actions:has(#tn-batch-btn)");
+      if (actionsRow) {
+        actionsRow.insertAdjacentElement("afterend", container);
+      } else {
+        document.getElementById("tn-batch-btn")?.closest(".form-surface")?.appendChild(container);
+      }
+    }
+
+    const ring = document.getElementById("tn-progress-ring");
+    const lbl  = document.getElementById("tn-ring-label");
+    const circumference = 94.2; // 2π×15
+
+    if (total === 0) {
+      container.style.display = "none";
+      return;
+    }
+
+    container.style.display = "inline-flex";
+    const pct = Math.max(0, Math.min(1, done / total));
+    ring.style.strokeDashoffset = (circumference * (1 - pct)).toFixed(2);
+    lbl.textContent = label || `TN ${done} / ${total}`;
+
+    if (done >= total) {
+      // Briefly show 100 % then hide
+      setTimeout(() => { container.style.display = "none"; }, 2000);
+    }
+  }
+
+  /**
+   * Update a single contact card's TN placeholder with the resolved result.
+   * Works whether the card is currently visible or not — the DOM element
+   * only exists when on the current page, so we guard with getElementById.
+   */
+  function applyTnResultToCard(mobile10, name, err) {
+    const el = document.getElementById(`tn-${mobile10}`);
+    if (!el) return; // card not in current page view — cache is enough
+    if (name) {
+      el.outerHTML = `<p class="contact-tn" style="font-size:11px;color:#10b981;font-weight:600;margin:2px 0 0;" title="Verified UPI name">✓ ${escHtml(name)}</p>`;
+    } else {
+      el.outerHTML = `<p style="font-size:11px;color:#94a3b8;margin:2px 0 0;" title="${escHtml(err || 'not found')}">— not found</p>`;
+    }
+  }
+
+  /**
+   * Auto-run TN lookup for every Indian contact in allContacts.
+   * Skips already-cached numbers.  Processes in batches of 20.
+   */
+  async function autoLookupAllContacts() {
+    if (tnAutoRunning) return;
+
+    // Collect all 10-digit Indian mobiles that aren't cached yet
+    const allMobiles = allContacts
+      .map((c) => (c.phone || "").replace(/^91/, ""))
+      .filter((m) => /^[6-9]\d{9}$/.test(m));
+
+    const uncached = allMobiles.filter((m) => !tnNameCache.has(m));
+    // Deduplicate
+    const unique = [...new Set(uncached)];
+
+    if (!unique.length) return; // everything already cached
+
+    tnAutoRunning = true;
+    const total = unique.length;
+    let done = 0;
+
+    updateTnProgressRing(done, total, `TN 0 / ${total}`);
+
+    // Process in chunks of 20 (server limit)
+    const chunks = [];
+    for (let i = 0; i < unique.length; i += 20) chunks.push(unique.slice(i, i + 20));
+
+    for (const chunk of chunks) {
+      try {
+        const resp = await fetch("/api/tn/batch-lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mobiles: chunk }),
+        });
+        const data = await resp.json();
+        const results = data.results || [];
+        results.forEach((r) => {
+          if (r.name) tnNameCache.set(r.mobile, r.name);
+          applyTnResultToCard(r.mobile, r.name, r.error);
+        });
+      } catch {
+        // network blip — keep going with next chunk
+      }
+      done += chunk.length;
+      updateTnProgressRing(done, total, `TN ${done} / ${total}`);
+    }
+
+    // Also refresh the batch section results if it has content
+    if (tnBatchResults.length) renderContacts();
+
+    tnAutoRunning = false;
+  }
+
   // Load cached TN names on page load so cards show them immediately
   async function loadTnCache() {
     try {
@@ -958,6 +1107,8 @@
         tnNameCache.set(mobile, name);
       }
     } catch {}
+    // After cache is warm, kick off auto-lookup for any contacts already loaded
+    if (allContacts.length) autoLookupAllContacts();
   }
 
   // =========================================================================
