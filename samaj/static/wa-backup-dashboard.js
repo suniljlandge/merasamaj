@@ -1067,29 +1067,33 @@
 
     updateTnProgressRing(done, total, `TN 0 / ${total}`);
 
-    // Process in chunks of 20 (server limit)
+    // Process all chunks in parallel — server resolves each batch concurrently too
     const chunks = [];
-    for (let i = 0; i < unique.length; i += 20) chunks.push(unique.slice(i, i + 20));
+    for (let i = 0; i < unique.length; i += 50) chunks.push(unique.slice(i, i + 50));
 
-    for (const chunk of chunks) {
-      try {
-        const resp = await fetch("/api/tn/batch-lookup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mobiles: chunk }),
-        });
-        const data = await resp.json();
-        const results = data.results || [];
-        results.forEach((r) => {
-          if (r.name) tnNameCache.set(r.mobile, r.name);
-          applyTnResultToCard(r.mobile, r.name, r.error);
-        });
-      } catch {
-        // network blip — keep going with next chunk
-      }
-      done += chunk.length;
-      updateTnProgressRing(done, total, `TN ${done} / ${total}`);
-    }
+    const chunkPromises = chunks.map((chunk) =>
+      fetch("/api/tn/batch-lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobiles: chunk }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          const results = data.results || [];
+          results.forEach((r) => {
+            if (r.name) tnNameCache.set(r.mobile, r.name);
+            applyTnResultToCard(r.mobile, r.name, r.error);
+          });
+          done += chunk.length;
+          updateTnProgressRing(done, total, `TN ${done} / ${total}`);
+        })
+        .catch(() => {
+          done += chunk.length;
+          updateTnProgressRing(done, total, `TN ${done} / ${total}`);
+        })
+    );
+
+    await Promise.all(chunkPromises);
 
     // Also refresh the batch section results if it has content
     if (tnBatchResults.length) renderContacts();

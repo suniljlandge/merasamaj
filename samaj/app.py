@@ -65,7 +65,7 @@ from .corrections import (
     save_corrections,
     )
 
-from .tn_service import resolve_true_name
+from .tn_service import resolve_true_name, resolve_batch
 
 from . import data_tools
 from . import pdf_export
@@ -4509,17 +4509,56 @@ def create_app(config=None, collection=None, correction_collection=None):
         if not isinstance(mobiles, list):
             return jsonify({"error": "mobiles must be a list"}), 400
 
-        if len(mobiles) > 20:
-            return jsonify({"error": "Maximum 20 numbers per batch request"}), 400
+        if len(mobiles) > 50:
+            return jsonify({"error": "Maximum 50 numbers per batch request"}), 400
 
+        # Validate and split into cached vs uncached
+        valid_mobiles = []
         results = []
         for mobile in mobiles:
             mobile = str(mobile).strip()
             if not re.fullmatch(r"[6-9]\d{9}", mobile):
                 results.append({"mobile": mobile, "name": None, "error": "invalid_format", "cached": False})
                 continue
-            name, err, from_cache = _tn_lookup_cached(mobile)
-            results.append({"mobile": mobile, "name": name, "error": err, "cached": from_cache})
+            valid_mobiles.append(mobile)
+
+        # Serve cached ones immediately, collect uncached for parallel resolution
+        cache = get_tn_cache_collection()
+        cached_docs = {
+            doc["mobile"]: doc["name"]
+            for doc in cache.find({"mobile": {"$in": valid_mobiles}}, {"mobile": 1, "name": 1, "_id": 0})
+            if doc.get("name")
+        }
+
+        need_lookup = []
+        for mobile in valid_mobiles:
+            if mobile in cached_docs:
+                results.append({"mobile": mobile, "name": cached_docs[mobile], "error": None, "cached": True})
+            else:
+                need_lookup.append(mobile)
+
+        # Resolve uncached numbers in parallel (one pipeline token, many VPA calls)
+        if need_lookup:
+            batch_results = resolve_batch(need_lookup)
+            # Persist resolved names to cache in bulk
+            updates = [
+                UpdateOne(
+                    {"mobile": r["mobile"]},
+                    {"$set": {
+                        "mobile": r["mobile"],
+                        "name": r["name"],
+                        "resolvedAt": now_utc(),
+                        "resolvedBy": session.get("username", ""),
+                    }},
+                    upsert=True,
+                )
+                for r in batch_results if r["name"]
+            ]
+            if updates:
+                cache.bulk_write(updates, ordered=False)
+
+            for r in batch_results:
+                results.append({"mobile": r["mobile"], "name": r["name"], "error": r["error"], "cached": False})
 
         return jsonify({"results": results})
 
