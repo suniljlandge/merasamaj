@@ -251,8 +251,16 @@
     grid.innerHTML = '<p style="color:var(--steel);grid-column:1/-1;text-align:center;">Loading contacts...</p>';
 
     try {
-      const resp = await fetch(`${API}/backup/export?format=json&userId=${selectedUserId}`);
-      const data = await resp.json();
+      let resp = await fetch(`${API}/backup/export?format=json&userId=${selectedUserId}`);
+      let data = await resp.json();
+
+      // If we get a connection error message (sidecar restarting), retry once after 3s
+      if (data.error && data.error.includes("Connection refused")) {
+        grid.innerHTML = '<p style="color:var(--steel);grid-column:1/-1;text-align:center;">Sidecar restarting, retrying...</p>';
+        await new Promise(r => setTimeout(r, 3000));
+        resp = await fetch(`${API}/backup/export?format=json&userId=${selectedUserId}`);
+        data = await resp.json();
+      }
 
       if (!resp.ok || data.error) {
         grid.innerHTML = `<p style="color:var(--danger);grid-column:1/-1;text-align:center;">Failed to load contacts: ${data.error || resp.statusText}</p>`;
@@ -261,7 +269,6 @@
 
       allContacts = data.contacts || [];
       if (allContacts.length === 0 && data.total === undefined) {
-        // Unexpected response shape — log for debugging
         console.warn("Unexpected contacts response:", data);
       }
       currentPage = 1;

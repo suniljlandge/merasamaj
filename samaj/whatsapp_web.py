@@ -13,6 +13,8 @@ via a shared API secret.
 
 import os
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Optional
 
 # Sidecar configuration
@@ -21,6 +23,23 @@ WA_WEB_API_SECRET = os.getenv("WA_WEB_API_SECRET", "change-this-to-a-random-secr
 
 # Request timeout for sidecar calls
 _TIMEOUT = 15
+
+# Shared session with retry on connection errors.
+# After the sidecar restarts, the connection pool may have a stale socket.
+# Retrying on ConnectionError flushes it and establishes a fresh connection.
+_session = requests.Session()
+_retry = Retry(
+    total=3,
+    connect=3,                 # retry on connection errors (stale pool after sidecar restart)
+    backoff_factor=1,          # 0s, 1s, 2s between retries
+    status_forcelist=[502, 503, 504],
+    allowed_methods=["GET", "POST", "PUT", "DELETE"],
+    raise_on_status=False,
+    raise_on_redirect=False,
+)
+_adapter = HTTPAdapter(max_retries=_retry)
+_session.mount("http://", _adapter)
+_session.mount("https://", _adapter)
 
 
 def _headers():
@@ -47,7 +66,7 @@ def is_service_available() -> bool:
     should respond instantly if it's up. Retrying for 10s here just blocks
     the Flask request thread and delays the user error message."""
     try:
-        resp = requests.get(f"{WA_WEB_BASE_URL}/health", timeout=5)
+        resp = _session.get(f"{WA_WEB_BASE_URL}/health", timeout=5)
         return resp.ok and resp.json().get("status") in ("ok", "starting")
     except (requests.ConnectionError, requests.Timeout):
         return False
@@ -72,7 +91,7 @@ def connect_session(user_id: str, phone_number: str) -> dict:
             - status: Connection status string
             - message: Human-readable instructions
     """
-    resp = requests.post(
+    resp = _session.post(
         _url("/api/session/connect"),
         headers=_headers(),
         json={"userId": user_id, "phoneNumber": phone_number},
@@ -89,7 +108,7 @@ def get_session_status(user_id: str) -> dict:
     Returns:
         dict with keys: userId, status (connected|connecting|reconnecting|disconnected)
     """
-    resp = requests.get(
+    resp = _session.get(
         _url(f"/api/session/status/{user_id}"),
         headers=_headers(),
         timeout=_TIMEOUT,
@@ -100,7 +119,7 @@ def get_session_status(user_id: str) -> dict:
 
 def disconnect_session(user_id: str) -> dict:
     """Disconnect and log out a user's WhatsApp Web session."""
-    resp = requests.post(
+    resp = _session.post(
         _url("/api/session/disconnect"),
         headers=_headers(),
         json={"userId": user_id},
@@ -135,7 +154,7 @@ def decide_route(
             - channel: "web" or "cloud_api"
             - reason: Explanation for the routing decision
     """
-    resp = requests.post(
+    resp = _session.post(
         _url("/api/route/decide"),
         headers=_headers(),
         json={
@@ -169,7 +188,7 @@ def send_personal_message(
     Raises:
         requests.HTTPError: On non-429 server errors.
     """
-    resp = requests.post(
+    resp = _session.post(
         _url("/api/message/send"),
         headers=_headers(),
         json={
@@ -195,7 +214,7 @@ def get_daily_send_stats(user_id: str) -> dict:
     Returns:
         dict with keys: sent, limit, remaining
     """
-    resp = requests.get(
+    resp = _session.get(
         _url(f"/api/message/daily-stats/{user_id}"),
         headers=_headers(),
         timeout=_TIMEOUT,
@@ -221,7 +240,7 @@ def send_media_message(
     Returns:
         dict with success status.
     """
-    resp = requests.post(
+    resp = _session.post(
         _url("/api/message/send-media"),
         headers=_headers(),
         json={
@@ -257,7 +276,7 @@ def trigger_backup(user_id: str, include_profile_pics: bool = True) -> dict:
     Returns:
         dict with success status and message.
     """
-    resp = requests.post(
+    resp = _session.post(
         _url("/api/backup/run"),
         headers=_headers(),
         json={"userId": user_id, "includeProfilePics": include_profile_pics},
@@ -274,7 +293,7 @@ def get_backup_status(user_id: str) -> dict:
     Returns:
         dict with keys: lastBackup, totalContacts, totalGroups
     """
-    resp = requests.get(
+    resp = _session.get(
         _url(f"/api/backup/status/{user_id}"),
         headers=_headers(),
         timeout=_TIMEOUT,
@@ -286,7 +305,7 @@ def get_backup_status(user_id: str) -> dict:
 def is_backup_running(user_id: str) -> bool:
     """Check if a backup is currently in progress for a user."""
     try:
-        resp = requests.get(
+        resp = _session.get(
             _url(f"/api/backup/running/{user_id}"),
             headers=_headers(),
             timeout=_TIMEOUT,
@@ -308,7 +327,7 @@ def export_contacts(user_id: str, format: str = "json"):
     Returns:
         JSON list of contacts, or raw CSV string.
     """
-    resp = requests.get(
+    resp = _session.get(
         _url(f"/api/backup/contacts/{user_id}"),
         headers=_headers(),
         params={"format": format},
@@ -332,7 +351,7 @@ def get_profile_pic_url(user_id: str, phone: str) -> Optional[str]:
     Returns:
         Signed URL string (expires in 1 hour), or None if not available.
     """
-    resp = requests.get(
+    resp = _session.get(
         _url(f"/api/backup/profile-pic/{user_id}/{phone}"),
         headers=_headers(),
         timeout=_TIMEOUT,
@@ -356,7 +375,7 @@ def get_profile_pic_history(user_id: str, phone: str) -> list:
     Returns:
         List of dicts with 'url' and 'capturedAt' keys.
     """
-    resp = requests.get(
+    resp = _session.get(
         _url(f"/api/backup/profile-pic-history/{user_id}/{phone}"),
         headers=_headers(),
         timeout=_TIMEOUT,
@@ -376,7 +395,7 @@ def get_profile_pics_batch(user_id: str, phones: list) -> dict:
     Returns:
         Dict mapping phone -> signed URL.
     """
-    resp = requests.post(
+    resp = _session.post(
         _url("/api/backup/profile-pics-batch"),
         headers=_headers(),
         json={"userId": user_id, "phones": phones},
