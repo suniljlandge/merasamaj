@@ -18,9 +18,20 @@ function createSessionManager(db, logger, { onConnected } = {}) {
   const activeSockets = new Map();
   // Connection status per user
   const connectionStatus = new Map();
+  // Reconnect lock — prevents multiple simultaneous reconnect attempts per user
+  const reconnectLock = new Map(); // userId -> true
 
   const sessionsCollection = db.collection("wa_web_sessions");
   const authCollection = db.collection("wa_auth_state");
+
+  // Global guard: catch unhandled promise rejections and exceptions so a single
+  // bad message or stale socket send can't crash the entire sidecar process.
+  process.on("uncaughtException", (err) => {
+    logger.error({ err: err.message, stack: err.stack }, "Uncaught exception — ignoring to keep sidecar alive");
+  });
+  process.on("unhandledRejection", (reason) => {
+    logger.error({ reason: String(reason) }, "Unhandled rejection — ignoring to keep sidecar alive");
+  });
 
   /**
    * Connect a user's WhatsApp session using OTP pairing code.
@@ -107,15 +118,29 @@ function createSessionManager(db, logger, { onConnected } = {}) {
             ? lastDisconnect.error.output.statusCode
             : null;
 
+        // 'conflict' (replaced) = another client opened the same session.
+        // Reconnecting immediately would just displace that client back and
+        // forth forever. Wait longer and let WhatsApp settle.
+        const isConflict = lastDisconnect?.error?.message?.includes("conflict") ||
+          lastDisconnect?.error?.message?.includes("Stream Errored (conflict)");
+
         const shouldReconnect =
           statusCode !== DisconnectReason.loggedOut &&
           statusCode !== DisconnectReason.forbidden;
 
         if (shouldReconnect) {
           connectionStatus.set(userId, "reconnecting");
-          logger.info({ userId, statusCode }, "Reconnecting...");
-          // Auto-reconnect after delay
-          setTimeout(() => reconnect(userId, phoneNumber), 3000);
+          // Back off longer on conflict to avoid displacing the active session
+          const delay = isConflict ? 15000 : 3000;
+          logger.info({ userId, statusCode, isConflict, delay }, "Reconnecting...");
+          // Use lock to prevent multiple simultaneous reconnect timers
+          if (!reconnectLock.get(userId)) {
+            reconnectLock.set(userId, true);
+            setTimeout(() => {
+              reconnectLock.delete(userId);
+              reconnect(userId, phoneNumber);
+            }, delay);
+          }
         } else {
           connectionStatus.set(userId, "disconnected");
           activeSockets.delete(userId);
@@ -233,8 +258,16 @@ function createSessionManager(db, logger, { onConnected } = {}) {
             { $set: { status: "disconnected", disconnectedAt: new Date() } }
           );
         } else {
+          const isConflict = lastDisconnect?.error?.message?.includes("conflict");
+          const delay = isConflict ? 15000 : 3000;
           connectionStatus.set(userId, "reconnecting");
-          setTimeout(() => reconnect(userId, ""), 3000);
+          if (!reconnectLock.get(userId)) {
+            reconnectLock.set(userId, true);
+            setTimeout(() => {
+              reconnectLock.delete(userId);
+              reconnect(userId, "");
+            }, delay);
+          }
         }
       }
     });
@@ -262,6 +295,12 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     if (!hasAuth) {
       connectionStatus.set(userId, "disconnected");
       return;
+    }
+
+    // Close any existing socket first to avoid conflict/replaced loops
+    if (activeSockets.has(userId)) {
+      try { activeSockets.get(userId).end(); } catch {}
+      activeSockets.delete(userId);
     }
 
     const { state, saveCreds } = await useMongoDBAuthState(authCollection, userId);
@@ -320,9 +359,17 @@ function createSessionManager(db, logger, { onConnected } = {}) {
             { $set: { status: "disconnected", disconnectedAt: new Date() } }
           );
         } else {
-          // Auto-reconnect on transient failures
+          // Auto-reconnect on transient failures, with lock and conflict backoff
+          const isConflict = lastDisconnect?.error?.message?.includes("conflict");
+          const delay = isConflict ? 15000 : 5000;
           connectionStatus.set(userId, "reconnecting");
-          setTimeout(() => reconnect(userId, phoneNumber), 5000);
+          if (!reconnectLock.get(userId)) {
+            reconnectLock.set(userId, true);
+            setTimeout(() => {
+              reconnectLock.delete(userId);
+              reconnect(userId, phoneNumber);
+            }, delay);
+          }
         }
       }
     });
