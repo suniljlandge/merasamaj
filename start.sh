@@ -1,8 +1,10 @@
 #!/bin/sh
-# Start the WhatsApp Web sidecar in the background
-cd /app/whatsapp-web
-node src/index.js &
+# Start the WhatsApp Web sidecar in the background, detached from Gunicorn's
+# process group so Gunicorn worker restarts (--max-requests) don't kill it.
+# setsid runs the process in a new session, fully detaching it.
+setsid node /app/whatsapp-web/src/index.js >> /tmp/sidecar.log 2>&1 &
 SIDECAR_PID=$!
+echo "Sidecar started (PID $SIDECAR_PID)"
 
 # Wait for the sidecar to be fully ready (MongoDB connected) before starting Flask.
 # Atlas DNS resolution + TLS handshake can take 5-15s on cold start.

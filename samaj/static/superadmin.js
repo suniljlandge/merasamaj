@@ -44,6 +44,15 @@ function initialize() {
 
   const sidecarStartBtn = document.querySelector("#sidecar-start-btn");
   if (sidecarStartBtn) sidecarStartBtn.addEventListener("click", sidecarStart);
+
+  const sidecarLogsBtn = document.querySelector("#sidecar-logs-btn");
+  if (sidecarLogsBtn) sidecarLogsBtn.addEventListener("click", sidecarViewLogs);
+
+  const sidecarLogsCloseBtn = document.querySelector("#sidecar-logs-close-btn");
+  if (sidecarLogsCloseBtn) sidecarLogsCloseBtn.addEventListener("click", () => {
+    const panel = document.querySelector("#sidecar-log-panel");
+    if (panel) panel.style.display = "none";
+  });
 }
 
 let exportColsState = { columns: [], roles: [], matrix: {} };
@@ -594,6 +603,29 @@ async function sidecarReconnectOne(userId, btn) {
     btn.disabled = false;
     btn.textContent = "Reconnect";
     if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = err.message; }
+  }
+}
+
+async function sidecarViewLogs() {
+  const panel = document.querySelector("#sidecar-log-panel");
+  const content = document.querySelector("#sidecar-log-content");
+  if (!panel || !content) return;
+
+  panel.style.display = "block";
+  content.textContent = "Loading...";
+
+  try {
+    const resp = await fetch("/api/wa-web/sidecar/logs?lines=100");
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    const lines = data.lines || [];
+    content.textContent = lines.length
+      ? lines.join("")
+      : (data.note || "No log output yet.");
+    // Scroll to bottom (newest entries)
+    content.scrollTop = content.scrollHeight;
+  } catch (err) {
+    content.textContent = "Failed to load logs: " + err.message;
   }
 }
 

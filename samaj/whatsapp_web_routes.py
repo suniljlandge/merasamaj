@@ -825,18 +825,25 @@ def _sidecar_is_running() -> bool:
 
 
 def _start_sidecar_process():
-    """Launch the Node.js sidecar as a background subprocess.
-    Returns the Popen object."""
+    """Launch the Node.js sidecar as a background subprocess,
+    detached from Gunicorn's process group via setsid so that
+    Gunicorn worker restarts (SIGTERM to process group) don't kill it."""
     global _sidecar_proc
     sidecar_dir = _os.path.join(_os.path.dirname(__file__), "..", "whatsapp-web")
     sidecar_dir = _os.path.abspath(sidecar_dir)
     env = _os.environ.copy()  # inherit all Fly secrets (MONGO_URI, API_SECRET, etc.)
+
+    log_path = "/tmp/sidecar.log"
+    log_file = open(log_path, "a")  # append so we keep history across restarts
+
     _sidecar_proc = subprocess.Popen(
         ["node", "src/index.js"],
         cwd=sidecar_dir,
         env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_file,
+        stderr=log_file,
+        # Start in a new session — detaches from Gunicorn's process group
+        start_new_session=True,
     )
     return _sidecar_proc
 
@@ -895,6 +902,21 @@ def sidecar_reconnect_all():
         return jsonify(resp.json())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@wa_web_bp.route("/sidecar/logs", methods=["GET"])
+@_require_super_admin
+def sidecar_logs():
+    """Return the last N lines of the sidecar log file."""
+    lines = int(request.args.get("lines", 100))
+    try:
+        with open("/tmp/sidecar.log", "r") as f:
+            all_lines = f.readlines()
+        return jsonify({"lines": all_lines[-lines:]})
+    except FileNotFoundError:
+        return jsonify({"lines": [], "note": "No log file yet — sidecar may have been started before this version."})
+    except Exception as e:
+        return jsonify({"error": str(e), "lines": []}), 500
 
 
 @wa_web_bp.route("/sidecar/start", methods=["POST"])

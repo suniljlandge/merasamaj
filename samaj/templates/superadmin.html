@@ -285,6 +285,7 @@
           </div>
           <div style="display:flex;gap:8px;align-items:flex-start;">
             <button type="button" class="button-secondary" id="sidecar-refresh-btn">Refresh</button>
+            <button type="button" class="button-secondary" id="sidecar-logs-btn">View Logs</button>
             <button type="button" class="button-primary" id="sidecar-start-btn" style="display:none;">Start Sidecar</button>
             <button type="button" class="button-primary" id="sidecar-reconnect-all-btn">Reconnect All</button>
           </div>
@@ -314,6 +315,15 @@
               <tr><td colspan="5">Loading...</td></tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Log viewer (hidden by default) -->
+        <div id="sidecar-log-panel" style="display:none;margin-top:16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <strong style="font-size:13px;">Sidecar Log (last 100 lines)</strong>
+            <button type="button" class="button-ghost" id="sidecar-logs-close-btn" style="font-size:12px;">Close</button>
+          </div>
+          <pre id="sidecar-log-content" style="background:var(--canvas-alt,#f5f5f5);border:1px solid var(--hairline);border-radius:8px;padding:12px;font-size:11px;line-height:1.5;overflow-x:auto;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:var(--ink);">Loading...</pre>
         </div>
       </section>
 
