@@ -10,6 +10,7 @@
   let currentPage = 1;
   const PAGE_SIZE = 24;
   let selectedUserId = null;
+  let picFilter = "all"; // "all" | "updated"
   const tnNameCache = new Map(); // phone (10-digit) -> verified name
   let tnAutoRunning = false;     // guard: only one auto-run at a time
 
@@ -286,11 +287,31 @@
     const search = document.getElementById("contact-search").value.toLowerCase().trim();
     const pagination = document.getElementById("contact-pagination");
 
+    // Threshold: "recently updated" = pic changed in last 7 days
+    const recentMs = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
     let filtered = allContacts;
+
+    // Apply pic-updated filter first
+    if (picFilter === "updated") {
+      filtered = filtered.filter((c) =>
+        c.profilePicUpdatedAt && (now - new Date(c.profilePicUpdatedAt).getTime()) < recentMs
+      );
+    }
+
+    // Then apply search
     if (search) {
-      filtered = allContacts.filter((c) =>
+      filtered = filtered.filter((c) =>
         (c.phone || "").includes(search) ||
         (c.pushName || "").toLowerCase().includes(search)
+      );
+    }
+
+    // When showing "pic updated" filter, sort by most recently updated first
+    if (picFilter === "updated") {
+      filtered = [...filtered].sort((a, b) =>
+        new Date(b.profilePicUpdatedAt) - new Date(a.profilePicUpdatedAt)
       );
     }
 
@@ -318,15 +339,33 @@
                <span>Looking up…</span>
              </p>`)
         : "";
+
+      // Profile pic updated indicator
+      const picUpdatedRecently = c.profilePicUpdatedAt &&
+        (now - new Date(c.profilePicUpdatedAt).getTime()) < recentMs;
+      const picBadgeHtml = picUpdatedRecently
+        ? `<span class="pic-updated-badge" title="Profile pic updated ${new Date(c.profilePicUpdatedAt).toLocaleDateString("en-IN", {day:"numeric",month:"short"})}" style="
+            position:absolute;bottom:0;right:0;width:14px;height:14px;border-radius:50%;
+            background:#10b981;border:2px solid #fff;display:flex;align-items:center;
+            justify-content:center;font-size:8px;color:#fff;">↑</span>`
+        : "";
+      const picDateHtml = picUpdatedRecently
+        ? `<p style="font-size:10px;color:#10b981;margin:2px 0 0;">📷 ${new Date(c.profilePicUpdatedAt).toLocaleDateString("en-IN", {day:"numeric",month:"short",year:"numeric"})}</p>`
+        : (c.picHistoryCount > 1
+          ? `<p style="font-size:10px;color:var(--steel);margin:2px 0 0;">📷 ${c.picHistoryCount} versions</p>`
+          : "");
+
       return `
       <div class="contact-card" data-phone="${escHtml(c.phone)}">
-        <div class="contact-pic" id="pic-${c.phone}">
+        <div class="contact-pic" id="pic-${c.phone}" style="position:relative;">
           <span style="font-size:24px;color:var(--steel);">👤</span>
+          ${picBadgeHtml}
         </div>
         <div class="contact-info">
           <p class="contact-name">${escHtml(c.pushName || "Unknown")}</p>
           <p class="contact-phone">+${escHtml(c.phone)}</p>
           <p class="contact-source">${escHtml(c.source || "chat")}</p>
+          ${picDateHtml}
           ${tnHtml}
         </div>
       </div>
@@ -529,6 +568,19 @@
     currentPage = 1;
     renderContacts();
   });
+
+  // Pic Updated filter toggle
+  const picFilterBtn = document.getElementById("pic-filter-btn");
+  if (picFilterBtn) {
+    picFilterBtn.addEventListener("click", () => {
+      picFilter = picFilter === "all" ? "updated" : "all";
+      picFilterBtn.style.background = picFilter === "updated" ? "#10b981" : "";
+      picFilterBtn.style.color = picFilter === "updated" ? "#fff" : "";
+      picFilterBtn.style.borderColor = picFilter === "updated" ? "#10b981" : "";
+      currentPage = 1;
+      renderContacts();
+    });
+  }
 
   // Pagination
   document.getElementById("prev-page-btn").addEventListener("click", () => {

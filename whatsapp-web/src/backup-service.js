@@ -376,9 +376,20 @@ function createBackupService(db, r2, logger) {
   async function exportContacts(userId, format = "json") {
     const contacts = await contactsCol
       .find({ userId, isActive: true })
-      .project({ _id: 0, phone: 1, pushName: 1, source: 1, firstSeenAt: 1, lastSeenAt: 1, profilePicKey: 1 })
+      .project({ _id: 0, phone: 1, pushName: 1, source: 1, firstSeenAt: 1, lastSeenAt: 1, profilePicKey: 1, profilePicUpdatedAt: 1 })
       .sort({ lastSeenAt: -1 })
       .toArray();
+
+    // Attach history counts (how many distinct pic versions) for contacts that have pics
+    const phonesWithPics = contacts.filter(c => c.profilePicKey).map(c => c.phone);
+    const historyCounts = new Map();
+    if (phonesWithPics.length) {
+      const counts = await profilePicHistoryCol.aggregate([
+        { $match: { userId, phone: { $in: phonesWithPics } } },
+        { $group: { _id: "$phone", count: { $sum: 1 } } },
+      ]).toArray();
+      for (const row of counts) historyCounts.set(row._id, row.count);
+    }
 
     // Sort: message/chat first, then has profile pic, then rest
     const priority = { message: 0, chat: 1, sync: 2, lid_resolved: 3, history_sync: 4, group: 5 };
@@ -414,6 +425,8 @@ function createBackupService(db, r2, logger) {
       firstSeenAt: c.firstSeenAt,
       lastSeenAt: c.lastSeenAt,
       hasProfilePic: !!c.profilePicKey,
+      profilePicUpdatedAt: c.profilePicUpdatedAt || null,
+      picHistoryCount: historyCounts.get(c.phone) || (c.profilePicKey ? 1 : 0),
     }));
   }
 

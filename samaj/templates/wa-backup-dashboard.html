@@ -88,10 +88,16 @@
           </div>
         </div>
 
-        <!-- Search -->
-        <div style="padding:0 24px 16px;">
+        <!-- Search + Filter -->
+        <div style="padding:0 24px 16px;display:flex;gap:8px;align-items:center;">
           <input type="search" id="contact-search" placeholder="Search contacts by phone or name..."
-                 style="width:100%;padding:10px 14px;border:1px solid var(--hairline);border-radius:8px;font-size:14px;">
+                 style="flex:1;padding:10px 14px;border:1px solid var(--hairline);border-radius:8px;font-size:14px;">
+          <button type="button" id="pic-filter-btn" class="button-secondary"
+                  title="Show only contacts who recently updated their profile picture"
+                  style="white-space:nowrap;display:flex;align-items:center;gap:6px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block;"></span>
+            Pic Updated
+          </button>
         </div>
 
         <!-- Contact Grid -->
