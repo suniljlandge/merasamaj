@@ -300,12 +300,15 @@
       );
     }
 
-    // Then apply search
+    // Then apply search (phone, pushName, and TN lookup name)
     if (search) {
-      filtered = filtered.filter((c) =>
-        (c.phone || "").includes(search) ||
-        (c.pushName || "").toLowerCase().includes(search)
-      );
+      filtered = filtered.filter((c) => {
+        const mobile10 = (c.phone || "").replace(/^91/, "");
+        const tnName = tnNameCache.get(mobile10) || "";
+        return (c.phone || "").includes(search) ||
+          (c.pushName || "").toLowerCase().includes(search) ||
+          tnName.toLowerCase().includes(search);
+      });
     }
 
     // When showing "pic updated" filter, sort by most recently updated first
@@ -893,7 +896,7 @@
       // Poll for new messages — on-demand sync arrives asynchronously (can take 10-30s)
       btn.textContent = "⏳ Waiting for phone…";
       let attempts = 0;
-      const maxAttempts = 8; // ~32s total
+      const maxAttempts = 5; // ~20s total (reduced — if nothing arrives in 20s, it won't)
       const poll = async () => {
         attempts++;
         try {
@@ -908,8 +911,8 @@
         } catch {}
 
         if (attempts >= maxAttempts) {
-          btn.textContent = "No older messages available";
-          btn.title = "WhatsApp returned no older history. The phone may be offline, or there are no more messages to sync.";
+          btn.textContent = "No older messages found";
+          btn.title = "WhatsApp returned no older history for this contact. Messages may have been lost after session reconnection, or there are no more messages to sync.";
           setTimeout(() => { btn.textContent = "↑ Load older messages"; btn.disabled = false; }, 5000);
           return;
         }
