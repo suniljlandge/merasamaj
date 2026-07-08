@@ -9,3 +9,9 @@ node_modules
 tests
 flask_session
 flask_session/
+.hypothesis
+.pytest_cache
+*.pptx
+old_data.json
+washim*.json
+graphify-out
