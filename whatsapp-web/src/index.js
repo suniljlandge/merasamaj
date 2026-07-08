@@ -10,6 +10,15 @@
 
 require("dotenv").config();
 
+// Global crash guard — keep the sidecar alive even if Baileys or a bad
+// message throws an unhandled error. Errors are logged but the process stays up.
+process.on("uncaughtException", (err) => {
+  console.error("[sidecar] uncaughtException:", err.message);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[sidecar] unhandledRejection:", reason);
+});
+
 const express = require("express");
 const { MongoClient } = require("mongodb");
 const pino = require("pino");
