@@ -180,12 +180,21 @@
       </a>
 
       <div class="directory-top-actions">
+        {% if session.get('accountType') == 'campaigner' %}
+        <a
+          href="/campaign-manager"
+          class="button-secondary"
+        >
+          Back to campaign manager
+        </a>
+        {% else %}
         <a
           href="/directory"
           class="button-secondary"
         >
           Back to directory
         </a>
+        {% endif %}
       </div>
     </header>
 

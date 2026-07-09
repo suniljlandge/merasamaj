@@ -3608,6 +3608,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                     "familyMembers.name.mr",
                     "familyMembers.spouseName.en",
                     "familyMembers.spouseName.mr",
+                    "familyMembers.currentCity",
                     "mobileNumber",
                 ]
 
@@ -5264,6 +5265,11 @@ def can_view_registration(document):
 def can_view_family_tree(document):
     if not document:
         return False
+
+    # Campaigners get read-only access to the family tree visualisation
+    # via the campaign manager directory tab (mirrors can_access_directory).
+    if is_campaigner_session():
+        return True
 
     return role_can("access_family_tree")
 

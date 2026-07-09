@@ -113,7 +113,7 @@
     currentPage = Number(page) || 1;
 
     tableBody.innerHTML =
-      '<tr><td colspan="7" class="px-4 py-10 text-center text-slate-500">' +
+      '<tr><td colspan="8" class="px-4 py-10 text-center text-slate-500">' +
       "Loading members..." +
       "</td></tr>";
 
@@ -138,7 +138,7 @@
       .catch(function (error) {
         console.error(error);
         tableBody.innerHTML =
-          '<tr><td colspan="7" class="px-4 py-10 text-center text-red-500">' +
+          '<tr><td colspan="8" class="px-4 py-10 text-center text-red-500">' +
           "Failed to load members" +
           "</td></tr>";
         if (paginationEl) {
@@ -160,7 +160,7 @@
 
     if (!items.length) {
       tableBody.innerHTML =
-        '<tr><td colspan="7" class="px-4 py-10 text-center text-slate-500">' +
+        '<tr><td colspan="8" class="px-4 py-10 text-center text-slate-500">' +
         "No members found" +
         "</td></tr>";
       renderPagination(total, pageNum, pageSize);
@@ -185,6 +185,7 @@
     var taluka = record.taluka || "-";
     var area = resolveArea(record);
     var members = membersCount(record);
+    var recordId = record._id || "";
 
     return (
       '<tr class="hover:bg-slate-50 transition">' +
@@ -212,6 +213,24 @@
       "\uD83D\uDC65 " +
       escapeHtml(String(members)) +
       "</span>" +
+      "</td>" +
+      '<td class="px-4 py-3 whitespace-nowrap">' +
+      (recordId
+        ? '<button class="inline-flex items-center gap-1 px-3 py-1.5 text-xs ' +
+          'font-semibold text-teal-700 bg-teal-50 border border-teal-200 ' +
+          'rounded-lg hover:bg-teal-100 transition" ' +
+          'onclick="window.open(\'/family-tree/' + escapeAttr(recordId) + '\', \'_blank\')" ' +
+          'title="View family tree">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" ' +
+          'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+          'stroke-linejoin="round"><circle cx="12" cy="5" r="2"/>' +
+          '<line x1="12" y1="7" x2="12" y2="12"/>' +
+          '<line x1="12" y1="12" x2="7" y2="17"/>' +
+          '<line x1="12" y1="12" x2="17" y2="17"/>' +
+          '<circle cx="7" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></svg>' +
+          "Tree" +
+          "</button>"
+        : "") +
       "</td>" +
       "</tr>"
     );
