@@ -16,6 +16,13 @@ process.on("uncaughtException", (err) => {
   console.error("[sidecar] uncaughtException:", err.message);
 });
 process.on("unhandledRejection", (reason) => {
+  // Baileys fires unhandled rejections for WS timeouts and init queries —
+  // these are non-fatal and sessions auto-reconnect.
+  const msg = reason?.message || String(reason);
+  if (msg === "Timed Out" || msg === "1006" || /Connection (Closed|Terminated)/.test(msg)) {
+    console.error("[sidecar] Unhandled rejection (non-fatal):", msg);
+    return;
+  }
   console.error("[sidecar] unhandledRejection:", reason);
 });
 
@@ -110,14 +117,18 @@ async function main() {
   // Initialize session manager (handles Baileys connections)
   sessionManager = createSessionManager(db, logger, {
     onConnected: (userId, sock) => {
-      // Auto-backup in background when a user connects
-      logger.info({ userId }, "Auto-triggering background backup on connect");
-      backupService.runFullBackup(sock, userId, {
-        includeProfilePics: true,
-        backupType: "auto_connect",
-      }).catch((err) => {
-        logger.error({ userId, err: err.message }, "Auto-backup failed");
-      });
+      // Delay auto-backup by 15s to let Baileys init queries finish first.
+      // Triggering groupFetchAllParticipating while init is still running
+      // causes WS timeouts on small instances with multiple sessions.
+      setTimeout(() => {
+        logger.info({ userId }, "Auto-triggering background backup on connect");
+        backupService.runFullBackup(sock, userId, {
+          includeProfilePics: true,
+          backupType: "auto_connect",
+        }).catch((err) => {
+          logger.error({ userId, err: err.message }, "Auto-backup failed");
+        });
+      }, 15000);
     },
   });
 

@@ -130,8 +130,9 @@ function createSessionManager(db, logger, { onConnected } = {}) {
 
         if (shouldReconnect) {
           connectionStatus.set(userId, "reconnecting");
-          // Back off longer on conflict to avoid displacing the active session
-          const delay = isConflict ? 15000 : 3000;
+          // Back off longer on conflict/timeout to reduce WS pressure
+          const isTimeout = lastDisconnect?.error?.message?.includes("Timed Out");
+          const delay = isConflict ? 30000 : isTimeout ? 20000 : 10000;
           logger.info({ userId, statusCode, isConflict, delay }, "Reconnecting...");
           // Use lock to prevent multiple simultaneous reconnect timers
           if (!reconnectLock.get(userId)) {
@@ -259,7 +260,8 @@ function createSessionManager(db, logger, { onConnected } = {}) {
           );
         } else {
           const isConflict = lastDisconnect?.error?.message?.includes("conflict");
-          const delay = isConflict ? 15000 : 3000;
+          const isTimeout = lastDisconnect?.error?.message?.includes("Timed Out");
+          const delay = isConflict ? 30000 : isTimeout ? 20000 : 10000;
           connectionStatus.set(userId, "reconnecting");
           if (!reconnectLock.get(userId)) {
             reconnectLock.set(userId, true);
@@ -359,9 +361,10 @@ function createSessionManager(db, logger, { onConnected } = {}) {
             { $set: { status: "disconnected", disconnectedAt: new Date() } }
           );
         } else {
-          // Auto-reconnect on transient failures, with lock and conflict backoff
+          // Auto-reconnect on transient failures, with lock and exponential backoff
           const isConflict = lastDisconnect?.error?.message?.includes("conflict");
-          const delay = isConflict ? 15000 : 5000;
+          const isTimeout = lastDisconnect?.error?.message?.includes("Timed Out");
+          const delay = isConflict ? 30000 : isTimeout ? 20000 : 10000;
           connectionStatus.set(userId, "reconnecting");
           if (!reconnectLock.get(userId)) {
             reconnectLock.set(userId, true);
@@ -428,17 +431,24 @@ function createSessionManager(db, logger, { onConnected } = {}) {
 
   /**
    * Restore sessions on service startup.
+   * Stagger reconnections to avoid overwhelming WhatsApp's servers
+   * when multiple sessions come back online simultaneously.
    */
   async function restoreSessions() {
     const sessions = await sessionsCollection
       .find({ status: "connected" })
       .toArray();
-    for (const session of sessions) {
+    for (let i = 0; i < sessions.length; i++) {
+      const session = sessions[i];
       try {
         await reconnect(session.userId, session.phoneNumber);
         logger.info({ userId: session.userId }, "Session restored");
       } catch (err) {
         logger.error({ userId: session.userId, err }, "Failed to restore session");
+      }
+      // Wait 10 seconds between each session so init queries don't overlap
+      if (i < sessions.length - 1) {
+        await new Promise((r) => setTimeout(r, 10000));
       }
     }
   }
