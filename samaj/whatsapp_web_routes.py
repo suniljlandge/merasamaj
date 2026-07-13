@@ -798,60 +798,16 @@ def all_sessions():
 
 
 # ===========================================================================
-# Sidecar Process Management (Super Admin)
+# Sidecar Status & Reconnect (Super Admin)
+# The sidecar now runs as a separate Fly app (samaj-wa-web). No local
+# process management needed — just proxy status/reconnect calls.
 # ===========================================================================
 
-import subprocess
-import os as _os
-import signal
-
-# Module-level reference to the sidecar process so we can check/kill it.
-_sidecar_proc = None
-
-
-def _sidecar_is_running() -> bool:
-    """Return True if the sidecar process is alive and responding."""
-    global _sidecar_proc
-    # First check the tracked subprocess (started via /sidecar/start)
-    if _sidecar_proc is not None and _sidecar_proc.poll() is None:
-        return True
-    # Also do a quick HTTP check — covers the case where start.sh launched it
-    # before Flask started (PID not tracked here).
-    try:
-        resp = http_requests.get(wa._url("/health"), timeout=3)
-        return resp.ok
-    except Exception:
-        return False
-
-
-def _start_sidecar_process():
-    """Launch the Node.js sidecar as a background subprocess,
-    detached from Gunicorn's process group via setsid so that
-    Gunicorn worker restarts (SIGTERM to process group) don't kill it."""
-    global _sidecar_proc
-    sidecar_dir = _os.path.join(_os.path.dirname(__file__), "..", "whatsapp-web")
-    sidecar_dir = _os.path.abspath(sidecar_dir)
-    env = _os.environ.copy()  # inherit all Fly secrets (MONGO_URI, API_SECRET, etc.)
-
-    log_path = "/tmp/sidecar.log"
-    log_file = open(log_path, "a")  # append so we keep history across restarts
-
-    _sidecar_proc = subprocess.Popen(
-        ["node", "src/index.js"],
-        cwd=sidecar_dir,
-        env=env,
-        stdout=log_file,
-        stderr=log_file,
-        # Start in a new session — detaches from Gunicorn's process group
-        start_new_session=True,
-    )
-    return _sidecar_proc
 
 @wa_web_bp.route("/sidecar/status", methods=["GET"])
 @_require_super_admin
 def sidecar_status():
     """Get sidecar health + live per-session status."""
-    process_alive = _sidecar_is_running()
     try:
         resp = http_requests.get(
             wa._url("/api/sidecar/status"),
@@ -860,13 +816,11 @@ def sidecar_status():
         )
         resp.raise_for_status()
         data = resp.json()
-        data["processAlive"] = process_alive
         return jsonify(data)
     except Exception as e:
         return jsonify({
             "health": "unavailable",
             "error": str(e),
-            "processAlive": process_alive,
             "activeSessions": 0,
             "sessions": [],
         }), 200
@@ -902,71 +856,3 @@ def sidecar_reconnect_all():
         return jsonify(resp.json())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-@wa_web_bp.route("/sidecar/logs", methods=["GET"])
-@_require_super_admin
-def sidecar_logs():
-    """Return the last N lines of the sidecar log file."""
-    lines = int(request.args.get("lines", 100))
-    try:
-        with open("/tmp/sidecar.log", "r") as f:
-            all_lines = f.readlines()
-        return jsonify({"lines": all_lines[-lines:]})
-    except FileNotFoundError:
-        return jsonify({"lines": [], "note": "No log file yet — sidecar may have been started before this version."})
-    except Exception as e:
-        return jsonify({"error": str(e), "lines": []}), 500
-
-
-@wa_web_bp.route("/sidecar/start", methods=["POST"])
-@_require_super_admin
-def sidecar_start():
-    """Start the Node.js sidecar process if it is not already running.
-
-    Safe to call repeatedly — if the sidecar is already up it just returns
-    its current status without touching the process.  After starting, waits
-    up to 20 seconds for the sidecar to reach 'ok' (MongoDB connected) before
-    returning, so the caller knows it's actually ready.
-    """
-    import time
-
-    if _sidecar_is_running():
-        return jsonify({
-            "success": True,
-            "message": "Sidecar is already running.",
-            "alreadyRunning": True,
-        })
-
-    try:
-        proc = _start_sidecar_process()
-    except Exception as e:
-        return jsonify({"error": f"Failed to start sidecar process: {e}"}), 500
-
-    # Poll for up to 20 s until health returns 'ok' (MongoDB connected)
-    deadline = time.time() + 20
-    health = "starting"
-    while time.time() < deadline:
-        time.sleep(2)
-        try:
-            r = http_requests.get(wa._url("/health"), timeout=3)
-            if r.ok:
-                health = r.json().get("status", "unknown")
-                if health == "ok":
-                    break
-        except Exception:
-            pass  # not ready yet
-
-    if proc.poll() is not None:
-        # Process exited immediately — something is wrong
-        return jsonify({
-            "error": "Sidecar process exited unexpectedly. Check server logs.",
-            "exitCode": proc.returncode,
-        }), 500
-
-    return jsonify({
-        "success": True,
-        "message": f"Sidecar started (health: {health}).",
-        "alreadyRunning": False,
-        "health": health,
-    })

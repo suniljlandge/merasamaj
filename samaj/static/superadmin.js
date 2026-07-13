@@ -41,18 +41,6 @@ function initialize() {
 
   const reconnectAllBtn = document.querySelector("#sidecar-reconnect-all-btn");
   if (reconnectAllBtn) reconnectAllBtn.addEventListener("click", sidecarReconnectAll);
-
-  const sidecarStartBtn = document.querySelector("#sidecar-start-btn");
-  if (sidecarStartBtn) sidecarStartBtn.addEventListener("click", sidecarStart);
-
-  const sidecarLogsBtn = document.querySelector("#sidecar-logs-btn");
-  if (sidecarLogsBtn) sidecarLogsBtn.addEventListener("click", sidecarViewLogs);
-
-  const sidecarLogsCloseBtn = document.querySelector("#sidecar-logs-close-btn");
-  if (sidecarLogsCloseBtn) sidecarLogsCloseBtn.addEventListener("click", () => {
-    const panel = document.querySelector("#sidecar-log-panel");
-    if (panel) panel.style.display = "none";
-  });
 }
 
 let exportColsState = { columns: [], roles: [], matrix: {} };
@@ -534,10 +522,8 @@ async function loadSidecarStatus() {
       ? `${data.activeSessions} active session${data.activeSessions !== 1 ? "s" : ""} · MongoDB connected`
       : (data.error || "Cannot reach sidecar service");
 
-    // Show Start button only when sidecar is down
-    const startBtn = document.querySelector("#sidecar-start-btn");
+    // Show reconnect-all only when sidecar is reachable
     const reconnectAllBtn = document.querySelector("#sidecar-reconnect-all-btn");
-    if (startBtn) startBtn.style.display = isOk ? "none" : "";
     if (reconnectAllBtn) reconnectAllBtn.style.display = isOk ? "" : "none";
 
     const sessions = data.sessions || [];
@@ -579,9 +565,7 @@ async function loadSidecarStatus() {
     if (healthText) healthText.textContent = "Sidecar unavailable";
     if (detail) detail.textContent = err.message;
     body.innerHTML = `<tr><td colspan='5' style='color:var(--danger);'>${escapeHtml(err.message)}</td></tr>`;
-    const startBtn = document.querySelector("#sidecar-start-btn");
     const reconnectAllBtn = document.querySelector("#sidecar-reconnect-all-btn");
-    if (startBtn) startBtn.style.display = "";
     if (reconnectAllBtn) reconnectAllBtn.style.display = "none";
   }
 }
@@ -603,56 +587,6 @@ async function sidecarReconnectOne(userId, btn) {
     btn.disabled = false;
     btn.textContent = "Reconnect";
     if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = err.message; }
-  }
-}
-
-async function sidecarViewLogs() {
-  const panel = document.querySelector("#sidecar-log-panel");
-  const content = document.querySelector("#sidecar-log-content");
-  if (!panel || !content) return;
-
-  panel.style.display = "block";
-  content.textContent = "Loading...";
-
-  try {
-    const resp = await fetch("/api/wa-web/sidecar/logs?lines=100");
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    const lines = data.lines || [];
-    content.textContent = lines.length
-      ? lines.join("")
-      : (data.note || "No log output yet.");
-    // Scroll to bottom (newest entries)
-    content.scrollTop = content.scrollHeight;
-  } catch (err) {
-    content.textContent = "Failed to load logs: " + err.message;
-  }
-}
-
-async function sidecarStart() {
-  const btn = document.querySelector("#sidecar-start-btn");
-  const statusEl = document.querySelector("#sidecar-action-status");
-  if (btn) { btn.disabled = true; btn.textContent = "Starting..."; }
-  if (statusEl) { statusEl.textContent = "Starting sidecar, waiting for MongoDB…"; statusEl.style.color = ""; }
-
-  try {
-    // This call blocks up to ~20s on the server while waiting for health=ok
-    const resp = await fetch("/api/wa-web/sidecar/start", { method: "POST" });
-    const data = await resp.json();
-    if (!resp.ok || data.error) throw new Error(data.error || "Failed to start");
-
-    if (data.alreadyRunning) {
-      if (statusEl) statusEl.textContent = "✓ Sidecar was already running.";
-    } else {
-      if (statusEl) statusEl.textContent = `✓ Sidecar started (health: ${data.health}). Reconnecting sessions…`;
-      // Auto-trigger reconnect-all so sessions come back immediately
-      await fetch("/api/wa-web/sidecar/reconnect-all", { method: "POST" });
-    }
-    setTimeout(loadSidecarStatus, 3000);
-  } catch (err) {
-    if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = err.message; }
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Start Sidecar"; }
   }
 }
 
