@@ -1,4 +1,4 @@
-app = "solarstation"
+app = "samaj"
 primary_region = "iad"
 
 [processes]
@@ -9,7 +9,7 @@ auto_start_machines = true
 auto_stop_machines = "stop"
 force_https = true
 internal_port = 8080
-min_machines_running = 1
+min_machines_running = 0
 processes = ["app"]
 
 [http_service.concurrency]
@@ -19,4 +19,4 @@ soft_limit = 6
 [[vm]]
 cpu_kind = "shared"
 cpus = 1
-memory = "512mb"
+memory = "256mb"
