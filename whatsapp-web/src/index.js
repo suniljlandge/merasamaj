@@ -52,9 +52,16 @@ async function main() {
   let sessionManager = null;
   let backupService = null;
 
-  // Auth middleware — all requests must include X-API-Secret header
+  // Auth middleware — internal API requests must include X-API-Secret header.
+  // UI routes (/ui/*, /auth/*) and static files are handled by their own auth.
   app.use((req, res, next) => {
     if (req.path === "/health") return next();
+    // Skip API-secret check for UI routes, auth endpoints, and static assets
+    if (req.path.startsWith("/ui/") || req.path.startsWith("/auth/") || req.path.startsWith("/uploads/")) return next();
+    // Static file extensions (css, js, html, images, fonts)
+    if (/\.(html|css|js|ico|png|jpg|svg|woff2?|ttf)$/i.test(req.path)) return next();
+    // Root path serves index.html
+    if (req.path === "/") return next();
     const secret = req.headers["x-api-secret"];
     if (secret !== API_SECRET) {
       return res.status(401).json({ error: "Unauthorized" });
