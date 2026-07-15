@@ -347,10 +347,19 @@
       document.getElementById("bs-groups").textContent = totalGroups;
 
       // Populate user select dropdown
-      userSelect.innerHTML = '<option value="">Select user session...</option>' +
-        sessions.map((s) => {
+      const sessionOptions = sessions.map((s) => {
+        const label = s.phoneNumber ? `${s.userId} (${s.phoneNumber})` : s.userId;
+        return `<option value="${escHtml(s.userId)}">${escHtml(label)} — ${s.liveStatus || "unknown"}</option>`;
+      }).join("");
+
+      userSelect.innerHTML = '<option value="">Select user session...</option>' + sessionOptions;
+
+      // Also populate the message session selector
+      const msgSelect = document.getElementById("msg-session-select");
+      msgSelect.innerHTML = '<option value="">Select session to send from...</option>' +
+        sessions.filter((s) => s.liveStatus === "connected").map((s) => {
           const label = s.phoneNumber ? `${s.userId} (${s.phoneNumber})` : s.userId;
-          return `<option value="${escHtml(s.userId)}">${escHtml(label)} — ${s.liveStatus || "unknown"}</option>`;
+          return `<option value="${escHtml(s.userId)}">${escHtml(label)}</option>`;
         }).join("");
 
       // Auto-select first connected session
@@ -576,19 +585,89 @@
     img.style.cssText = "width:48px;height:48px;border-radius:50%;object-fit:cover;";
   }
 
-  // Profile pic modal
+  // Profile pic modal with history navigation (like wa-backup dashboard)
   async function openPicModal(phone, name) {
     const modal = document.getElementById("pic-modal");
     const cachedUrl = picUrlCache.get(phone);
     if (!cachedUrl) return;
+
+    let history = [{ url: cachedUrl, capturedAt: null }];
+    let currentIdx = 0;
+
     modal.hidden = false;
-    modal.innerHTML = `
-      <div style="position:relative;text-align:center;">
-        <img src="${cachedUrl}" alt="${escHtml(name)}" style="max-width:80vw;max-height:70vh;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
-        <p style="color:#fff;margin-top:12px;font-size:16px;font-weight:600;">${escHtml(name)}</p>
-        <p style="color:#ccc;font-size:13px;">+${escHtml(phone)}</p>
-      </div>`;
-    modal.addEventListener("click", () => { modal.hidden = true; }, { once: true });
+
+    function renderModal() {
+      const entry = history[currentIdx];
+      const dateStr = entry.capturedAt
+        ? new Date(entry.capturedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+        : "";
+      const counterText = history.length > 1 ? `${currentIdx + 1} / ${history.length}` : "";
+
+      modal.innerHTML = `
+        <div style="position:relative;max-width:90vw;max-height:90vh;text-align:center;">
+          <img src="${entry.url}" alt="${escHtml(name)}" style="max-width:80vw;max-height:70vh;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);object-fit:contain;">
+          <p style="color:#fff;margin-top:12px;font-size:16px;font-weight:600;">${escHtml(name)}</p>
+          <p style="color:#ccc;font-size:13px;">+${escHtml(phone)}</p>
+          ${dateStr ? `<p style="color:#aaa;margin-top:4px;font-size:12px;">${dateStr}</p>` : ""}
+          ${counterText ? `<p style="color:#888;margin-top:4px;font-size:11px;">${counterText}</p>` : ""}
+          ${history.length > 1 ? `
+            <div style="display:flex;justify-content:center;gap:16px;margin-top:12px;">
+              <button id="pp-prev" ${currentIdx >= history.length - 1 ? "disabled" : ""} style="
+                padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);
+                color:#fff;font-size:14px;cursor:pointer;${currentIdx >= history.length - 1 ? "opacity:0.3;cursor:not-allowed;" : ""}
+              ">← Older</button>
+              <button id="pp-next" ${currentIdx <= 0 ? "disabled" : ""} style="
+                padding:8px 20px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);
+                color:#fff;font-size:14px;cursor:pointer;${currentIdx <= 0 ? "opacity:0.3;cursor:not-allowed;" : ""}
+              ">Newer →</button>
+            </div>
+          ` : ""}
+          <button id="pp-close" style="
+            position:absolute;top:-12px;right:-12px;width:36px;height:36px;
+            border-radius:50%;border:none;background:#fff;color:#333;font-size:20px;
+            cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;
+            align-items:center;justify-content:center;
+          ">&times;</button>
+        </div>
+      `;
+
+      modal.querySelector("#pp-close").addEventListener("click", closeModal);
+      const prevBtn = modal.querySelector("#pp-prev");
+      const nextBtn = modal.querySelector("#pp-next");
+      if (prevBtn && !prevBtn.disabled) prevBtn.addEventListener("click", (e) => { e.stopPropagation(); currentIdx++; renderModal(); });
+      if (nextBtn && !nextBtn.disabled) nextBtn.addEventListener("click", (e) => { e.stopPropagation(); currentIdx--; renderModal(); });
+    }
+
+    function closeModal() {
+      modal.hidden = true;
+      modal.innerHTML = "";
+      document.removeEventListener("keydown", onKey);
+    }
+
+    const onKey = (e) => {
+      if (e.key === "Escape") closeModal();
+      if (e.key === "ArrowLeft" && currentIdx < history.length - 1) { currentIdx++; renderModal(); }
+      if (e.key === "ArrowRight" && currentIdx > 0) { currentIdx--; renderModal(); }
+    };
+
+    renderModal();
+    modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+    document.addEventListener("keydown", onKey);
+
+    // Load full history in background, then re-render with navigation
+    try {
+      const resp = await apiGet(`/ui/profile-pic-history/${phone}?userId=${selectedUserId}`);
+      const data = await resp.json();
+      if (data.history && data.history.length > 0) {
+        // Keep cached URL for newest to avoid flicker
+        if (cachedUrl) data.history[0] = { ...data.history[0], url: cachedUrl };
+        history = data.history;
+        currentIdx = 0;
+        // Preload first few images
+        history.slice(0, 4).forEach((entry) => { const i = new Image(); i.src = entry.url; });
+        if (!modal.hidden) renderModal();
+      }
+    } catch {}
   }
 
   // Chat popup
@@ -761,15 +840,17 @@
   // =========================================================================
 
   document.getElementById("msg-send-btn").addEventListener("click", async () => {
+    const sendUserId = document.getElementById("msg-session-select").value;
     const phone = document.getElementById("msg-phone").value.trim();
     const text = document.getElementById("msg-text").value.trim();
     const result = document.getElementById("msg-result");
+    if (!sendUserId) { result.textContent = "Select a session to send from."; result.style.color = "var(--red)"; return; }
     if (!phone || !text) { result.textContent = "Fill in both fields."; result.style.color = "var(--red)"; return; }
     const btn = document.getElementById("msg-send-btn");
     btn.disabled = true;
 
     try {
-      const resp = await apiPost("/ui/send", { recipientPhone: phone, text });
+      const resp = await apiPost(`/ui/send/${sendUserId}`, { recipientPhone: phone, text });
       const data = await resp.json();
       if (data.success) {
         result.textContent = "✓ Sent via WhatsApp Web";

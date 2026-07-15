@@ -358,7 +358,7 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
 
   app.get("/ui/profile-pic-history/:phone", requireAuth, async (req, res) => {
     try {
-      const userId = await getActiveUserId();
+      const userId = req.query.userId || await getActiveUserId();
       const history = await backupService.getProfilePicHistory(userId, req.params.phone);
       res.json({ history });
     } catch (err) {
@@ -497,6 +497,25 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
   // =========================================================================
   // SEND MESSAGE
   // =========================================================================
+
+  app.post("/ui/send/:userId", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { recipientPhone, text } = req.body || {};
+
+      if (!recipientPhone || !text) {
+        return res.status(400).json({ error: "recipientPhone and text are required" });
+      }
+
+      const result = await sessionManager.sendMessage(userId, recipientPhone, text);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      if (err.message && err.message.includes("Daily web send limit")) {
+        return res.json({ channel: "cloud_api", reason: err.message });
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   app.post("/ui/send", requireAuth, async (req, res) => {
     try {
