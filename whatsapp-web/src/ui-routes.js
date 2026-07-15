@@ -117,6 +117,141 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
   });
 
   // =========================================================================
+  // SESSIONS OVERVIEW (all sessions like wa-backup dashboard)
+  // =========================================================================
+
+  app.get("/ui/sessions", requireAuth, async (req, res) => {
+    try {
+      const sessions = await db.collection("wa_web_sessions").find(
+        {},
+        { projection: { _id: 0, userId: 1, phoneNumber: 1, status: 1, connectedAt: 1, lastActiveAt: 1 } }
+      ).toArray();
+
+      // Enrich with live status and backup stats
+      for (const s of sessions) {
+        s.liveStatus = sessionManager.getStatus(s.userId) || s.status || "disconnected";
+        const uid = s.userId;
+        const contacts = await db.collection("wa_contact_backups").countDocuments({ userId: uid });
+        const groups = await db.collection("wa_group_backups").countDocuments({ userId: uid });
+        const lastLog = await db.collection("wa_backup_log").findOne(
+          { userId: uid }, { sort: { createdAt: -1 } }
+        );
+        s.backupStats = {
+          contacts,
+          groups,
+          lastBackup: lastLog?.createdAt || null,
+          lastResults: lastLog?.results || null,
+        };
+      }
+
+      res.json({ sessions, total: sessions.length });
+    } catch (err) {
+      res.json({ sessions: [], error: err.message });
+    }
+  });
+
+  // Backup for a specific user (by userId param)
+  app.post("/ui/backup/:userId", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { includeProfilePics = true } = req.body || {};
+
+      const sock = sessionManager.getSocket(userId);
+      if (!sock) {
+        return res.status(400).json({ error: "No active session for this user" });
+      }
+
+      backupService.runFullBackup(sock, userId, {
+        includeProfilePics,
+        backupType: "manual_ui",
+      }).catch((err) => {
+        logger.error({ userId, err: err.message }, "UI-triggered backup failed");
+      });
+
+      res.json({ success: true, message: "Backup started" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Contacts for a specific user
+  app.get("/ui/contacts/:userId", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const data = await backupService.exportContacts(userId, "json");
+      if (Array.isArray(data)) {
+        res.json({ contacts: data, total: data.length });
+      } else if (data && data.contacts) {
+        res.json(data);
+      } else {
+        res.json({ contacts: [], total: 0 });
+      }
+    } catch (err) {
+      res.json({ contacts: [], error: err.message });
+    }
+  });
+
+  // Profile pics batch for a specific user
+  app.post("/ui/profile-pics-batch/:userId", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { phones = [] } = req.body || {};
+      const urls = await backupService.getContactProfilePicUrlsBatch(userId, phones);
+      res.json({ urls });
+    } catch (err) {
+      res.json({ urls: {}, error: err.message });
+    }
+  });
+
+  // Messages for a specific user + phone
+  app.get("/ui/messages/:userId/:phone", requireAuth, async (req, res) => {
+    try {
+      const { userId, phone } = req.params;
+      const limit = Math.min(parseInt(req.query.limit || "100", 10), 500);
+
+      const phoneVariants = [phone];
+      const lidMappings = await db.collection("wa_lid_mappings")
+        .find({ userId, phone }).toArray();
+      for (const mapping of lidMappings) {
+        const lidNum = (mapping.lid || "").replace("@lid", "");
+        if (lidNum && !phoneVariants.includes(lidNum)) phoneVariants.push(lidNum);
+      }
+
+      const messages = await db.collection("wa_messages")
+        .find({
+          userId,
+          phone: phoneVariants.length === 1 ? phone : { $in: phoneVariants },
+          $or: [
+            { text: { $nin: [null, ""] } },
+            { mediaType: { $ne: null } },
+            { mediaUrl: { $nin: [null, ""] } },
+          ],
+        })
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .toArray();
+
+      messages.reverse();
+
+      res.json({
+        messages: messages.map((m) => ({
+          id: m.odgId,
+          fromMe: m.fromMe,
+          text: m.text,
+          mediaType: m.mediaType,
+          mediaInfo: m.mediaInfo || null,
+          mediaUrl: m.mediaUrl || null,
+          timestamp: m.timestamp,
+          pushName: m.pushName,
+        })),
+        total: messages.length,
+      });
+    } catch (err) {
+      res.json({ messages: [], error: err.message });
+    }
+  });
+
+  // =========================================================================
   // BACKUP
   // =========================================================================
 

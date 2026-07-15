@@ -53,6 +53,57 @@
 
       <!-- SESSION TAB -->
       <section id="tab-session" class="tab-panel active">
+        <!-- All Sessions Overview -->
+        <div class="card">
+          <div class="card-header">
+            <h2>All Sessions</h2>
+            <div class="header-actions">
+              <button type="button" id="refresh-sessions-btn" class="btn-icon" title="Refresh sessions">↻</button>
+            </div>
+          </div>
+          <div class="sessions-table-wrapper">
+            <table class="data-table" id="sessions-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th>Connected</th>
+                  <th>Last Active</th>
+                  <th>Backup</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="sessions-tbody">
+                <tr><td colspan="7" style="text-align:center;color:var(--text-light);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Backup Summary -->
+        <div class="card">
+          <div class="card-header"><h2>Backup Summary</h2></div>
+          <div class="stats-grid stats-grid-4">
+            <div class="stat-item">
+              <span class="stat-value" id="bs-contacts">—</span>
+              <span class="stat-label">Total Contacts</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="bs-groups">—</span>
+              <span class="stat-label">Total Groups</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="bs-pics">—</span>
+              <span class="stat-label">Profile Pics</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="bs-last">—</span>
+              <span class="stat-label">Last Backup</span>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header">
             <h2>Connection Status</h2>
@@ -133,6 +184,9 @@
           <div class="card-header">
             <h2>Contact Viewer</h2>
             <div class="header-actions">
+              <select id="user-select" class="user-select">
+                <option value="">Select user session...</option>
+              </select>
               <button type="button" id="refresh-contacts-btn" class="btn-icon" title="Refresh">↻</button>
               <button type="button" id="export-csv-btn" class="btn-secondary btn-sm">CSV</button>
               <button type="button" id="export-json-btn" class="btn-secondary btn-sm">JSON</button>

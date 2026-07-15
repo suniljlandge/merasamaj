@@ -17,6 +17,7 @@
   const tnNameCache = new Map();
   const picUrlCache = new Map();
   let tnAutoRunning = false;
+  let selectedUserId = null; // currently selected user for contacts/messages
 
   const API_HEADERS = () => ({
     "Content-Type": "application/json",
@@ -298,6 +299,122 @@
   }
 
   // =========================================================================
+  // SESSIONS OVERVIEW
+  // =========================================================================
+
+  async function loadSessions() {
+    const tbody = document.getElementById("sessions-tbody");
+    const userSelect = document.getElementById("user-select");
+    try {
+      const resp = await apiGet("/ui/sessions");
+      if (resp.status === 401) { showLogin(); return; }
+      const data = await resp.json();
+      const sessions = data.sessions || [];
+
+      if (!sessions.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-light);">No sessions found.</td></tr>';
+        return;
+      }
+
+      // Populate sessions table
+      let totalContacts = 0, totalGroups = 0;
+      tbody.innerHTML = sessions.map((s) => {
+        const bs = s.backupStats || {};
+        totalContacts += bs.contacts || 0;
+        totalGroups += bs.groups || 0;
+        const status = s.liveStatus || s.status || "disconnected";
+        const lastBackup = bs.lastBackup ? formatDate(bs.lastBackup) : "Never";
+        const picCount = bs.lastResults?.profilePics?.uploaded || "—";
+        return `
+        <tr>
+          <td style="font-weight:600;">${escHtml(s.userId)}</td>
+          <td>${escHtml(s.phoneNumber || "—")}</td>
+          <td><span class="status-badge ${status}">${status}</span></td>
+          <td>${s.connectedAt ? formatDate(s.connectedAt) : "—"}</td>
+          <td>${s.lastActiveAt ? formatDate(s.lastActiveAt) : "—"}</td>
+          <td>
+            <span style="font-size:12px;">📇 ${bs.contacts || 0} · 👥 ${bs.groups || 0}</span><br>
+            <span style="font-size:11px;color:var(--text-light);">Last: ${lastBackup}</span>
+          </td>
+          <td>
+            <button type="button" class="btn-secondary btn-sm backup-user-btn" data-user-id="${escHtml(s.userId)}" ${status !== "connected" ? "disabled" : ""}>Backup</button>
+          </td>
+        </tr>`;
+      }).join("");
+
+      // Summary stats
+      document.getElementById("bs-contacts").textContent = totalContacts;
+      document.getElementById("bs-groups").textContent = totalGroups;
+
+      // Populate user select dropdown
+      userSelect.innerHTML = '<option value="">Select user session...</option>' +
+        sessions.map((s) => {
+          const label = s.phoneNumber ? `${s.userId} (${s.phoneNumber})` : s.userId;
+          return `<option value="${escHtml(s.userId)}">${escHtml(label)} — ${s.liveStatus || "unknown"}</option>`;
+        }).join("");
+
+      // Auto-select first connected session
+      if (!selectedUserId) {
+        const connected = sessions.find((s) => s.liveStatus === "connected");
+        if (connected) {
+          selectedUserId = connected.userId;
+          userSelect.value = connected.userId;
+        }
+      } else {
+        userSelect.value = selectedUserId;
+      }
+
+      // Wire backup buttons
+      tbody.querySelectorAll(".backup-user-btn").forEach((btn) => {
+        btn.addEventListener("click", () => triggerUserBackup(btn.dataset.userId, btn));
+      });
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:var(--red);">${err.message}</td></tr>`;
+    }
+  }
+
+  async function triggerUserBackup(userId, btn) {
+    btn.disabled = true;
+    btn.textContent = "Starting...";
+    try {
+      const resp = await apiPost(`/ui/backup/${userId}`, { includeProfilePics: true });
+      const data = await resp.json();
+      if (data.success) {
+        btn.textContent = "✓ Running";
+        setTimeout(() => { btn.textContent = "Backup"; btn.disabled = false; loadSessions(); }, 30000);
+      } else {
+        btn.textContent = "Failed";
+        setTimeout(() => { btn.textContent = "Backup"; btn.disabled = false; }, 3000);
+      }
+    } catch (err) {
+      btn.textContent = "Error";
+      setTimeout(() => { btn.textContent = "Backup"; btn.disabled = false; }, 3000);
+    }
+  }
+
+  // User select change handler
+  document.getElementById("user-select").addEventListener("change", (e) => {
+    selectedUserId = e.target.value || null;
+    if (selectedUserId) {
+      picUrlCache.clear();
+      loadContacts();
+    } else {
+      allContacts = [];
+      document.getElementById("contact-grid").innerHTML = '<p class="empty-state">Select a user session to view contacts.</p>';
+    }
+  });
+
+  // Refresh sessions button
+  document.getElementById("refresh-sessions-btn").addEventListener("click", loadSessions);
+
+  function formatDate(isoStr) {
+    if (!isoStr) return "—";
+    const d = new Date(isoStr);
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + " " +
+      d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // =========================================================================
   // CONTACTS
   // =========================================================================
 
@@ -308,9 +425,13 @@
 
   async function loadContacts() {
     const grid = document.getElementById("contact-grid");
+    if (!selectedUserId) {
+      grid.innerHTML = '<p class="empty-state">Select a user session to view contacts.</p>';
+      return;
+    }
     grid.innerHTML = '<p class="empty-state">Loading contacts...</p>';
     try {
-      const resp = await apiGet("/ui/contacts");
+      const resp = await apiGet(`/ui/contacts/${selectedUserId}`);
       if (resp.status === 401) { showLogin(); return; }
       const data = await resp.json();
       allContacts = data.contacts || [];
@@ -436,7 +557,7 @@
     phones.forEach((p) => { if (picUrlCache.has(p)) applyPic(p, picUrlCache.get(p)); });
     if (!uncached.length) return;
     try {
-      const resp = await apiPost("/ui/profile-pics-batch", { phones: uncached });
+      const resp = await apiPost(`/ui/profile-pics-batch/${selectedUserId}`, { phones: uncached });
       const data = await resp.json();
       const urls = data.urls || {};
       for (const [phone, url] of Object.entries(urls)) {
@@ -494,7 +615,7 @@
     modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
 
     try {
-      const resp = await apiGet("/ui/messages/" + phone);
+      const resp = await apiGet(`/ui/messages/${selectedUserId}/${phone}`);
       const data = await resp.json();
       const messages = (data.messages || []).filter((m) => m.text || m.mediaType);
       const container = document.getElementById("chat-msgs");
@@ -686,7 +807,8 @@
     checkStatus();
     statusInterval = setInterval(checkStatus, 10000);
     loadTnCache();
-    loadContacts();
+    loadSessions();
+    loadContacts(); // will show "select user" if none selected
   }
 
   // Preload TN cache so contact cards show names immediately
