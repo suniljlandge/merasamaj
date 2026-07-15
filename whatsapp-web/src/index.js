@@ -34,6 +34,7 @@ const { createSessionManager } = require("./session-manager");
 const { createBackupService } = require("./backup-service");
 const { createR2Client } = require("./r2-storage");
 const { createRoutes } = require("./routes");
+const { createUIRoutes } = require("./ui-routes");
 
 const logger = pino({ level: "info" });
 
@@ -134,6 +135,9 @@ async function main() {
 
   // Mount routes
   createRoutes(app, { sessionManager, backupService, r2, db, logger });
+
+  // Mount standalone UI routes (login, contacts, TN, messaging, static files)
+  createUIRoutes(app, { sessionManager, backupService, r2, db, logger });
 
   // Restore previously connected sessions from disk
   try {

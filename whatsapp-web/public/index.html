@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SAMAJ WhatsApp Web</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="login-screen" class="screen active">
+    <main class="login-container">
+      <section class="login-card">
+        <div class="login-header">
+          <span class="wa-icon">💬</span>
+          <h1>SAMAJ WhatsApp Web</h1>
+          <p class="subtitle">Sign in to manage your WhatsApp sessions</p>
+        </div>
+        <div class="login-form">
+          <input type="password" id="login-password" placeholder="Enter admin password" autocomplete="current-password">
+          <button type="button" id="login-btn" class="btn-primary">Sign In</button>
+          <p id="login-error" class="error-text" hidden></p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- App Screen -->
+  <div id="app-screen" class="screen">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="wa-icon-sm">💬</span>
+        <h1>SAMAJ WhatsApp Web</h1>
+      </div>
+      <div class="topbar-right">
+        <span id="session-indicator" class="session-dot disconnected" title="Session status"></span>
+        <span id="session-status-label" class="session-label">Disconnected</span>
+        <button type="button" id="logout-btn" class="btn-ghost">Logout</button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="tab-nav">
+      <button type="button" class="tab-btn active" data-tab="session">Session</button>
+      <button type="button" class="tab-btn" data-tab="contacts">Contacts</button>
+      <button type="button" class="tab-btn" data-tab="tn-lookup">TN Lookup</button>
+      <button type="button" class="tab-btn" data-tab="messages">Messages</button>
+    </nav>
+
+    <!-- Tab Panels -->
+    <main class="tab-content">
+
+      <!-- SESSION TAB -->
+      <section id="tab-session" class="tab-panel active">
+        <div class="card">
+          <div class="card-header">
+            <h2>Connection Status</h2>
+          </div>
+          <div class="status-panel">
+            <div class="status-row">
+              <span id="status-dot" class="status-indicator disconnected"></span>
+              <span id="status-text">Disconnected</span>
+            </div>
+            <p id="status-detail" class="status-detail"></p>
+          </div>
+        </div>
+
+        <!-- Connect Form -->
+        <div class="card" id="connect-card">
+          <div class="card-header">
+            <h2>Connect WhatsApp</h2>
+            <p>Link your WhatsApp using a pairing code or QR scan.</p>
+          </div>
+          <div class="form-row">
+            <input type="tel" id="phone-input" placeholder="+91 98765 43210" autocomplete="tel">
+            <button type="button" id="connect-otp-btn" class="btn-primary">Get Pairing Code</button>
+            <button type="button" id="connect-qr-btn" class="btn-secondary">Show QR</button>
+          </div>
+          <!-- Pairing Code Display -->
+          <div id="pairing-panel" class="pairing-display" hidden>
+            <p class="pairing-label">Enter this code on your phone:</p>
+            <p id="pairing-code" class="pairing-code"></p>
+            <p class="pairing-hint">WhatsApp → Settings → Linked Devices → Link a Device → Enter code</p>
+          </div>
+          <!-- QR Code Display -->
+          <div id="qr-panel" class="qr-display" hidden>
+            <p class="pairing-label">Scan this QR code with WhatsApp:</p>
+            <div id="qr-container" class="qr-container"></div>
+            <p class="pairing-hint">WhatsApp → Settings → Linked Devices → Link a Device</p>
+          </div>
+        </div>
+
+        <!-- Connected Panel -->
+        <div class="card" id="connected-card" hidden>
+          <div class="card-header">
+            <h2>✓ WhatsApp Connected</h2>
+            <p id="connected-phone-label"></p>
+          </div>
+          <div class="btn-row">
+            <button type="button" id="backup-btn" class="btn-secondary">Run Backup</button>
+            <button type="button" id="disconnect-btn" class="btn-danger">Disconnect</button>
+          </div>
+          <div id="backup-progress" class="backup-progress" hidden>
+            <div class="progress-bar"><div id="backup-fill" class="progress-fill"></div></div>
+            <span id="backup-text" class="progress-text"></span>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="card" id="stats-card" hidden>
+          <div class="card-header"><h2>Today's Stats</h2></div>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="stat-value" id="stat-sent">0</span>
+              <span class="stat-label">Sent</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="stat-limit">20</span>
+              <span class="stat-label">Limit</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="stat-remaining">20</span>
+              <span class="stat-label">Remaining</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONTACTS TAB -->
+      <section id="tab-contacts" class="tab-panel">
+        <div class="card">
+          <div class="card-header">
+            <h2>Contact Viewer</h2>
+            <div class="header-actions">
+              <button type="button" id="refresh-contacts-btn" class="btn-icon" title="Refresh">↻</button>
+              <button type="button" id="export-csv-btn" class="btn-secondary btn-sm">CSV</button>
+              <button type="button" id="export-json-btn" class="btn-secondary btn-sm">JSON</button>
+            </div>
+          </div>
+          <div class="search-row">
+            <input type="search" id="contact-search" placeholder="Search by phone, name, or TN name...">
+            <button type="button" id="pic-filter-btn" class="btn-secondary btn-sm" title="Show only recently updated pics">
+              <span class="filter-dot"></span> Pic Updated
+            </button>
+          </div>
+          <div id="contact-grid" class="contact-grid">
+            <p class="empty-state">Connect your WhatsApp and run a backup to see contacts here.</p>
+          </div>
+          <div id="contact-pagination" class="pagination" hidden>
+            <button type="button" id="prev-page-btn" class="btn-ghost">← Prev</button>
+            <span id="page-info" class="page-info"></span>
+            <button type="button" id="next-page-btn" class="btn-ghost">Next →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TN LOOKUP TAB -->
+      <section id="tab-tn-lookup" class="tab-panel">
+        <div class="card">
+          <div class="card-header">
+            <h2>True Name Lookup</h2>
+            <p>Resolve verified UPI account names for mobile numbers.</p>
+          </div>
+          <div class="tn-form">
+            <textarea id="tn-input" rows="4" placeholder="Enter mobile numbers (one per line or comma-separated)&#10;9876543210&#10;9123456789"></textarea>
+            <div class="btn-row">
+              <button type="button" id="tn-lookup-btn" class="btn-primary">Lookup Names</button>
+              <button type="button" id="tn-lookup-contacts-btn" class="btn-secondary" disabled>Lookup All Contacts</button>
+              <span id="tn-status" class="status-text"></span>
+            </div>
+          </div>
+          <div id="tn-results" class="tn-results" hidden>
+            <div class="tn-results-header">
+              <span id="tn-results-summary"></span>
+              <button type="button" id="tn-export-btn" class="btn-secondary btn-sm">Export CSV</button>
+            </div>
+            <table class="data-table">
+              <thead><tr><th>Mobile</th><th>Verified Name</th><th>Status</th></tr></thead>
+              <tbody id="tn-results-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- MESSAGES TAB -->
+      <section id="tab-messages" class="tab-panel">
+        <div class="card">
+          <div class="card-header">
+            <h2>Send Message</h2>
+            <p>Send a personal follow-up via your WhatsApp Web session.</p>
+          </div>
+          <div class="msg-form">
+            <input type="tel" id="msg-phone" placeholder="Recipient phone (91XXXXXXXXXX)">
+            <textarea id="msg-text" rows="3" placeholder="Type your message..."></textarea>
+            <div class="btn-row">
+              <button type="button" id="msg-send-btn" class="btn-primary">Send</button>
+              <span id="msg-result" class="status-text"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Profile Pic Modal (injected by JS) -->
+  <div id="pic-modal" class="modal" hidden></div>
+  <!-- Chat Modal (injected by JS) -->
+  <div id="chat-modal" class="modal" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
