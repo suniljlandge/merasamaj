@@ -457,8 +457,8 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
 
   app.post("/ui/messages/download-media", requireAuth, async (req, res) => {
     try {
-      const userId = await getActiveUserId();
-      const { phone, messageId } = req.body || {};
+      const { userId: bodyUserId, phone, messageId } = req.body || {};
+      const userId = bodyUserId || await getActiveUserId();
       if (!messageId) return res.status(400).json({ error: "messageId required" });
 
       const { downloadMediaMessage } = require("@whiskeysockets/baileys");

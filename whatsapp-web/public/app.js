@@ -464,6 +464,13 @@
     if (picFilter === "updated") {
       filtered = filtered.filter((c) => c.profilePicUpdatedAt && (now - new Date(c.profilePicUpdatedAt).getTime()) < recentMs);
       filtered = [...filtered].sort((a, b) => new Date(b.profilePicUpdatedAt) - new Date(a.profilePicUpdatedAt));
+    } else {
+      // Default: sort by lastSeenAt descending (latest chats first)
+      filtered = [...filtered].sort((a, b) => {
+        const aTime = a.lastSeenAt ? new Date(a.lastSeenAt).getTime() : 0;
+        const bTime = b.lastSeenAt ? new Date(b.lastSeenAt).getTime() : 0;
+        return bTime - aTime;
+      });
     }
     if (search) {
       filtered = filtered.filter((c) => {
@@ -672,6 +679,10 @@
 
   // Chat popup
   async function openChat(phone) {
+    if (!selectedUserId) {
+      alert("Select a user session first (in Contacts tab dropdown).");
+      return;
+    }
     const contact = allContacts.find((c) => c.phone === phone);
     const name = contact?.pushName || "Unknown";
     const modal = document.getElementById("chat-modal");
@@ -690,32 +701,102 @@
           <p style="text-align:center;color:var(--text-light);margin:auto;">Loading messages...</p>
         </div>
       </div>`;
-    document.getElementById("chat-close").addEventListener("click", () => { modal.hidden = true; });
-    modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
+    document.getElementById("chat-close").addEventListener("click", () => { modal.hidden = true; modal.innerHTML = ""; });
+    modal.addEventListener("click", (e) => { if (e.target === modal) { modal.hidden = true; modal.innerHTML = ""; } });
 
     try {
       const resp = await apiGet(`/ui/messages/${selectedUserId}/${phone}`);
       const data = await resp.json();
-      const messages = (data.messages || []).filter((m) => m.text || m.mediaType);
+      const messages = (data.messages || []).filter((m) => m.text || m.mediaType || m.mediaUrl);
       const container = document.getElementById("chat-msgs");
+
       if (!messages.length) {
         container.innerHTML = '<p style="text-align:center;color:var(--text-light);margin:auto;">No messages found.</p>';
         return;
       }
+
       container.innerHTML = messages.map((m) => {
         const cls = m.fromMe ? "sent" : "received";
         const time = m.timestamp ? new Date(m.timestamp).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }) : "";
+
+        // Media rendering
         let media = "";
-        if (m.mediaUrl && m.mediaType === "image") {
-          media = `<img src="${escHtml(m.mediaUrl)}" style="max-width:100%;border-radius:8px;margin-bottom:4px;">`;
-        } else if (m.mediaType && !m.mediaUrl) {
-          media = `<span style="font-size:11px;color:var(--text-light);">📎 ${m.mediaType}</span>`;
+        if (m.mediaType) {
+          if (m.mediaUrl) {
+            // Already downloaded — render inline
+            if (m.mediaType === "image") {
+              media = `<img src="${escHtml(m.mediaUrl)}" style="max-width:100%;border-radius:8px;margin-bottom:4px;cursor:pointer;" onclick="window.open('${escHtml(m.mediaUrl)}','_blank')" alt="image">`;
+            } else if (m.mediaType === "video") {
+              media = `<video src="${escHtml(m.mediaUrl)}" controls style="max-width:100%;border-radius:8px;margin-bottom:4px;"></video>`;
+            } else if (m.mediaType === "audio" || m.mediaType === "ptt") {
+              media = `<audio src="${escHtml(m.mediaUrl)}" controls style="width:100%;margin-bottom:4px;"></audio>`;
+            } else {
+              // Document (PDF, etc)
+              media = `<a href="${escHtml(m.mediaUrl)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;background:var(--border-light);border-radius:6px;font-size:11px;color:var(--text);text-decoration:none;margin-bottom:4px;">📄 Open ${escHtml(m.mediaType)}</a>`;
+            }
+          } else if (m.mediaInfo && m.mediaInfo._hasMedia) {
+            // Has media data but not downloaded — show download button
+            const sizeText = m.mediaInfo.fileLength ? ` (${(m.mediaInfo.fileLength / 1024).toFixed(0)} KB)` : "";
+            const icon = m.mediaType === "image" ? "🖼️" : m.mediaType === "video" ? "🎬" : m.mediaType === "audio" || m.mediaType === "ptt" ? "🎵" : "📄";
+            media = `<div class="media-skeleton" data-msg-id="${escHtml(m.id)}" data-phone="${escHtml(phone)}" style="background:var(--border-light);border-radius:8px;padding:10px;margin-bottom:4px;text-align:center;">
+              <span style="font-size:20px;">${icon}</span>
+              <p style="font-size:11px;color:var(--text-muted);margin:4px 0;">${escHtml(m.mediaType)}${sizeText}</p>
+              <button type="button" class="media-dl-btn btn-secondary btn-sm" data-msg-id="${escHtml(m.id)}" data-phone="${escHtml(phone)}">⬇ Download</button>
+            </div>`;
+          } else {
+            // Expired / unavailable
+            const icon = m.mediaType === "image" ? "🖼️" : m.mediaType === "video" ? "🎬" : "📄";
+            media = `<div style="background:var(--border-light);border-radius:6px;padding:6px;margin-bottom:4px;text-align:center;"><span style="font-size:11px;color:var(--text-light);">${icon} ${escHtml(m.mediaType)} (unavailable)</span></div>`;
+          }
         }
-        return `<div class="msg-bubble ${cls}">${media}${m.text ? escHtml(m.text) : ""}<span class="msg-time">${time}</span></div>`;
+
+        // Don't show redundant text like "[image]" or "[video]"
+        const textContent = m.text && !/^\[.+\]$/.test(m.text.trim()) ? escHtml(m.text) : "";
+
+        return `<div class="msg-bubble ${cls}">${media}${textContent ? `<span style="word-break:break-word;">${textContent}</span>` : ""}<span class="msg-time">${time}</span></div>`;
       }).join("");
+
+      // Wire media download buttons
+      container.querySelectorAll(".media-dl-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          downloadChatMedia(btn.dataset.msgId, btn.dataset.phone, btn);
+        });
+      });
+
+      // Scroll to bottom
       container.scrollTop = container.scrollHeight;
     } catch (err) {
       document.getElementById("chat-msgs").innerHTML = `<p style="color:var(--red);text-align:center;margin:auto;">${err.message}</p>`;
+    }
+  }
+
+  async function downloadChatMedia(messageId, phone, btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Downloading...";
+    try {
+      const resp = await apiPost("/ui/messages/download-media", { userId: selectedUserId, phone, messageId });
+      const data = await resp.json();
+      if (data.error) {
+        btn.textContent = "❌ " + (data.error.includes("expired") ? "Expired" : "Failed");
+        return;
+      }
+      // Replace skeleton with actual media
+      const skeleton = btn.closest(".media-skeleton");
+      if (skeleton && data.url) {
+        const type = data.mediaType || "document";
+        if (type === "image") {
+          skeleton.outerHTML = `<img src="${escHtml(data.url)}" style="max-width:100%;border-radius:8px;margin-bottom:4px;cursor:pointer;" onclick="window.open('${escHtml(data.url)}','_blank')">`;
+        } else if (type === "video") {
+          skeleton.outerHTML = `<video src="${escHtml(data.url)}" controls style="max-width:100%;border-radius:8px;margin-bottom:4px;"></video>`;
+        } else if (type === "audio" || type === "ptt") {
+          skeleton.outerHTML = `<audio src="${escHtml(data.url)}" controls style="width:100%;margin-bottom:4px;"></audio>`;
+        } else {
+          skeleton.outerHTML = `<a href="${escHtml(data.url)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;background:var(--border-light);border-radius:6px;font-size:11px;color:var(--text);text-decoration:none;margin-bottom:4px;">📄 Open ${type}</a>`;
+        }
+      }
+    } catch (err) {
+      btn.textContent = "❌ Error";
     }
   }
 
