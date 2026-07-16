@@ -107,9 +107,6 @@
   // SESSION MANAGEMENT
   // =========================================================================
 
-  const statusDot = document.getElementById("status-dot");
-  const statusText = document.getElementById("status-text");
-  const statusDetail = document.getElementById("status-detail");
   const sessionDot = document.getElementById("session-indicator");
   const sessionLabel = document.getElementById("session-status-label");
   let isPairing = false;
@@ -121,43 +118,19 @@
       if (resp.status === 401) { showLogin(); return; }
       const data = await resp.json();
       if (isPairing && data.status !== "connected") return;
-      updateStatusUI(data.status || "disconnected");
-    } catch {
-      if (!isPairing) updateStatusUI("unavailable");
-    }
-  }
-
-  function updateStatusUI(status) {
-    // Status dot
-    statusDot.className = "status-indicator " + status;
-    sessionDot.className = "session-dot " + status;
-
-    const labels = {
-      connected: "Connected", connecting: "Connecting...",
-      reconnecting: "Reconnecting...", disconnected: "Disconnected",
-      unavailable: "Unavailable",
-    };
-    statusText.textContent = labels[status] || status;
-    sessionLabel.textContent = labels[status] || status;
-
-    const connectCard = document.getElementById("connect-card");
-    const connectedCard = document.getElementById("connected-card");
-    const statsCard = document.getElementById("stats-card");
-
-    if (status === "connected") {
-      connectCard.hidden = true;
-      connectedCard.hidden = false;
-      statsCard.hidden = false;
-      loadStats();
-    } else {
-      connectCard.hidden = false;
-      connectedCard.hidden = true;
-      statsCard.hidden = true;
-      if (status === "unavailable") {
-        statusDetail.textContent = "Sidecar service is not responding.";
-      } else {
-        statusDetail.textContent = "";
+      const status = data.status || "disconnected";
+      sessionDot.className = "session-dot " + status;
+      const labels = { connected: "Connected", connecting: "Connecting...", reconnecting: "Reconnecting...", disconnected: "Disconnected", unavailable: "Unavailable" };
+      sessionLabel.textContent = labels[status] || status;
+      if (status === "connected" && isPairing) {
+        isPairing = false;
+        document.getElementById("pairing-panel").hidden = true;
+        document.getElementById("qr-panel").hidden = true;
+        loadSessions();
       }
+    } catch {
+      sessionDot.className = "session-dot disconnected";
+      sessionLabel.textContent = "Unavailable";
     }
   }
 
@@ -178,7 +151,7 @@
         isPairing = true;
         pollForConnection();
       } else if (data.status === "connected") {
-        updateStatusUI("connected");
+        loadSessions();
       } else {
         alert(data.error || "Failed to start connection");
       }
@@ -215,7 +188,7 @@
           isPairing = false;
           document.getElementById("pairing-panel").hidden = true;
           document.getElementById("qr-panel").hidden = true;
-          updateStatusUI("connected");
+          loadSessions();
         }
       } catch {}
     }, 2000);
@@ -231,73 +204,12 @@
         const data = await resp.json();
         if (data.qr) {
           const container = document.getElementById("qr-container");
-          // Use a simple text representation or generate QR image
           container.innerHTML = `<pre style="font-size:4px;line-height:4px;letter-spacing:1px;font-family:monospace;">${escHtml(data.qr)}</pre>`;
         }
         if (data.status === "connected") { clearInterval(interval); }
       } catch {}
     }, 2000);
   }
-
-  // Disconnect
-  document.getElementById("disconnect-btn").addEventListener("click", async () => {
-    if (!confirm("Disconnect WhatsApp? You'll need to pair again.")) return;
-    try {
-      await apiPost("/ui/disconnect", {});
-      updateStatusUI("disconnected");
-    } catch (err) { alert("Error: " + err.message); }
-  });
-
-  // Backup
-  document.getElementById("backup-btn").addEventListener("click", async () => {
-    const btn = document.getElementById("backup-btn");
-    btn.disabled = true; btn.textContent = "Starting...";
-    const progress = document.getElementById("backup-progress");
-    const fill = document.getElementById("backup-fill");
-    const text = document.getElementById("backup-text");
-    progress.hidden = false; fill.style.width = "10%";
-    text.textContent = "Starting backup...";
-
-    try {
-      const resp = await apiPost("/ui/backup", { includeProfilePics: true });
-      const data = await resp.json();
-      if (data.success) {
-        fill.style.width = "40%"; text.textContent = "Backup running...";
-        // Poll for completion
-        let checks = 0;
-        const poll = setInterval(async () => {
-          checks++;
-          if (checks > 120) { clearInterval(poll); text.textContent = "Still running..."; btn.disabled = false; return; }
-          try {
-            const s = await (await apiGet("/ui/backup-status")).json();
-            if (!s.running) {
-              clearInterval(poll);
-              fill.style.width = "100%";
-              text.textContent = `Done — ${s.totalContacts || 0} contacts, ${s.totalGroups || 0} groups`;
-              btn.textContent = "Run Backup"; btn.disabled = false;
-              setTimeout(() => { progress.hidden = true; }, 5000);
-            } else {
-              fill.style.width = Math.min(90, 40 + checks) + "%";
-            }
-          } catch {}
-        }, 3000);
-      } else {
-        text.textContent = data.error || "Failed"; btn.disabled = false; btn.textContent = "Run Backup";
-      }
-    } catch (err) { text.textContent = err.message; btn.disabled = false; btn.textContent = "Run Backup"; }
-  });
-
-  // Stats
-  async function loadStats() {
-    try {
-      const resp = await apiGet("/ui/stats");
-      const data = await resp.json();
-      document.getElementById("stat-sent").textContent = data.sent || 0;
-      document.getElementById("stat-limit").textContent = data.limit || 20;
-      document.getElementById("stat-remaining").textContent = data.remaining || 0;
-    } catch {}
-  }
-
   // =========================================================================
   // SESSIONS OVERVIEW
   // =========================================================================
@@ -325,6 +237,7 @@
         const status = s.liveStatus || s.status || "disconnected";
         const lastBackup = bs.lastBackup ? formatDate(bs.lastBackup) : "Never";
         const picCount = bs.lastResults?.profilePics?.uploaded || "—";
+        const isConnected = status === "connected";
         return `
         <tr>
           <td style="font-weight:600;">${escHtml(s.userId)}</td>
@@ -336,8 +249,9 @@
             <span style="font-size:12px;">📇 ${bs.contacts || 0} · 👥 ${bs.groups || 0}</span><br>
             <span style="font-size:11px;color:var(--text-light);">Last: ${lastBackup}</span>
           </td>
-          <td>
-            <button type="button" class="btn-secondary btn-sm backup-user-btn" data-user-id="${escHtml(s.userId)}" ${status !== "connected" ? "disabled" : ""}>Backup</button>
+          <td style="white-space:nowrap;">
+            <button type="button" class="btn-secondary btn-sm backup-user-btn" data-user-id="${escHtml(s.userId)}" ${!isConnected ? "disabled" : ""}>Backup</button>
+            <button type="button" class="btn-danger btn-sm disconnect-user-btn" data-user-id="${escHtml(s.userId)}" ${!isConnected ? "disabled" : ""} style="margin-left:4px;">Disconnect</button>
           </td>
         </tr>`;
       }).join("");
@@ -362,20 +276,19 @@
           return `<option value="${escHtml(s.userId)}">${escHtml(label)}</option>`;
         }).join("");
 
-      // Auto-select first connected session
-      if (!selectedUserId) {
-        const connected = sessions.find((s) => s.liveStatus === "connected");
-        if (connected) {
-          selectedUserId = connected.userId;
-          userSelect.value = connected.userId;
-        }
-      } else {
+      // Auto-select: don't auto-select — let user choose
+      if (selectedUserId) {
         userSelect.value = selectedUserId;
       }
 
       // Wire backup buttons
       tbody.querySelectorAll(".backup-user-btn").forEach((btn) => {
         btn.addEventListener("click", () => triggerUserBackup(btn.dataset.userId, btn));
+      });
+
+      // Wire disconnect buttons
+      tbody.querySelectorAll(".disconnect-user-btn").forEach((btn) => {
+        btn.addEventListener("click", () => disconnectUser(btn.dataset.userId, btn));
       });
     } catch (err) {
       tbody.innerHTML = `<tr><td colspan="7" style="color:var(--red);">${err.message}</td></tr>`;
@@ -398,6 +311,20 @@
     } catch (err) {
       btn.textContent = "Error";
       setTimeout(() => { btn.textContent = "Backup"; btn.disabled = false; }, 3000);
+    }
+  }
+
+  async function disconnectUser(userId, btn) {
+    if (!confirm(`Disconnect session ${userId}? You'll need to pair again.`)) return;
+    btn.disabled = true;
+    btn.textContent = "...";
+    try {
+      await apiPost(`/ui/disconnect/${userId}`, {});
+      btn.textContent = "Done";
+      setTimeout(() => loadSessions(), 1000);
+    } catch (err) {
+      btn.textContent = "Error";
+      setTimeout(() => { btn.textContent = "Disconnect"; btn.disabled = false; }, 3000);
     }
   }
 

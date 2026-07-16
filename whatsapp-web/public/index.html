@@ -106,22 +106,8 @@
 
         <div class="card">
           <div class="card-header">
-            <h2>Connection Status</h2>
-          </div>
-          <div class="status-panel">
-            <div class="status-row">
-              <span id="status-dot" class="status-indicator disconnected"></span>
-              <span id="status-text">Disconnected</span>
-            </div>
-            <p id="status-detail" class="status-detail"></p>
-          </div>
-        </div>
-
-        <!-- Connect Form -->
-        <div class="card" id="connect-card">
-          <div class="card-header">
-            <h2>Connect WhatsApp</h2>
-            <p>Link your WhatsApp using a pairing code or QR scan.</p>
+            <h2>Connect New Session</h2>
+            <p>Link a new WhatsApp using a pairing code or QR scan.</p>
           </div>
           <div class="form-row">
             <input type="tel" id="phone-input" placeholder="+91 98765 43210" autocomplete="tel">
@@ -139,41 +125,6 @@
             <p class="pairing-label">Scan this QR code with WhatsApp:</p>
             <div id="qr-container" class="qr-container"></div>
             <p class="pairing-hint">WhatsApp → Settings → Linked Devices → Link a Device</p>
-          </div>
-        </div>
-
-        <!-- Connected Panel -->
-        <div class="card" id="connected-card" hidden>
-          <div class="card-header">
-            <h2>✓ WhatsApp Connected</h2>
-            <p id="connected-phone-label"></p>
-          </div>
-          <div class="btn-row">
-            <button type="button" id="backup-btn" class="btn-secondary">Run Backup</button>
-            <button type="button" id="disconnect-btn" class="btn-danger">Disconnect</button>
-          </div>
-          <div id="backup-progress" class="backup-progress" hidden>
-            <div class="progress-bar"><div id="backup-fill" class="progress-fill"></div></div>
-            <span id="backup-text" class="progress-text"></span>
-          </div>
-        </div>
-
-        <!-- Stats -->
-        <div class="card" id="stats-card" hidden>
-          <div class="card-header"><h2>Today's Stats</h2></div>
-          <div class="stats-grid">
-            <div class="stat-item">
-              <span class="stat-value" id="stat-sent">0</span>
-              <span class="stat-label">Sent</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-value" id="stat-limit">20</span>
-              <span class="stat-label">Limit</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-value" id="stat-remaining">20</span>
-              <span class="stat-label">Remaining</span>
-            </div>
           </div>
         </div>
       </section>

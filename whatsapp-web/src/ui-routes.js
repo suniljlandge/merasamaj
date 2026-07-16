@@ -116,6 +116,16 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
     }
   });
 
+  app.post("/ui/disconnect/:userId", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      await sessionManager.disconnect(userId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // =========================================================================
   // SESSIONS OVERVIEW (all sessions like wa-backup dashboard)
   // =========================================================================
