@@ -178,10 +178,10 @@ async function resolveTrueName(mobile) {
  * Retries with a fresh token if expiry is detected.
  *
  * @param {string[]} mobiles
- * @param {number} concurrency - max parallel VPA calls (default 8)
+ * @param {number} concurrency - max parallel VPA calls (default 20)
  * @returns {Array<{mobile: string, name: string|null, error: string|null}>}
  */
-async function resolveBatch(mobiles, concurrency = 8) {
+async function resolveBatch(mobiles, concurrency = 20) {
   if (!mobiles.length) return [];
 
   let pid, token;
@@ -195,36 +195,50 @@ async function resolveBatch(mobiles, concurrency = 8) {
   const results = new Array(mobiles.length);
   const needRetry = [];
 
-  // Process in chunks for concurrency control
-  for (let i = 0; i < mobiles.length; i += concurrency) {
-    const chunk = mobiles.slice(i, i + concurrency);
-    const promises = chunk.map(async (mobile, idx) => {
-      const globalIdx = i + idx;
-      const res = await resolveVpa(mobile, pid, token);
+  // Fire ALL VPA calls in parallel (limited by concurrency)
+  const queue = [...mobiles.map((m, i) => ({ mobile: m, idx: i }))];
+  const workers = [];
+
+  async function worker() {
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item) break;
+      const res = await resolveVpa(item.mobile, pid, token);
       if (res.expired) {
-        needRetry.push(globalIdx);
-        results[globalIdx] = { mobile, name: null, error: "token_expired" };
+        needRetry.push(item.idx);
+        results[item.idx] = { mobile: item.mobile, name: null, error: "token_expired" };
       } else {
-        results[globalIdx] = { mobile, name: res.name, error: res.error };
+        results[item.idx] = { mobile: item.mobile, name: res.name, error: res.error };
       }
-    });
-    await Promise.all(promises);
+    }
   }
+
+  // Spawn concurrent workers
+  for (let i = 0; i < Math.min(concurrency, mobiles.length); i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
 
   // Retry expired ones with a fresh token
   if (needRetry.length > 0) {
     try {
       ({ pid, token } = await getPipelineToken());
-      for (let i = 0; i < needRetry.length; i += concurrency) {
-        const chunk = needRetry.slice(i, i + concurrency);
-        await Promise.all(
-          chunk.map(async (globalIdx) => {
-            const mobile = mobiles[globalIdx];
-            const res = await resolveVpa(mobile, pid, token);
-            results[globalIdx] = { mobile, name: res.name, error: res.error };
-          })
-        );
+      const retryQueue = [...needRetry.map((idx) => ({ mobile: mobiles[idx], idx }))];
+      const retryWorkers = [];
+
+      async function retryWorker() {
+        while (retryQueue.length > 0) {
+          const item = retryQueue.shift();
+          if (!item) break;
+          const res = await resolveVpa(item.mobile, pid, token);
+          results[item.idx] = { mobile: item.mobile, name: res.name, error: res.error };
+        }
       }
+
+      for (let i = 0; i < Math.min(concurrency, needRetry.length); i++) {
+        retryWorkers.push(retryWorker());
+      }
+      await Promise.all(retryWorkers);
     } catch (err) {
       for (const idx of needRetry) {
         results[idx] = { mobile: mobiles[idx], name: null, error: "token_refresh_failed" };

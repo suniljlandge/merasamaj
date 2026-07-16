@@ -761,20 +761,21 @@
     let allResults = [];
 
     const chunks = [];
-    for (let i = 0; i < mobiles.length; i += 20) chunks.push(mobiles.slice(i, i + 20));
+    for (let i = 0; i < mobiles.length; i += 50) chunks.push(mobiles.slice(i, i + 50));
 
-    let done = 0;
-    for (const chunk of chunks) {
-      try {
-        const resp = await apiPost("/ui/tn-batch", { mobiles: chunk });
-        const data = await resp.json();
-        const results = data.results || [];
-        allResults.push(...results);
-        results.forEach((r) => { if (r.name) tnNameCache.set(r.mobile, r.name); });
-      } catch {}
-      done += chunk.length;
-      status.textContent = `Processed ${done} / ${mobiles.length}…`;
-    }
+    // Fire all chunks in parallel
+    const chunkPromises = chunks.map((chunk) =>
+      apiPost("/ui/tn-batch", { mobiles: chunk })
+        .then((r) => r.json())
+        .then((data) => {
+          const results = data.results || [];
+          allResults.push(...results);
+          results.forEach((r) => { if (r.name) tnNameCache.set(r.mobile, r.name); });
+          status.textContent = `Resolved ${allResults.length} / ${mobiles.length}…`;
+        })
+        .catch(() => {})
+    );
+    await Promise.all(chunkPromises);
 
     const successCount = allResults.filter((r) => r.name).length;
     status.textContent = `Done — ${successCount} resolved out of ${allResults.length}`;
