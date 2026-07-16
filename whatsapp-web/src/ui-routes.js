@@ -584,6 +584,7 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
 
   app.post("/ui/tn-batch", requireAuth, async (req, res) => {
     try {
+      const { resolveBatch } = require("./tn-service");
       const { mobiles = [] } = req.body || {};
       if (!Array.isArray(mobiles) || mobiles.length === 0) {
         return res.status(400).json({ error: "mobiles must be a non-empty array" });
@@ -625,43 +626,24 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
         }
       }
 
-      // For uncached numbers, proxy to the main SAMAJ Flask app
+      // Resolve uncached numbers directly via UPI VPA
       if (needLookup.length > 0) {
-        const mainAppUrl = process.env.SAMAJ_APP_URL || "http://localhost:5000";
-        const mainAppSecret = process.env.SAMAJ_APP_SECRET || "";
-
         try {
-          const fetchResp = await fetch(`${mainAppUrl}/api/tn/batch-lookup`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Internal-Secret": mainAppSecret,
-              "Cookie": `session=${process.env.SAMAJ_SESSION_COOKIE || ""}`,
-            },
-            body: JSON.stringify({ mobiles: needLookup }),
-          });
-
-          if (fetchResp.ok) {
-            const data = await fetchResp.json();
-            const batchResults = data.results || [];
-            for (const r of batchResults) {
-              results.push({ mobile: r.mobile, name: r.name, error: r.error, cached: false });
-              if (r.name) {
-                col.updateOne(
-                  { mobile: r.mobile },
-                  { $set: { mobile: r.mobile, name: r.name, resolvedAt: new Date() } },
-                  { upsert: true }
-                ).catch(() => {});
-              }
+          const batchResults = await resolveBatch(needLookup, 8);
+          for (const r of batchResults) {
+            results.push({ mobile: r.mobile, name: r.name, error: r.error, cached: false });
+            // Cache successful results
+            if (r.name) {
+              col.updateOne(
+                { mobile: r.mobile },
+                { $set: { mobile: r.mobile, name: r.name, resolvedAt: new Date() } },
+                { upsert: true }
+              ).catch(() => {});
             }
-          } else {
-            needLookup.forEach((m) => {
-              results.push({ mobile: m, name: null, error: "lookup_service_unavailable" });
-            });
           }
-        } catch (proxyErr) {
+        } catch (lookupErr) {
           needLookup.forEach((m) => {
-            results.push({ mobile: m, name: null, error: "lookup_service_unavailable" });
+            results.push({ mobile: m, name: null, error: lookupErr.message });
           });
         }
       }
@@ -674,6 +656,7 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
 
   app.get("/ui/tn-lookup", requireAuth, async (req, res) => {
     try {
+      const { resolveTrueName } = require("./tn-service");
       const mobile = (req.query.mobile || "").replace(/[^0-9]/g, "").slice(-10);
       if (!/^[6-9]\d{9}$/.test(mobile)) {
         return res.status(400).json({ error: "Invalid mobile number" });
@@ -685,29 +668,17 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
         return res.json({ mobile, name: cached.name, cached: true });
       }
 
-      // Proxy to main app
-      const mainAppUrl = process.env.SAMAJ_APP_URL || "http://localhost:5000";
-      try {
-        const fetchResp = await fetch(`${mainAppUrl}/api/tn/lookup?mobile=${mobile}`, {
-          headers: {
-            "X-Internal-Secret": process.env.SAMAJ_APP_SECRET || "",
-            "Cookie": `session=${process.env.SAMAJ_SESSION_COOKIE || ""}`,
-          },
-        });
-        if (fetchResp.ok) {
-          const data = await fetchResp.json();
-          if (data.name) {
-            col.updateOne(
-              { mobile },
-              { $set: { mobile, name: data.name, resolvedAt: new Date() } },
-              { upsert: true }
-            ).catch(() => {});
-          }
-          return res.json(data);
-        }
-      } catch {}
+      // Resolve directly
+      const { name, error } = await resolveTrueName(mobile);
+      if (name) {
+        col.updateOne(
+          { mobile },
+          { $set: { mobile, name, resolvedAt: new Date() } },
+          { upsert: true }
+        ).catch(() => {});
+      }
 
-      res.json({ mobile, name: null, error: "lookup_service_unavailable" });
+      res.json({ mobile, name, error, cached: false });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
