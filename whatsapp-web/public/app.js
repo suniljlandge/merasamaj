@@ -913,11 +913,12 @@
     } catch {}
   }
 
-  // Auto-login if token exists
+  // Auto-login if token exists — show correct screen immediately without flash
   if (authToken) {
-    // Validate token
+    // Show app immediately (optimistic), revert to login if token is invalid
+    showApp();
     fetch("/ui/status", { headers: { "X-Auth-Token": authToken } })
-      .then((r) => { if (r.ok) showApp(); else showLogin(); })
+      .then((r) => { if (!r.ok) { showLogin(); } })
       .catch(() => showLogin());
   } else {
     showLogin();
