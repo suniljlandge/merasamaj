@@ -2217,13 +2217,11 @@ def create_app(config=None, collection=None, correction_collection=None):
                     "error": "Session expired"
                 }), 400
 
-        # If already verified, report status + backup progress
+        # If already verified, report status (no sidecar call needed)
         if login_session.get("verifiedAt"):
-            backup_running = wa.is_backup_running(sidecar_user_id)
             return jsonify({
                 "status": "verified",
                 "ok": True,
-                "backupRunning": backup_running,
             })
 
         # Check the sidecar for the real-time status
@@ -2298,16 +2296,12 @@ def create_app(config=None, collection=None, correction_collection=None):
             # Store the sidecar userId in the Flask session so status checks work
             session["wa_sidecar_user_id"] = sidecar_user_id
 
-            # Backup continues in background — no need to wait
-            backup_running = wa.is_backup_running(sidecar_user_id)
-
             return jsonify({
                 "status": "verified",
                 "ok": True,
                 "role": current_role(),
                 "account": serialize_public_account(account),
                 "redirectTo": get_redirect_for_account(account),
-                "backupRunning": backup_running,
             })
 
         # Update stored status

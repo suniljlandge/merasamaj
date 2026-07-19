@@ -237,8 +237,8 @@ function startWaStatusPolling() {
 
   if (!waCurrentSessionId) return;
 
-  // Poll every 2 seconds
-  waPollingInterval = setInterval(pollWaStatus, 2000);
+  // Poll every 1 second for faster redirect after verification
+  waPollingInterval = setInterval(pollWaStatus, 1000);
   // Also poll immediately
   pollWaStatus();
 }
@@ -289,10 +289,7 @@ async function pollWaStatus() {
       // Redirect immediately — backup continues in the background on the server
       setWaStatus("✓ WhatsApp verified! Redirecting...", false);
       stopWaPolling();
-
-      setTimeout(function () {
-        window.location = waRedirectTo;
-      }, 600);
+      window.location = waRedirectTo;
       return;
     }
 
