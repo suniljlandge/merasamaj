@@ -21,8 +21,8 @@ from typing import Optional
 WA_WEB_BASE_URL = os.getenv("WA_WEB_SERVICE_URL", "http://localhost:3001")
 WA_WEB_API_SECRET = os.getenv("WA_WEB_API_SECRET", "change-this-to-a-random-secret")
 
-# Request timeout for sidecar calls
-_TIMEOUT = 15
+# Request timeout for sidecar calls (status checks, backup checks, etc.)
+_TIMEOUT = 8
 
 # Shared session with retry on connection errors.
 # After the sidecar restarts, the connection pool may have a stale socket.
@@ -95,7 +95,7 @@ def connect_session(user_id: str, phone_number: str) -> dict:
         _url("/api/session/connect"),
         headers=_headers(),
         json={"userId": user_id, "phoneNumber": phone_number},
-        timeout=_TIMEOUT,
+        timeout=30,
     )
     resp.raise_for_status()
     return resp.json()

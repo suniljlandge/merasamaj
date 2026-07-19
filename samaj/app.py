@@ -2146,7 +2146,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 wa._url("/api/session/connect-qr"),
                 headers=wa._headers(),
                 json={"userId": sidecar_user_id},
-                timeout=15,
+                timeout=30,
             )
             resp.raise_for_status()
             result = resp.json()
