@@ -189,7 +189,12 @@ async function loginStaffUser() {
   });
 
   if (response.ok) {
-    window.location = "/";
+    const data = await response.json();
+    if (data.role === "campaign_admin") {
+      window.location = "/campaign-manager";
+    } else {
+      window.location = "/";
+    }
     return;
   }
 

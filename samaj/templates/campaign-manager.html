@@ -21,6 +21,8 @@
       "{{ session.get('accountType', '') }}";
     window.CURRENT_PUBLIC_MOBILE =
       "{{ session.get('public_mobile', '') }}";
+    window.IS_CAMPAIGN_ADMIN =
+      {{ 'true' if is_campaign_admin else 'false' }};
   </script>
 
   <script src="https://cdn.tailwindcss.com"></script>
@@ -76,6 +78,14 @@
     src="{{ url_for('static', filename='campaign-whatsapp.js') }}"
   ></script>
 
+  <!-- Campaign Admin tab logic (template approval + payment confirmation) -->
+  {% if is_campaign_admin %}
+  <script
+    defer
+    src="{{ url_for('static', filename='campaign-admin.js') }}"
+  ></script>
+  {% endif %}
+
 </head>
 
 <body class="bg-slate-100 text-slate-900 overflow-x-hidden">
@@ -108,6 +118,14 @@
 
       <!-- WhatsApp Status Indicator (dropdown) + Campaign Manager label -->
       <div class="flex items-center gap-3">
+        {% if is_campaign_admin %}
+        <a
+          href="/directory"
+          class="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-50 transition-colors"
+        >
+          Staff Dashboard
+        </a>
+        {% endif %}
         <div class="relative" id="wa-topbar-widget">
           <button type="button" id="wa-topbar-btn"
             class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-sm">
@@ -199,6 +217,20 @@
       >
         My Campaigns
       </button>
+
+      {% if is_campaign_admin %}
+      <button
+        type="button"
+        class="cm-tab px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200"
+        id="cm-tab-admin"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cm-panel-admin"
+        data-tab="admin"
+      >
+        Admin
+      </button>
+      {% endif %}
 
       <button
         type="button"
@@ -1251,6 +1283,130 @@
         </p>
       </div>
     </section>
+
+    {% if is_campaign_admin %}
+    <!-- ========================================================== -->
+    <!-- TAB PANEL: ADMIN (Template Approval + Payment Confirmation)-->
+    <!-- Only visible for campaign_admin staff sessions.            -->
+    <!-- ========================================================== -->
+    <section
+      id="cm-panel-admin"
+      class="cm-panel hidden"
+      role="tabpanel"
+      aria-labelledby="cm-tab-admin"
+    >
+      <!-- Sub-tabs within admin panel -->
+      <div class="flex gap-2 mb-4">
+        <button
+          type="button"
+          id="cm-admin-subtab-templates"
+          class="px-4 py-2 text-sm font-semibold rounded-lg bg-white text-emerald-700 shadow-sm border border-slate-200"
+          data-admin-subtab="templates"
+        >
+          Template Approvals
+        </button>
+        <button
+          type="button"
+          id="cm-admin-subtab-payments"
+          class="px-4 py-2 text-sm font-semibold rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+          data-admin-subtab="payments"
+        >
+          Payment Confirmations
+        </button>
+      </div>
+
+      <!-- Template Approvals sub-panel -->
+      <div id="cm-admin-panel-templates" class="cm-admin-subpanel">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-4 md:px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-700">Pending Template Approvals</h2>
+              <p class="text-xs text-slate-500 mt-0.5">Review and approve/reject user-submitted custom templates.</p>
+            </div>
+            <button
+              id="cm-admin-tpl-refresh"
+              type="button"
+              class="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+            >Refresh</button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th class="px-4 py-3">Name</th>
+                  <th class="px-4 py-3">Body Text</th>
+                  <th class="px-4 py-3">Language</th>
+                  <th class="px-4 py-3">Media</th>
+                  <th class="px-4 py-3">Submitted</th>
+                  <th class="px-4 py-3">Action</th>
+                </tr>
+              </thead>
+              <tbody id="cm-admin-tpl-body" class="divide-y divide-slate-100">
+                <tr>
+                  <td colspan="6" class="px-4 py-8 text-center text-slate-400">
+                    Loading templates&hellip;
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p id="cm-admin-tpl-empty" class="hidden px-4 py-8 text-center text-sm text-slate-400">
+            No pending templates. All caught up!
+          </p>
+          <p id="cm-admin-tpl-status" class="px-4 py-2 text-xs text-slate-500"></p>
+        </div>
+      </div>
+
+      <!-- Payment Confirmations sub-panel -->
+      <div id="cm-admin-panel-payments" class="cm-admin-subpanel hidden">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-4 md:px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-700">Pending UPI Payments</h2>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Verify UTR in your bank/UPI app, then confirm to trigger message delivery.
+              </p>
+            </div>
+            <button
+              id="cm-admin-pay-refresh"
+              type="button"
+              class="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+            >Refresh</button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th class="px-4 py-3">Campaign</th>
+                  <th class="px-4 py-3">Amount</th>
+                  <th class="px-4 py-3">Recipients</th>
+                  <th class="px-4 py-3">UPI Ref (UTR)</th>
+                  <th class="px-4 py-3">Txn Note</th>
+                  <th class="px-4 py-3">Created</th>
+                  <th class="px-4 py-3">Action</th>
+                </tr>
+              </thead>
+              <tbody id="cm-admin-pay-body" class="divide-y divide-slate-100">
+                <tr>
+                  <td colspan="7" class="px-4 py-8 text-center text-slate-400">
+                    Loading payments&hellip;
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p id="cm-admin-pay-empty" class="hidden px-4 py-8 text-center text-sm text-slate-400">
+            No pending payments. All clear!
+          </p>
+          <p id="cm-admin-pay-status" class="px-4 py-2 text-xs text-slate-500"></p>
+        </div>
+      </div>
+    </section>
+    {% endif %}
 
   </main>
 

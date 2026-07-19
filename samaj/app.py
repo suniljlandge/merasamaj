@@ -254,6 +254,8 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "/directory"
             )
 
+        # Campaign admin defaults to campaign manager but can still access
+        # the staff dashboard via this route when navigating directly.
         return render_template(
             "index.html"
         )
@@ -363,15 +365,15 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.route("/campaign-manager")
     def campaign_manager_page():
 
-        # Only campaigner sessions may view the campaign manager. Any other
-        # visitor (unauthenticated, staff, or registrant) is sent to login
-        # (Requirements 1.5, 2.1).
-        if not is_campaigner_session():
+        # Campaigner public sessions and campaign_admin staff sessions may
+        # view the campaign manager. Any other visitor is sent to login.
+        if not is_campaigner_session() and not is_campaign_admin_session():
             return redirect("/login")
 
         return render_template(
             "campaign-manager.html",
             current_role=current_role(),
+            is_campaign_admin=is_campaign_admin_session(),
         )
 
     @app.route("/otp-settings")
@@ -1540,6 +1542,9 @@ def create_app(config=None, collection=None, correction_collection=None):
         if request.method == "GET":
             if require_auth():
                 if is_campaigner_session():
+                    return redirect("/campaign-manager")
+
+                if is_campaign_admin_session():
                     return redirect("/campaign-manager")
 
                 if is_pending_public_session():
@@ -4027,7 +4032,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             registration_ids, get_collection(), salutations=salutations
         )
 
-        account_id = session.get("public_account_id", "")
+        account_id = session.get("public_account_id", "") or session.get("user_id", "")
 
         # --- Check if user wants to send via WhatsApp Web (free, no payment) ---
         send_via_web = payload.get("sendViaWeb", False)
@@ -4252,17 +4257,28 @@ def create_app(config=None, collection=None, correction_collection=None):
         Campaigns are filtered by accountId matching the campaigner's
         public_account_id stored in the session. accountId is persisted as an
         ObjectId, so the session id is coerced via ensure_object_id
-        (Requirement 8.4)."""
+        (Requirement 8.4).
 
-        account_object_id = ensure_object_id(
-            session.get("public_account_id", "")
-        )
+        Campaign admin staff see all campaigns across all accounts."""
 
-        campaigns = list(
-            get_campaigns_collection()
-            .find({"accountId": account_object_id})
-            .sort("createdAt", -1)
-        )
+        # Campaign admins see all campaigns for oversight.
+        if is_campaign_admin_session():
+            campaigns = list(
+                get_campaigns_collection()
+                .find({})
+                .sort("createdAt", -1)
+                .limit(200)
+            )
+        else:
+            account_object_id = ensure_object_id(
+                session.get("public_account_id", "")
+            )
+
+            campaigns = list(
+                get_campaigns_collection()
+                .find({"accountId": account_object_id})
+                .sort("createdAt", -1)
+            )
 
         return jsonify({
             "campaigns": [serialize_document(campaign) for campaign in campaigns],
@@ -4273,20 +4289,28 @@ def create_app(config=None, collection=None, correction_collection=None):
     def get_campaign(campaign_id):
         """Return a single campaign's details (status, stats, recipients) for the
         authenticated campaigner. Responds 404 if the campaign does not exist or
-        does not belong to the current campaigner (Requirement 8.4)."""
+        does not belong to the current campaigner (Requirement 8.4).
 
-        account_object_id = ensure_object_id(
-            session.get("public_account_id", "")
-        )
+        Campaign admin staff can view any campaign."""
 
         campaign_object_id = object_id_or_none(campaign_id)
         if campaign_object_id is None:
             return jsonify({"error": "Campaign not found."}), 404
 
-        campaign = get_campaigns_collection().find_one({
-            "_id": campaign_object_id,
-            "accountId": account_object_id,
-        })
+        # Campaign admins can view any campaign.
+        if is_campaign_admin_session():
+            campaign = get_campaigns_collection().find_one({
+                "_id": campaign_object_id,
+            })
+        else:
+            account_object_id = ensure_object_id(
+                session.get("public_account_id", "")
+            )
+
+            campaign = get_campaigns_collection().find_one({
+                "_id": campaign_object_id,
+                "accountId": account_object_id,
+            })
 
         if campaign is None:
             return jsonify({"error": "Campaign not found."}), 404
@@ -4306,7 +4330,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         """
 
         account_object_id = ensure_object_id(
-            session.get("public_account_id", "")
+            session.get("public_account_id", "") or session.get("user_id", "")
         )
 
         campaign_object_id = object_id_or_none(campaign_id)
@@ -4409,22 +4433,30 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         The campaign must belong to the authenticated campaigner: the lookup is
         scoped by accountId so a campaigner can never view another campaigner's
-        report. Responds 404 if the campaign does not exist or is not owned by
+        report. Campaign admin staff can view any campaign's report.
+
+        Responds 404 if the campaign does not exist or is not owned by
         the current campaigner (Requirements 8.1, 8.2, 8.4).
         """
-
-        account_object_id = ensure_object_id(
-            session.get("public_account_id", "")
-        )
 
         campaign_object_id = object_id_or_none(campaign_id)
         if campaign_object_id is None:
             return jsonify({"error": "Campaign not found."}), 404
 
-        campaign_doc = get_campaigns_collection().find_one({
-            "_id": campaign_object_id,
-            "accountId": account_object_id,
-        })
+        # Campaign admins can view any campaign's report.
+        if is_campaign_admin_session():
+            campaign_doc = get_campaigns_collection().find_one({
+                "_id": campaign_object_id,
+            })
+        else:
+            account_object_id = ensure_object_id(
+                session.get("public_account_id", "")
+            )
+
+            campaign_doc = get_campaigns_collection().find_one({
+                "_id": campaign_object_id,
+                "accountId": account_object_id,
+            })
 
         if campaign_doc is None:
             return jsonify({"error": "Campaign not found."}), 404
@@ -5160,13 +5192,23 @@ def is_campaigner_session():
     )
 
 
+def is_campaign_admin_session():
+    """Return True when the current session is a staff user with the
+    campaign_admin role. Campaign admins land on the campaign manager page
+    and can approve/reject templates and confirm payments."""
+    return (
+        is_staff_session()
+        and session.get("role") == "campaign_admin"
+    )
+
+
 def require_campaigner(view):
-    """Decorator that restricts a view to campaigner sessions. Any non-campaigner
-    session (unauthenticated, staff, or registrant) receives a 403 JSON error
-    (Requirements 1.6, 11.1, 11.2)."""
+    """Decorator that restricts a view to campaigner sessions or campaign_admin
+    staff sessions. Any other session (unauthenticated, non-campaign staff, or
+    registrant) receives a 403 JSON error (Requirements 1.6, 11.1, 11.2)."""
     @functools.wraps(view)
     def wrapper(*args, **kwargs):
-        if not is_campaigner_session():
+        if not is_campaigner_session() and not is_campaign_admin_session():
             return jsonify({
                 "error": "Campaigner access required."
             }), 403
@@ -7133,10 +7175,12 @@ ROLE_ASSIGNMENT_RULES = {
     "super_admin": [
         "super_admin",
         "admin",
+        "campaign_admin",
         "operator",
         "viewer",
     ],
     "admin": [
+        "campaign_admin",
         "operator",
         "viewer",
     ],
@@ -7146,10 +7190,12 @@ ROLE_DELETION_RULES = {
     "super_admin": [
         "super_admin",
         "admin",
+        "campaign_admin",
         "operator",
         "viewer",
     ],
     "admin": [
+        "campaign_admin",
         "operator",
         "viewer",
     ],
@@ -7179,6 +7225,7 @@ ROLE_CONFIG_KEY = "role_config"
 MANAGED_ROLES = [
     "super_admin",
     "admin",
+    "campaign_admin",
     "operator",
     "viewer",
 ]
@@ -7186,6 +7233,7 @@ MANAGED_ROLES = [
 ROLE_LABELS = {
     "super_admin": "Super Admin",
     "admin": "Admin",
+    "campaign_admin": "Campaign Admin",
     "operator": "Operator",
     "viewer": "Viewer",
 }
@@ -7345,6 +7393,28 @@ DEFAULT_ROLE_PERMISSIONS = {
         "export_address_areas": True,
         "confirm_campaign_payments": True,
         "manage_wa_web": False,
+        "manage_wa_routing": False,
+    },
+    "campaign_admin": {
+        "access_directory": True,
+        "create_registrations": True,
+        "view_all_registrations": False,
+        "edit_all_registrations": False,
+        "delete_registrations": False,
+        "update_invitation_name": False,
+        "access_family_tree": True,
+        "manage_users": False,
+        "review_self_registrations": False,
+        "view_leaderboard": False,
+        "bulk_import": False,
+        "export_directory": False,
+        "manage_otp_settings": False,
+        "manage_role_config": False,
+        "manage_transliteration": False,
+        "manage_address_areas": False,
+        "export_address_areas": False,
+        "confirm_campaign_payments": True,
+        "manage_wa_web": True,
         "manage_wa_routing": False,
     },
     "operator": {
