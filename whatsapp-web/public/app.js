@@ -392,10 +392,10 @@
       filtered = filtered.filter((c) => c.profilePicUpdatedAt && (now - new Date(c.profilePicUpdatedAt).getTime()) < recentMs);
       filtered = [...filtered].sort((a, b) => new Date(b.profilePicUpdatedAt) - new Date(a.profilePicUpdatedAt));
     } else {
-      // Default: sort by lastSeenAt descending (latest chats first)
+      // Default: sort by lastMessageAt descending (recent chats first)
       filtered = [...filtered].sort((a, b) => {
-        const aTime = a.lastSeenAt ? new Date(a.lastSeenAt).getTime() : 0;
-        const bTime = b.lastSeenAt ? new Date(b.lastSeenAt).getTime() : 0;
+        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
         return bTime - aTime;
       });
     }

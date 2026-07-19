@@ -189,13 +189,32 @@ function createUIRoutes(app, { sessionManager, backupService, r2, db, logger }) 
     try {
       const { userId } = req.params;
       const data = await backupService.exportContacts(userId, "json");
-      if (Array.isArray(data)) {
-        res.json({ contacts: data, total: data.length });
-      } else if (data && data.contacts) {
-        res.json(data);
-      } else {
-        res.json({ contacts: [], total: 0 });
+      let contacts = Array.isArray(data) ? data : (data?.contacts || []);
+
+      // Enrich with last message timestamp for "recent chat first" sorting
+      if (contacts.length > 0) {
+        const phones = contacts.map((c) => c.phone);
+        const lastMsgs = await db.collection("wa_messages").aggregate([
+          { $match: { userId, phone: { $in: phones } } },
+          { $group: { _id: "$phone", lastMsgAt: { $max: "$timestamp" } } },
+        ]).toArray();
+        const lastMsgMap = new Map();
+        lastMsgs.forEach((m) => { if (m.lastMsgAt) lastMsgMap.set(m._id, m.lastMsgAt); });
+
+        contacts = contacts.map((c) => ({
+          ...c,
+          lastMessageAt: lastMsgMap.get(c.phone) || null,
+        }));
+
+        // Sort by lastMessageAt descending (recent chats first)
+        contacts.sort((a, b) => {
+          const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+          const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+          return bTime - aTime;
+        });
       }
+
+      res.json({ contacts, total: contacts.length });
     } catch (err) {
       res.json({ contacts: [], error: err.message });
     }
