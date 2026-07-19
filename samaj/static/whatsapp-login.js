@@ -100,6 +100,14 @@ async function startWhatsAppPairing() {
   if (waStartPairingButton) waStartPairingButton.disabled = true;
   if (waStartQrButton) waStartQrButton.disabled = true;
 
+  // Show pairing panel with skeleton
+  var pairingSkeleton = document.querySelector("#wa-pairing-skeleton");
+  var pairingCode = document.querySelector("#wa-pairing-code");
+  if (waPairingPanel) waPairingPanel.hidden = false;
+  if (pairingSkeleton) pairingSkeleton.hidden = false;
+  if (pairingCode) pairingCode.hidden = true;
+  if (waPairingStatus) waPairingStatus.textContent = "Connecting to WhatsApp...";
+
   try {
     var response = await fetch("/api/public/whatsapp-login/start", {
       method: "POST",
@@ -115,6 +123,10 @@ async function startWhatsAppPairing() {
     waCurrentSessionId = body.sessionId;
     waVerified = false;
 
+    // Hide skeleton, show real content
+    if (pairingSkeleton) pairingSkeleton.hidden = true;
+    if (pairingCode) pairingCode.hidden = false;
+
     if (body.pairingCode) {
       // Format pairing code with a dash in the middle for readability
       var code = body.pairingCode;
@@ -122,10 +134,8 @@ async function startWhatsAppPairing() {
         ? code.slice(0, 4) + " - " + code.slice(4)
         : code;
       if (waPairingCode) waPairingCode.textContent = formatted;
-      if (waPairingPanel) waPairingPanel.hidden = false;
       if (waPairingStatus) waPairingStatus.textContent = "Waiting for you to link...";
     } else {
-      if (waPairingPanel) waPairingPanel.hidden = false;
       if (waPairingCode) waPairingCode.textContent = "...";
       if (waPairingStatus) waPairingStatus.textContent = body.message || "Reconnecting...";
     }
@@ -133,6 +143,8 @@ async function startWhatsAppPairing() {
     // Start polling for status
     startWaStatusPolling();
   } catch (error) {
+    if (pairingSkeleton) pairingSkeleton.hidden = true;
+    if (waPairingPanel) waPairingPanel.hidden = true;
     window.alert(error.message || "Failed to start WhatsApp login.");
   } finally {
     if (waStartPairingButton) waStartPairingButton.disabled = false;
@@ -151,6 +163,14 @@ async function startWhatsAppQr() {
   if (waStartPairingButton) waStartPairingButton.disabled = true;
   if (waStartQrButton) waStartQrButton.disabled = true;
 
+  // Show QR panel with skeleton
+  var qrSkeleton = document.querySelector("#wa-qr-skeleton");
+  var qrContainer = document.querySelector("#wa-qr-container");
+  if (waQrPanel) waQrPanel.hidden = false;
+  if (qrSkeleton) qrSkeleton.hidden = false;
+  if (qrContainer) qrContainer.hidden = true;
+  if (waQrStatus) waQrStatus.textContent = "Generating QR code...";
+
   try {
     var response = await fetch("/api/public/whatsapp-login/start-qr", {
       method: "POST",
@@ -166,7 +186,10 @@ async function startWhatsAppQr() {
     waCurrentSessionId = body.sessionId;
     waVerified = false;
 
-    if (waQrPanel) waQrPanel.hidden = false;
+    // Hide skeleton, show real QR container
+    if (qrSkeleton) qrSkeleton.hidden = true;
+    if (qrContainer) qrContainer.hidden = false;
+
     if (waQrStatus) waQrStatus.textContent = "Waiting for QR code...";
 
     // Render QR if we already have one
@@ -178,6 +201,8 @@ async function startWhatsAppQr() {
     // Start polling for status + QR updates
     startWaStatusPolling();
   } catch (error) {
+    if (qrSkeleton) qrSkeleton.hidden = true;
+    if (waQrPanel) waQrPanel.hidden = true;
     window.alert(error.message || "Failed to start WhatsApp QR login.");
   } finally {
     if (waStartPairingButton) waStartPairingButton.disabled = false;
@@ -268,6 +293,10 @@ async function pollWaStatus() {
 
     // Update QR if available
     if (body.qr && waQrPanel && !waQrPanel.hidden) {
+      var qrSkeleton = document.querySelector("#wa-qr-skeleton");
+      var qrContainer = document.querySelector("#wa-qr-container");
+      if (qrSkeleton) qrSkeleton.hidden = true;
+      if (qrContainer) qrContainer.hidden = false;
       renderQrCode(body.qr);
       if (waQrStatus) waQrStatus.textContent = "Scan this QR with WhatsApp.";
     }
