@@ -473,7 +473,7 @@ _TEMPLATES_COLLECTION = "wa_custom_templates"
 @wa_web_bp.route("/templates", methods=["GET"])
 @_require_auth
 def list_custom_templates():
-    """List custom templates. Users see only their own + approved ones."""
+    """List custom templates. Admins see all; regular users see only their own."""
     from flask import current_app
     from samaj.app import role_can
     collection = current_app.extensions.get("mongo_collection")
@@ -484,15 +484,12 @@ def list_custom_templates():
     is_admin = role_can("manage_wa_web")
 
     if is_admin:
-        # Admin sees all templates
+        # Admin sees all templates (for approval/management)
         templates = list(col.find({}).sort("createdAt", -1))
     else:
-        # Users see their own (any status) + all approved
+        # Users see ONLY their own templates (any status)
         templates = list(col.find({
-            "$or": [
-                {"createdBy": user_id},
-                {"status": "approved"},
-            ]
+            "createdBy": user_id,
         }).sort("createdAt", -1))
 
     for t in templates:

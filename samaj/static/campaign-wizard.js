@@ -1272,63 +1272,26 @@
   function renderCustomTemplateDropdown() {
     var listEl = document.getElementById("cm-custom-tpl-list");
     var select = document.getElementById("cm-custom-tpl-select");
+    var preview = document.getElementById("cm-custom-tpl-preview");
     if (!listEl) return;
 
     if (customTemplatesCache.length === 0) {
-      listEl.innerHTML = '<p class="text-xs text-slate-400 py-2">No custom templates yet.</p>';
+      listEl.innerHTML = '<p class="text-xs text-slate-400 py-2">No approved custom templates yet.</p>';
+      if (select) { select.classList.add("hidden"); select.innerHTML = ""; }
       return;
     }
 
-    listEl.innerHTML = customTemplatesCache.map(function (t) {
-      return '<div class="flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg bg-white hover:border-emerald-300 transition-colors cursor-pointer cm-custom-tpl-item" data-id="' + escapeHtml(t._id) + '">' +
-        '<div class="flex-1 min-w-0">' +
-          '<span class="text-sm font-medium text-slate-800">' + escapeHtml(t.name) + '</span>' +
-          '<span class="text-[11px] text-slate-400 ml-2">(' + escapeHtml(t.language || "") + ')</span>' +
-        '</div>' +
-        '<button type="button" class="cm-custom-tpl-del flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-red-400 hover:text-red-600 hover:bg-red-50 text-sm" data-id="' + escapeHtml(t._id) + '" title="Delete">×</button>' +
-      '</div>';
-    }).join("");
+    // Show the select dropdown, hide the stacked list container
+    listEl.innerHTML = "";
 
-    // Wire click to select
-    listEl.querySelectorAll(".cm-custom-tpl-item").forEach(function (item) {
-      item.addEventListener("click", function (e) {
-        if (e.target.closest(".cm-custom-tpl-del")) return; // Don't select when clicking delete
-        var id = item.dataset.id;
-        // Deselect all
-        listEl.querySelectorAll(".cm-custom-tpl-item").forEach(function (el) {
-          el.classList.remove("border-emerald-500", "bg-emerald-50");
-          el.classList.add("border-slate-200");
-        });
-        // Select this one
-        item.classList.remove("border-slate-200");
-        item.classList.add("border-emerald-500", "bg-emerald-50");
-        // Trigger the hidden select change logic
-        if (select) { select.value = id; select.dispatchEvent(new Event("change")); }
-      });
-    });
-
-    // Wire delete buttons
-    listEl.querySelectorAll(".cm-custom-tpl-del").forEach(function (btn) {
-      btn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        if (!confirm("Delete this template?")) return;
-        fetch("/api/wa-web/templates/" + btn.dataset.id, {
-          method: "DELETE", credentials: "same-origin",
-        }).then(function (r) { return r.json(); }).then(function (d) {
-          if (d.error) { alert(d.error); return; }
-          customTemplatesLoaded = false;
-          fetchCustomTemplates();
-        }).catch(function () {});
-      });
-    });
-
-    // Also populate the hidden select for the existing change handler
     if (select) {
-      var opts = '<option value="">— None —</option>';
+      var opts = '<option value="">— Select a custom template —</option>';
       customTemplatesCache.forEach(function (t) {
-        opts += '<option value="' + escapeHtml(t._id) + '">' + escapeHtml(t.name) + '</option>';
+        opts += '<option value="' + escapeHtml(t._id) + '">' + escapeHtml(t.name) + ' (' + escapeHtml(t.language || "hi") + ')</option>';
       });
       select.innerHTML = opts;
+      select.classList.remove("hidden");
+      select.className = "w-full h-11 rounded-xl border border-slate-300 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 bg-white";
     }
   }
 

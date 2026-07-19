@@ -720,10 +720,10 @@
           <div class="mt-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
             <h3 class="text-sm font-semibold text-slate-700 mb-2">Or use a custom template</h3>
             <p class="text-xs text-slate-500 mb-3">Select from your approved custom templates.</p>
-            <div id="cm-custom-tpl-list" class="space-y-2 mb-2">
-              <!-- Populated by JS with selectable template items + delete buttons -->
+            <div id="cm-custom-tpl-list" class="mb-2">
+              <!-- Populated by JS if no templates available -->
             </div>
-            <select id="cm-custom-tpl-select" class="hidden"></select>
+            <select id="cm-custom-tpl-select" class="hidden w-full h-11 rounded-xl border border-slate-300 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 bg-white"></select>
             <p id="cm-custom-tpl-preview" class="text-xs text-slate-500 mt-2 hidden"></p>
 
             <!-- Create New Template (inline) -->
