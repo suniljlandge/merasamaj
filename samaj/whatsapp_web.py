@@ -97,7 +97,13 @@ def connect_session(user_id: str, phone_number: str) -> dict:
         json={"userId": user_id, "phoneNumber": phone_number},
         timeout=30,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        # Extract error message from sidecar response
+        try:
+            error_msg = resp.json().get("error", resp.text)
+        except Exception:
+            error_msg = resp.text or f"Sidecar returned {resp.status_code}"
+        raise RuntimeError(error_msg)
     return resp.json()
 
 

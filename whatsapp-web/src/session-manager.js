@@ -49,10 +49,6 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     await clearAuthState(authCollection, userId);
     logger.info({ userId }, "Cleared old auth state for fresh pairing");
 
-    // Clear old auth state for fresh pairing
-    await clearAuthState(authCollection, userId);
-    logger.info({ userId }, "Cleared old auth state for fresh pairing");
-
     const { state, saveCreds } = await useMongoDBAuthState(authCollection, userId);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -157,14 +153,30 @@ function createSessionManager(db, logger, { onConnected } = {}) {
     // Request pairing code (OTP-based login)
     let pairingCode = null;
     if (!sock.authState.creds.registered) {
-      // Wait for socket to be ready before requesting code
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Wait for socket to be ready before requesting code.
+      // On remote servers, WhatsApp WS handshake can take 5-8s.
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Check if socket disconnected during the wait
+      if (connectionStatus.get(userId) === "disconnected" || !activeSockets.has(userId)) {
+        throw new Error("WhatsApp connection failed during setup. Please try again.");
+      }
       
       // Clean phone number: remove +, spaces, dashes — must be digits with country code
       const cleanNumber = phoneNumber.replace(/[^0-9]/g, "");
       logger.info({ userId, cleanNumber }, "Requesting pairing code");
-      pairingCode = await sock.requestPairingCode(cleanNumber);
-      logger.info({ userId, pairingCode }, "Pairing code generated");
+      try {
+        pairingCode = await sock.requestPairingCode(cleanNumber);
+        logger.info({ userId, pairingCode }, "Pairing code generated");
+      } catch (pairingErr) {
+        logger.error({ userId, err: pairingErr.message }, "Pairing code request failed");
+        throw new Error(
+          "Could not get pairing code. " +
+          (pairingErr.message.includes("rate")
+            ? "Too many attempts — wait a few minutes and try again."
+            : "WhatsApp may be temporarily unavailable. Try again shortly.")
+        );
+      }
     } else {
       connectionStatus.set(userId, "connected");
     }

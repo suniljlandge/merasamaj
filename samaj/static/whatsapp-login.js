@@ -186,16 +186,15 @@ async function startWhatsAppQr() {
     waCurrentSessionId = body.sessionId;
     waVerified = false;
 
-    // Hide skeleton, show real QR container
-    if (qrSkeleton) qrSkeleton.hidden = true;
-    if (qrContainer) qrContainer.hidden = false;
-
-    if (waQrStatus) waQrStatus.textContent = "Waiting for QR code...";
-
-    // Render QR if we already have one
+    // If QR is already available, show it immediately
     if (body.qr) {
+      if (qrSkeleton) qrSkeleton.hidden = true;
+      if (qrContainer) qrContainer.hidden = false;
       renderQrCode(body.qr);
       if (waQrStatus) waQrStatus.textContent = "Scan this QR with WhatsApp.";
+    } else {
+      // Keep skeleton visible — QR will arrive via polling
+      if (waQrStatus) waQrStatus.textContent = "Generating QR code...";
     }
 
     // Start polling for status + QR updates
@@ -325,9 +324,12 @@ async function pollWaStatus() {
     // Update status text (pre-verification)
     if (body.status === "connecting") {
       if (waPairingStatus) waPairingStatus.textContent = "Waiting for you to link...";
-      if (waQrStatus) waQrStatus.textContent = "Waiting for scan...";
+      if (waQrStatus) waQrStatus.textContent = "Connecting to WhatsApp...";
     } else if (body.status === "waiting_qr") {
-      if (waQrStatus) waQrStatus.textContent = "QR code ready. Scan with WhatsApp.";
+      // Only say "ready" if QR was actually rendered above
+      if (!body.qr) {
+        if (waQrStatus) waQrStatus.textContent = "Generating QR code...";
+      }
     }
   } catch (error) {
     // Network error, keep polling

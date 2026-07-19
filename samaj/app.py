@@ -2067,7 +2067,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             )
         except Exception as e:
             return jsonify({
-                "error": f"Failed to start WhatsApp session: {str(e)}"
+                "error": str(e) or "Could not connect to WhatsApp. Please try again."
             }), 500
 
         # Store the login session mapping in a temporary collection
