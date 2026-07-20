@@ -7438,7 +7438,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "edit_all_registrations": False,
         "delete_registrations": False,
         "update_invitation_name": False,
-        "access_family_tree": False,
+        "access_family_tree": True,
         "manage_users": False,
         "review_self_registrations": False,
         "view_leaderboard": False,
