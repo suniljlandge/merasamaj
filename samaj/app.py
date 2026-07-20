@@ -7432,7 +7432,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "manage_wa_routing": False,
     },
     "campaigner": {
-        "access_directory": False,
+        "access_directory": True,
         "create_registrations": False,
         "view_all_registrations": False,
         "edit_all_registrations": False,
