@@ -190,7 +190,7 @@ async function loginStaffUser() {
 
   if (response.ok) {
     const data = await response.json();
-    if (data.role === "campaign_admin") {
+    if (data.role === "campaign_admin" || data.role === "campaigner") {
       window.location = "/campaign-manager";
     } else {
       window.location = "/";

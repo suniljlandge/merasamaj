@@ -365,9 +365,13 @@ def create_app(config=None, collection=None, correction_collection=None):
     @app.route("/campaign-manager")
     def campaign_manager_page():
 
-        # Campaigner public sessions and campaign_admin staff sessions may
-        # view the campaign manager. Any other visitor is sent to login.
-        if not is_campaigner_session() and not is_campaign_admin_session():
+        # Campaigner public sessions, campaign_admin staff sessions, and
+        # staff users with the 'campaigner' role may view the campaign manager.
+        if (
+            not is_campaigner_session()
+            and not is_campaign_admin_session()
+            and not (is_staff_session() and session.get("role") == "campaigner")
+        ):
             return redirect("/login")
 
         return render_template(
@@ -1537,6 +1541,9 @@ def create_app(config=None, collection=None, correction_collection=None):
                 if is_campaign_admin_session():
                     return redirect("/campaign-manager")
 
+                if current_role() == "campaigner":
+                    return redirect("/campaign-manager")
+
                 if is_pending_public_session():
                     return redirect("/self-register")
 
@@ -2432,7 +2439,13 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         filters = {}
 
-        if current_role() != "super_admin":
+        role = current_role()
+        if role == "super_admin":
+            pass  # sees all users
+        elif role == "campaign_admin":
+            # campaign_admin can only manage campaigner users
+            filters["role"] = {"$in": get_assignable_roles(role)}
+        else:
             filters["role"] = {
                 "$ne": "super_admin"
             }
@@ -5188,11 +5201,16 @@ def is_campaign_admin_session():
 
 def require_campaigner(view):
     """Decorator that restricts a view to campaigner sessions or campaign_admin
-    staff sessions. Any other session (unauthenticated, non-campaign staff, or
+    staff sessions, or staff users with the 'campaigner' role.
+    Any other session (unauthenticated, non-campaign staff, or
     registrant) receives a 403 JSON error (Requirements 1.6, 11.1, 11.2)."""
     @functools.wraps(view)
     def wrapper(*args, **kwargs):
-        if not is_campaigner_session() and not is_campaign_admin_session():
+        if (
+            not is_campaigner_session()
+            and not is_campaign_admin_session()
+            and not (is_staff_session() and session.get("role") == "campaigner")
+        ):
             return jsonify({
                 "error": "Campaigner access required."
             }), 403
@@ -7160,13 +7178,18 @@ ROLE_ASSIGNMENT_RULES = {
         "super_admin",
         "admin",
         "campaign_admin",
+        "campaigner",
         "operator",
         "viewer",
     ],
     "admin": [
         "campaign_admin",
+        "campaigner",
         "operator",
         "viewer",
+    ],
+    "campaign_admin": [
+        "campaigner",
     ],
 }
 
@@ -7175,13 +7198,18 @@ ROLE_DELETION_RULES = {
         "super_admin",
         "admin",
         "campaign_admin",
+        "campaigner",
         "operator",
         "viewer",
     ],
     "admin": [
         "campaign_admin",
+        "campaigner",
         "operator",
         "viewer",
+    ],
+    "campaign_admin": [
+        "campaigner",
     ],
 }
 
@@ -7210,6 +7238,7 @@ MANAGED_ROLES = [
     "super_admin",
     "admin",
     "campaign_admin",
+    "campaigner",
     "operator",
     "viewer",
 ]
@@ -7218,6 +7247,7 @@ ROLE_LABELS = {
     "super_admin": "Super Admin",
     "admin": "Admin",
     "campaign_admin": "Campaign Admin",
+    "campaigner": "Campaigner",
     "operator": "Operator",
     "viewer": "Viewer",
 }
@@ -7387,7 +7417,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "delete_registrations": False,
         "update_invitation_name": False,
         "access_family_tree": True,
-        "manage_users": False,
+        "manage_users": True,
         "review_self_registrations": False,
         "view_leaderboard": False,
         "bulk_import": False,
@@ -7399,6 +7429,28 @@ DEFAULT_ROLE_PERMISSIONS = {
         "export_address_areas": False,
         "confirm_campaign_payments": True,
         "manage_wa_web": True,
+        "manage_wa_routing": False,
+    },
+    "campaigner": {
+        "access_directory": False,
+        "create_registrations": False,
+        "view_all_registrations": False,
+        "edit_all_registrations": False,
+        "delete_registrations": False,
+        "update_invitation_name": False,
+        "access_family_tree": False,
+        "manage_users": False,
+        "review_self_registrations": False,
+        "view_leaderboard": False,
+        "bulk_import": False,
+        "export_directory": False,
+        "manage_otp_settings": False,
+        "manage_role_config": False,
+        "manage_transliteration": False,
+        "manage_address_areas": False,
+        "export_address_areas": False,
+        "confirm_campaign_payments": False,
+        "manage_wa_web": False,
         "manage_wa_routing": False,
     },
     "operator": {
