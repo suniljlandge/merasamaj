@@ -249,6 +249,9 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         role = current_role()
 
+        if role == "campaigner":
+            return redirect("/campaign-manager")
+
         if role == "viewer":
             return redirect(
                 "/directory"
@@ -269,7 +272,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         document_id = object_id_or_none(id)
 
         if not document_id:
-            return redirect("/directory")
+            return home_redirect()
 
         document = (
             get_collection()
@@ -279,7 +282,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         if not can_view_registration(document):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "view-member.html",
@@ -295,7 +298,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         document_id = object_id_or_none(id)
 
         if not document_id:
-            return redirect("/directory")
+            return home_redirect()
 
         document = (
             get_collection()
@@ -305,7 +308,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         if not can_view_family_tree(document):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "family-tree.html",
@@ -384,7 +387,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     def otp_settings_page():
 
         if not role_can("manage_otp_settings"):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "otp-settings.html",
@@ -395,7 +398,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     def self_registration_review_page():
 
         if not role_can("review_self_registrations"):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "self-registration-review.html",
@@ -406,7 +409,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     def user_management_page():
 
         if not role_can("manage_users"):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "user-management.html",
@@ -420,7 +423,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     def superadmin_dashboard_page():
 
         if not role_can("manage_role_config"):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "superadmin.html",
@@ -431,7 +434,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     def whatsapp_web_page():
         """WhatsApp Web connection page — available to users with manage_wa_web."""
         if not role_can("manage_wa_web"):
-            return redirect("/directory")
+            return home_redirect()
         return render_template(
             "whatsapp-web.html",
             current_role=current_role(),
@@ -441,7 +444,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     def wa_routing_page():
         """Routing engine control panel — super admin only."""
         if not role_can("manage_wa_routing"):
-            return redirect("/directory")
+            return home_redirect()
         return render_template(
             "wa-routing.html",
             current_role=current_role(),
@@ -452,7 +455,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         """Dedicated page for confirming pending UPI campaign payments."""
 
         if not is_staff_session() or not role_can("confirm_campaign_payments"):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "campaign-payments.html",
@@ -465,7 +468,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         can_translit = role_can("manage_transliteration")
         can_address = role_can("manage_address_areas")
         if not (can_translit or can_address):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "data-tools.html",
@@ -1163,7 +1166,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         document_id = object_id_or_none(id)
 
         if not document_id:
-            return redirect("/directory")
+            return home_redirect()
 
         document = (
             get_collection()
@@ -1175,7 +1178,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         if not can_edit_registration(
             document
         ):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "edit-member.html",
@@ -1207,7 +1210,7 @@ def create_app(config=None, collection=None, correction_collection=None):
     def operator_leaderboard_page():
 
         if not role_can("view_leaderboard"):
-            return redirect("/directory")
+            return home_redirect()
 
         return render_template(
             "operator-leaderboard.html",
@@ -5141,6 +5144,17 @@ def build_directory_export_rows(
 
 def require_auth():
     return is_staff_session() or is_public_session()
+
+
+def home_redirect():
+    """Return the appropriate home redirect for the current session's role."""
+    role = current_role()
+    if role == "campaigner" or role == "campaign_admin":
+        return redirect("/campaign-manager")
+    if is_campaigner_session():
+        return redirect("/campaign-manager")
+    return redirect("/directory")
+
 
 def require_role(*roles):
     return (

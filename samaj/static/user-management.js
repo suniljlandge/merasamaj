@@ -168,7 +168,11 @@ function canChangePassword(user) {
   }
 
   if (currentRole === "admin") {
-    return role === "operator" || role === "viewer";
+    return role === "operator" || role === "viewer" || role === "campaign_admin" || role === "campaigner";
+  }
+
+  if (currentRole === "campaign_admin") {
+    return role === "campaigner";
   }
 
   return false;
@@ -182,7 +186,11 @@ function canDeleteUser(user) {
   }
 
   if (currentRole === "admin") {
-    return role === "operator" || role === "viewer";
+    return role === "operator" || role === "viewer" || role === "campaign_admin" || role === "campaigner";
+  }
+
+  if (currentRole === "campaign_admin") {
+    return role === "campaigner";
   }
 
   return false;
