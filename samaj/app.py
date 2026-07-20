@@ -433,16 +433,6 @@ def create_app(config=None, collection=None, correction_collection=None):
             current_role=current_role(),
         )
 
-    @app.route("/wa-backup-dashboard")
-    def wa_backup_dashboard_page():
-        """Backup dashboard + contact viewer — super admin only."""
-        if not role_can("manage_wa_web"):
-            return redirect("/directory")
-        return render_template(
-            "wa-backup-dashboard.html",
-            current_role=current_role(),
-        )
-
     @app.route("/wa-routing")
     def wa_routing_page():
         """Routing engine control panel — super admin only."""
