@@ -11,6 +11,7 @@ from samaj.tenancy import (
     scope_for_session,
     scoped_query,
 )
+from bson import ObjectId
 from samaj.db import ensure_tenant_indexes
 from samaj.tenant_migration import (
     backfill_city_ids,
@@ -117,6 +118,18 @@ def test_scope_for_active_staff_uses_matching_city():
         city_id="city-a",
         reason="staff",
     )
+
+
+def test_scope_accepts_serialized_session_city_and_returns_database_id():
+    city_id = ObjectId()
+
+    scope = scope_for_session(
+        {"role": "admin", "cityId": str(city_id)},
+        {"role": "admin", "cityId": city_id, "isActive": True},
+        {"_id": city_id, "isActive": True},
+    )
+
+    assert scope.city_id == city_id
 
 
 @pytest.mark.parametrize(
