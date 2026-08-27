@@ -12,6 +12,13 @@ from samaj.tenancy import (
     scoped_query,
 )
 from samaj.db import ensure_tenant_indexes
+from samaj.tenant_migration import (
+    backfill_city_ids,
+    ensure_initial_city,
+    migrate_legacy_tenants,
+    validate_city_references,
+)
+from tests.test_user_management import FakeDatabase
 
 
 class FakeCitiesCollection:
@@ -167,3 +174,94 @@ def test_ensure_tenant_indexes_covers_city_owned_collections_and_audit():
     assert ([('sourceCityId', 1), ('changedAt', -1)], {}) in (
         database["city_transfers"].indexes
     )
+
+
+def test_ensure_initial_city_seeds_active_washim_once():
+    database = FakeDatabase()
+    cities = database["cities"]
+
+    first = ensure_initial_city(cities)
+    second = ensure_initial_city(cities)
+
+    assert first["_id"] == second["_id"]
+    assert first["name"] == "Washim"
+    assert first["nameKey"] == "washim"
+    assert first["isActive"] is True
+    assert len(list(cities.find({"nameKey": "washim"}))) == 1
+
+
+def test_backfill_assigns_only_missing_city_ids_and_skips_superadmin():
+    database = FakeDatabase()
+    existing_city = "existing-city"
+    database["registrations"].insert_one({"name": "legacy"})
+    database["registrations"].insert_one({
+        "name": "assigned",
+        "cityId": existing_city,
+    })
+    database["users"].insert_one({"username": "admin", "role": "admin"})
+    database["users"].insert_one({
+        "username": "root",
+        "role": "super_admin",
+    })
+
+    counts = backfill_city_ids(database, "washim-id")
+
+    assert counts["registrations"] == 1
+    assert counts["users"] == 1
+    assert database["registrations"].find_one({"name": "legacy"})[
+        "cityId"
+    ] == "washim-id"
+    assert database["registrations"].find_one({"name": "assigned"})[
+        "cityId"
+    ] == existing_city
+    assert "cityId" not in database["users"].find_one({"username": "root"})
+
+
+def test_backfill_dry_run_counts_without_writing():
+    database = FakeDatabase()
+    database["campaigns"].insert_one({"name": "legacy"})
+
+    counts = backfill_city_ids(database, "washim-id", dry_run=True)
+
+    assert counts["campaigns"] == 1
+    assert "cityId" not in database["campaigns"].find_one({"name": "legacy"})
+
+
+def test_validation_reports_missing_and_invalid_city_references():
+    database = FakeDatabase()
+    database["cities"].insert_one({
+        "_id": "washim-id",
+        "name": "Washim",
+        "nameKey": "washim",
+        "isActive": True,
+    })
+    database["registrations"].insert_one({"name": "missing"})
+    database["registrations"].insert_one({
+        "name": "invalid",
+        "cityId": "missing-city",
+    })
+    database["registrations"].insert_one({
+        "name": "valid",
+        "cityId": "washim-id",
+    })
+
+    result = validate_city_references(database, database["cities"])
+
+    assert result["ok"] is False
+    assert result["missing_by_collection"]["registrations"] == 1
+    assert result["invalid_by_collection"]["registrations"] == 1
+
+
+def test_migration_is_idempotent_and_validates_backfill():
+    database = FakeDatabase()
+    database["registrations"].insert_one({"name": "legacy"})
+    database["public_accounts"].insert_one({"mobileNumber": "9876543210"})
+
+    first = migrate_legacy_tenants(database)
+    second = migrate_legacy_tenants(database)
+
+    assert first["backfilled"]["registrations"] == 1
+    assert first["backfilled"]["public_accounts"] == 1
+    assert second["backfilled"]["registrations"] == 0
+    assert second["backfilled"]["public_accounts"] == 0
+    assert second["validation"]["ok"] is True
