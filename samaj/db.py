@@ -1,6 +1,35 @@
 from pymongo import MongoClient
 
 
+CITY_OWNED_COLLECTIONS = (
+    "users",
+    "public_accounts",
+    "self_registrations",
+    "campaigns",
+    "campaign_payments",
+    "campaign_messages",
+)
+
+
+def ensure_tenant_indexes(database, registration_collection):
+    registration_collection.create_index("cityId")
+
+    for collection_name in CITY_OWNED_COLLECTIONS:
+        database[collection_name].create_index("cityId")
+
+    database["cities"].create_index("nameKey", unique=True)
+    database["cities"].create_index("isActive")
+    database["city_transfers"].create_index(
+        [("sourceCityId", 1), ("changedAt", -1)]
+    )
+    database["city_transfers"].create_index(
+        [("destinationCityId", 1), ("changedAt", -1)]
+    )
+    database["city_transfers"].create_index(
+        [("entityType", 1), ("entityId", 1), ("changedAt", -1)]
+    )
+
+
 def create_collections(config):
     client = MongoClient(config["MONGO_URI"])
     database = client[config["MONGO_DB"]]
@@ -31,6 +60,7 @@ def create_collections(config):
     )
     correction_collection.create_index("source", unique=True)
     correction_collection.create_index([("updatedAt", -1)])
+    ensure_tenant_indexes(database, collection)
     return client, collection, correction_collection
 
 
