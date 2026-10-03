@@ -82,6 +82,10 @@
                 Verified mobile:
                 <strong id="verified-mobile-copy"></strong>
               </p>
+              <p class="section-note">
+                City:
+                <strong id="verified-city-copy"></strong>
+              </p>
             </div>
           </div>
 
@@ -144,6 +148,12 @@
             value="household-primary"
           >
 
+          <input
+            type="hidden"
+            id="cityId"
+            value="{{ public_account.cityId }}"
+          >
+
           <div
             class="form-section"
             data-wizard-step="2"
@@ -163,6 +173,21 @@
                   required
                   readonly
                 >
+              </label>
+
+              <label class="field">
+                <span>Profession</span>
+                <select id="profession" name="profession">
+                  <option value="Not Added">Not Added</option>
+                  <option value="Doctor">Doctor</option>
+                  <option value="Teacher">Teacher</option>
+                  <option value="Advocate">Advocate</option>
+                  <option value="Chartered Accountant (CA)">Chartered Accountant (CA)</option>
+                  <option value="Company Secretary (CS)">Company Secretary (CS)</option>
+                  <option value="Business">Business</option>
+                  <option value="Contractor">Contractor</option>
+                  <option value="Other">Other</option>
+                </select>
               </label>
             </div>
           </div>
@@ -190,6 +215,27 @@
                   min="1900"
                   max="2099"
                   placeholder="1998"
+                >
+              </label>
+
+              <label class="married-toggle deceased-toggle">
+                <input
+                  type="checkbox"
+                  class="deceased-checkbox"
+                  id="isDeceased"
+                >
+                <span>Deceased</span>
+              </label>
+
+              <label
+                class="field"
+                id="deathDateField"
+                style="display:none;"
+              >
+                <span>Date of death (optional)</span>
+                <input
+                  id="deathDate"
+                  type="date"
                 >
               </label>
             </div>

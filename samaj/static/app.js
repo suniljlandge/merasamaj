@@ -23,15 +23,10 @@ const memberDirectory =
     "#member-directory"
   );
 
-const LOCATION_DATA = {
-  Maharashtra: {
-    Washim: ["Washim", "Malegaon", "Mangrulpir", "Karanja", "Risod", "Manora"],
-    Amravati: ["Amravati", "Achalpur", "Chandur Railway", "Daryapur", "Morshi"],
-    Akola: ["Akola", "Balapur", "Patur", "Murtizapur"],
-    Buldhana: ["Buldhana", "Khamgaon", "Shegaon", "Malkapur", "Jalgaon Jamod"],
-    Yavatmal: ["Yavatmal", "Darwha", "Digras", "Pusad", "Umarkhed"],
-    Nagpur: ["Nagpur", "Katol", "Hingna", "Kalameshwar", "Kamptee"]
-  }
+// LOCATION_DATA is loaded dynamically from /api/locations, which derives
+// districts and talukas from the active cities created by the superadmin.
+let LOCATION_DATA = {
+  Maharashtra: {}
 };
 
 const TEXT_FIELDS = [
@@ -92,6 +87,18 @@ const MARRIAGE_ALLOWED_RELATIONS = [
   "Niece",
   "Father-in-law",
   "Mother-in-law"
+];
+
+const PROFESSION_OPTIONS = [
+  "Not Added",
+  "Doctor",
+  "Teacher",
+  "Advocate",
+  "Chartered Accountant (CA)",
+  "Company Secretary (CS)",
+  "Business",
+  "Contractor",
+  "Other"
 ];
 
 const OBVIOUS_MARRIED_RELATIONS = [
@@ -238,12 +245,34 @@ input.addEventListener(
   );
 }
 
+function setupApplicantDeceasedToggle() {
+  const checkbox =
+    document.querySelector("#isDeceased");
+  const field =
+    document.querySelector("#deathDateField");
+
+  if (!checkbox || !field) {
+    return;
+  }
+
+  const sync = () => {
+    field.style.display =
+      checkbox.checked
+        ? "grid"
+        : "none";
+  };
+
+  checkbox.addEventListener("change", sync);
+  sync();
+}
+
 if (form) {
   renderApplicantFields();
   renderFamilyMembers();
-  setupLocationDropdowns();
+  loadLocations().then(() => setupLocationDropdowns());
   setupAutoCapitalization();
   setupPhoneInputSanitization();
+  setupApplicantDeceasedToggle();
   syncWizardMode();
 
   form.addEventListener("submit", handleSubmit);
@@ -258,7 +287,7 @@ if (form) {
       }
 
       renderFamilyMembers();
-      setupLocationDropdowns();
+      loadLocations().then(() => setupLocationDropdowns());
       wireAutoTransliteration();
       setupAutoCapitalization();
       setupPhoneInputSanitization();
@@ -332,7 +361,7 @@ if (
   memberDirectory
 ) {
 
-  setupSearchFilters();
+  loadLocations().then(() => setupSearchFilters());
 
   searchButton.addEventListener(
     "click",
@@ -532,6 +561,35 @@ memberContainer
   });
 
   memberContainer
+  .querySelectorAll('[data-member-deceased]')
+  .forEach((checkbox) => {
+
+    checkbox.addEventListener(
+      "change",
+      () => {
+
+        const index =
+          checkbox.dataset.memberDeceased;
+
+        const section =
+          memberContainer.querySelector(
+            `[data-deathdate-wrap="${index}"]`
+          );
+
+        if (!section) {
+          return;
+        }
+
+        section.style.display =
+          checkbox.checked
+            ? "grid"
+            : "none";
+      }
+    );
+
+  });
+
+  memberContainer
   .querySelectorAll(
     '[data-member-relation]'
   )
@@ -693,6 +751,15 @@ function renderMemberCard(index, value = {}, allMembers = []) {
   const currentCity =
     value.currentCity ?? "";
 
+  const birthDate =
+    value.birthDate ?? "";
+
+  const isDeceased =
+    value.isDeceased === true;
+
+  const deathDate =
+    value.deathDate ?? "";
+
   const isMarried =
     value.isMarried
     ?? OBVIOUS_MARRIED_RELATIONS.includes(relationValue);
@@ -714,6 +781,9 @@ function renderMemberCard(index, value = {}, allMembers = []) {
 
   const spouseMemberId =
     value.spouseMemberId ?? "";
+
+  const profession =
+    value.profession ?? "Not Added";
 
   const relationshipLinks =
     Array.isArray(value.relationshipLinks)
@@ -817,6 +887,70 @@ function renderMemberCard(index, value = {}, allMembers = []) {
             )}"
             placeholder="9876543210 or +919876543210"
             required
+          >
+
+        </label>
+
+        <label class="field">
+
+          <span>Date of birth (optional)</span>
+
+          <input
+            type="date"
+            data-member-birthdate="${index}"
+            value="${escapeAttribute(birthDate)}"
+          >
+
+        </label>
+
+        <label class="field">
+
+          <span>Profession</span>
+
+          <select
+            data-member-profession="${index}"
+          >
+            ${PROFESSION_OPTIONS
+              .map(
+                (opt) => `
+                  <option
+                    value="${opt}"
+                    ${profession === opt ? "selected" : ""}
+                  >
+                    ${opt}
+                  </option>
+                `
+              )
+              .join("")}
+          </select>
+
+        </label>
+
+        <label class="married-toggle deceased-toggle">
+
+          <input
+            type="checkbox"
+            class="deceased-checkbox"
+            data-member-deceased="${index}"
+            ${isDeceased ? "checked" : ""}
+          >
+
+          <span>Deceased</span>
+
+        </label>
+
+        <label
+          class="field"
+          data-deathdate-wrap="${index}"
+          style="display:${isDeceased ? "grid" : "none"};"
+        >
+
+          <span>Date of death (optional)</span>
+
+          <input
+            type="date"
+            data-member-deathdate="${index}"
+            value="${escapeAttribute(deathDate)}"
           >
 
         </label>
@@ -1137,10 +1271,24 @@ function shouldShowMarriageFields(
 
 
 
+async function loadLocations() {
+  try {
+    const response = await fetch("/api/locations");
+    const data = await response.json();
+    if (response.ok && data) {
+      LOCATION_DATA = {
+        Maharashtra: data.district_talukas || {}
+      };
+    }
+  } catch (error) {
+    console.error("Failed to load locations:", error);
+  }
+}
+
 function setupLocationDropdowns(
   selectedState = "Maharashtra",
-  selectedDistrict = "Washim",
-  selectedTaluka = "Washim"
+  selectedDistrict = "",
+  selectedTaluka = ""
 ) {
   const stateSelect =
     document.querySelector("#state");
@@ -1643,7 +1791,7 @@ setTimeout(() => {
 
   renderFamilyMembers();
 
-  setupLocationDropdowns();
+  loadLocations().then(() => setupLocationDropdowns());
 
   wireAutoTransliteration();
   setupAutoCapitalization();
@@ -1711,7 +1859,7 @@ setTimeout(() => {
 
   renderFamilyMembers();
 
-  setupLocationDropdowns();
+  loadLocations().then(() => setupLocationDropdowns());
 
   wireAutoTransliteration();
   setupAutoCapitalization();
@@ -1730,10 +1878,14 @@ function readRegistration() {
 
   payload.birthDate = document.querySelector("#birthDate")?.value || "";
   payload.birthYear = document.querySelector("#birthYear")?.value || "";
+  payload.isDeceased = document.querySelector("#isDeceased")?.checked || false;
+  payload.deathDate = document.querySelector("#deathDate")?.value || "";
   payload.state = document.querySelector("#state")?.value || "";
   payload.district = document.querySelector("#district")?.value || "";
   payload.taluka = document.querySelector("#taluka")?.value || "";
   payload.mobileNumber = document.querySelector("#mobileNumber")?.value || "";
+  payload.profession = document.querySelector("#profession")?.value || "Not Added";
+  payload.cityId = document.querySelector("#cityId")?.value || "";
   payload.familyType = familyTypeInput?.value || "nuclear";
   payload.primaryHouseholdId =
     primaryHouseholdInput?.value || "household-primary";
@@ -1756,6 +1908,12 @@ function populateRegistrationForm(record = {}) {
     document.querySelector("#birthDate");
   const birthYearInput =
     document.querySelector("#birthYear");
+  const deceasedInput =
+    document.querySelector("#isDeceased");
+  const deathDateInput =
+    document.querySelector("#deathDate");
+  const deathDateField =
+    document.querySelector("#deathDateField");
   const mobileInput =
     document.querySelector("#mobileNumber");
 
@@ -1769,9 +1927,34 @@ function populateRegistrationForm(record = {}) {
       record.birthYear || "";
   }
 
+  if (deceasedInput) {
+    deceasedInput.checked =
+      record.isDeceased === true;
+  }
+
+  if (deathDateInput) {
+    deathDateInput.value =
+      record.deathDate || "";
+  }
+
+  if (deathDateField) {
+    deathDateField.style.display =
+      record.isDeceased === true
+        ? "grid"
+        : "none";
+  }
+
   if (mobileInput) {
     mobileInput.value =
       record.mobileNumber || "";
+  }
+
+  const professionSelect =
+    document.querySelector("#profession");
+
+  if (professionSelect) {
+    professionSelect.value =
+      record.profession || "Not Added";
   }
 
   if (familyTypeInput) {
@@ -1789,10 +1972,12 @@ function populateRegistrationForm(record = {}) {
       record.familyId || "";
   }
 
-  setupLocationDropdowns(
-    record.state || "Maharashtra",
-    record.district || "Washim",
-    record.taluka || ""
+  loadLocations().then(() =>
+    setupLocationDropdowns(
+      record.state || "Maharashtra",
+      record.district || "",
+      record.taluka || ""
+    )
   );
 
   const familyMembers =
@@ -1947,6 +2132,26 @@ function readFamilyMembers() {
       card.querySelector(
         `[data-member-contact="${index}"]`
       )?.value ?? "",
+
+    birthDate:
+      card.querySelector(
+        `[data-member-birthdate="${index}"]`
+      )?.value || "",
+
+    profession:
+      card.querySelector(
+        `[data-member-profession="${index}"]`
+      )?.value || "Not Added",
+
+    isDeceased:
+      card.querySelector(
+        `[data-member-deceased="${index}"]`
+      )?.checked || false,
+
+    deathDate:
+      card.querySelector(
+        `[data-member-deathdate="${index}"]`
+      )?.value || "",
 
     isMarried:
       card.querySelector(
@@ -2124,6 +2329,7 @@ function getWizardStepForField(fieldName = "") {
     || fieldName.startsWith("lastName")
     || fieldName === "birthDate"
     || fieldName === "birthYear"
+    || fieldName === "deathDate"
   ) {
     return 1;
   }
@@ -2176,6 +2382,15 @@ function validateWizardStep(stepNumber) {
       errors.push({
         field: "birthDate",
         message: "Provide full DOB or birth year."
+      });
+    }
+
+    const deathDate = payload.deathDate.trim();
+
+    if (deathDate && !/^\d{4}-\d{2}-\d{2}$/.test(deathDate)) {
+      errors.push({
+        field: "deathDate",
+        message: "Death date must be YYYY-MM-DD."
       });
     }
   }
@@ -2321,6 +2536,7 @@ if (fieldKey === "spouseName") {
     mobileNumber: "#mobileNumber",
     birthDate: "#birthDate",
     birthYear: "#birthYear",
+    deathDate: "#deathDate",
     state: "#state",
     district: "#district",
     taluka: "#taluka"
@@ -2399,7 +2615,7 @@ function renderRecentCard(record) {
       <strong>${escapeHtml(name || "Unnamed")}</strong>
       <span lang="mr">${escapeHtml(marathi)}</span>
       <span>DOB: ${escapeHtml(dob)}</span>
-      <span>${escapeHtml(geo)} · ${(record.membersCount ?? 0) + 1}family members</span>
+      <span>${escapeHtml(geo)} · ${(record.membersCount ?? 0) + (record.isDeceased ? 0 : 1)} family members</span>
     </article>
   `;
 }
@@ -2618,4 +2834,6 @@ window.registrationFormApi = {
   clearMessage,
   highlightValidationErrors,
   activateWizardStep,
+  loadLocations,
+  setupLocationDropdowns,
 };

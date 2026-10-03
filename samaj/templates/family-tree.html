@@ -492,6 +492,18 @@
                   partnerRelation:
                     secondary.data?.relationToApplicant
                     || "",
+                  primaryBirthDate:
+                    primary.data?.birthDate || "",
+                  primaryBirthYear:
+                    primary.data?.birthYear || "",
+                  partnerBirthDate:
+                    secondary.data?.birthDate || "",
+                  partnerBirthYear:
+                    secondary.data?.birthYear || "",
+                  primaryIsDeceased:
+                    primary.data?.isDeceased || false,
+                  partnerIsDeceased:
+                    secondary.data?.isDeceased || false,
                   currentCity:
                     primary.data?.currentCity
                     || secondary.data?.currentCity
@@ -580,6 +592,240 @@
             animated: false,
           };
         });
+      }
+
+      function computeBirthInfo(birthDate, birthYear) {
+        const now = new Date();
+        const isoDate =
+          String(birthDate || "").trim();
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+          const parsed =
+            new Date(`${isoDate}T00:00:00`);
+
+          if (!Number.isNaN(parsed.getTime())) {
+            let age =
+              now.getFullYear()
+              - parsed.getFullYear();
+            const monthDelta =
+              now.getMonth() - parsed.getMonth();
+
+            if (
+              monthDelta < 0
+              || (monthDelta === 0
+                && now.getDate() < parsed.getDate())
+            ) {
+              age -= 1;
+            }
+
+            return {
+              dob: isoDate,
+              age: age >= 0 ? age : null,
+              approximate: false,
+            };
+          }
+        }
+
+        const year =
+          String(birthYear || "").trim();
+
+        if (/^\d{4}$/.test(year)) {
+          const age =
+            now.getFullYear() - Number(year);
+
+          return {
+            dob: year,
+            age: age >= 0 ? age : null,
+            approximate: true,
+          };
+        }
+
+        return {
+          dob: "",
+          age: null,
+          approximate: false,
+        };
+      }
+
+      function Halo({
+        show,
+      }) {
+        if (!show) {
+          return null;
+        }
+
+        return React.createElement("div", {
+          "aria-hidden": "true",
+          style: {
+            position: "absolute",
+            top: -14,
+            left: "50%",
+            width: 30,
+            height: 12,
+            transform: "translateX(-50%) rotateX(52deg)",
+            borderRadius: "50%",
+            border: "2.5px solid #f5b301",
+            background:
+              "radial-gradient(ellipse at center,"
+              + " rgba(255,236,179,0.45),"
+              + " rgba(255,236,179,0) 72%)",
+            boxShadow:
+              "0 0 6px 2px rgba(245,179,1,0.65),"
+              + " 0 0 12px 5px rgba(245,179,1,0.35),"
+              + " inset 0 0 4px rgba(255,214,102,0.75)",
+            pointerEvents: "none",
+          },
+        });
+      }
+
+      function NameWithHalo({
+        text,
+        deceased,
+        style,
+      }) {
+        return React.createElement(
+          "span",
+          {
+            style: {
+              position: "relative",
+              display: "inline-flex",
+              alignItems: "center",
+              ...(style || {}),
+            },
+          },
+          React.createElement(Halo, {
+            show: !!deceased,
+          }),
+          text
+        );
+      }
+
+      function InfoBadge({
+        birthDate,
+        birthYear,
+      }) {
+        const [open, setOpen] =
+          React.useState(false);
+        const info =
+          computeBirthInfo(birthDate, birthYear);
+
+        const stop = (event) => {
+          event.stopPropagation();
+        };
+
+        const ageText =
+          info.age === null
+            ? ""
+            : `${info.approximate ? "~" : ""}`
+              + `${info.age} yr`
+              + `${info.age === 1 ? "" : "s"}`;
+
+        return React.createElement(
+          "span",
+          {
+            onMouseEnter: () => setOpen(true),
+            onMouseLeave: () => setOpen(false),
+            onMouseDown: stop,
+            style: {
+              position: "relative",
+              display: "inline-flex",
+              alignItems: "center",
+            },
+          },
+          React.createElement(
+            "span",
+            {
+              title: "Date of birth",
+              "aria-label": "Date of birth",
+              style: {
+                cursor: "help",
+                color: info.dob ? "#0f766e" : "#94a3b8",
+                lineHeight: 1,
+                display: "inline-flex",
+                alignItems: "center",
+              },
+            },
+            React.createElement(
+              "svg",
+              {
+                width: 14,
+                height: 14,
+                viewBox: "0 0 24 24",
+                fill: "none",
+                stroke: "currentColor",
+                strokeWidth: 2,
+                strokeLinecap: "round",
+                strokeLinejoin: "round",
+                "aria-hidden": "true",
+                focusable: "false",
+                style: { display: "block" },
+              },
+              React.createElement("circle", {
+                cx: 12,
+                cy: 12,
+                r: 10,
+              }),
+              React.createElement("line", {
+                x1: 12,
+                y1: 16,
+                x2: 12,
+                y2: 12,
+              }),
+              React.createElement("line", {
+                x1: 12,
+                y1: 8,
+                x2: "12.01",
+                y2: 8,
+              })
+            )
+          ),
+          open
+            ? React.createElement(
+                "div",
+                {
+                  style: {
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "#0f172a",
+                    color: "#f8fafc",
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                    boxShadow:
+                      "0 8px 20px rgba(15,23,42,0.28)",
+                    zIndex: 50,
+                    pointerEvents: "none",
+                  },
+                },
+                info.dob
+                  ? React.createElement(
+                      React.Fragment,
+                      null,
+                      React.createElement(
+                        "div",
+                        null,
+                        `DOB: ${info.dob}`
+                      ),
+                      ageText
+                        ? React.createElement(
+                            "div",
+                            null,
+                            `Age: ${ageText}`
+                          )
+                        : null
+                    )
+                  : React.createElement(
+                      "div",
+                      null,
+                      "DOB not added"
+                    )
+              )
+            : null
+        );
       }
 
       function FamilyMemberNode({
@@ -736,11 +982,14 @@
                         flexWrap: "wrap",
                       },
                     },
-                    React.createElement(
-                      "span",
-                      null,
-                      data?.primaryName || "Unnamed"
-                    ),
+                    React.createElement(NameWithHalo, {
+                      text: data?.primaryName || "Unnamed",
+                      deceased: data?.primaryIsDeceased,
+                    }),
+                    React.createElement(InfoBadge, {
+                      birthDate: data?.primaryBirthDate,
+                      birthYear: data?.primaryBirthYear,
+                    }),
                     React.createElement(
                       "span",
                       {
@@ -751,15 +1000,17 @@
                       },
                       "❤"
                     ),
-                    React.createElement(
-                      "span",
-                      {
-                        style: {
-                          fontWeight: 600,
-                        },
+                    React.createElement(NameWithHalo, {
+                      text: data?.partnerName || "Partner",
+                      deceased: data?.partnerIsDeceased,
+                      style: {
+                        fontWeight: 600,
                       },
-                      data?.partnerName || "Partner"
-                    )
+                    }),
+                    React.createElement(InfoBadge, {
+                      birthDate: data?.partnerBirthDate,
+                      birthYear: data?.partnerBirthYear,
+                    })
                   ),
                   (
                     ["daughter", "sister"].includes(relation)
@@ -780,8 +1031,22 @@
                   null,
                   React.createElement(
                     "div",
-                    null,
-                    data?.label || "Unnamed member"
+                    {
+                      style: {
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                      },
+                    },
+                    React.createElement(NameWithHalo, {
+                      text: data?.label || "Unnamed member",
+                      deceased: data?.isDeceased,
+                    }),
+                    React.createElement(InfoBadge, {
+                      birthDate: data?.birthDate,
+                      birthYear: data?.birthYear,
+                    })
                   ),
                   (
                     ["daughter", "sister"].includes(relation)

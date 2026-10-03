@@ -237,12 +237,17 @@
   }
 
   // Total members in a family: the head of family (applicant) plus every
-  // entry in the familyMembers array. Always at least 1.
+  // living entry in the familyMembers array. Deceased people are preserved
+  // but not counted, so this can be 0 when the head is deceased.
   function membersCount(record) {
     record = record || {};
     var members = record.familyMembers;
-    var extra = Array.isArray(members) ? members.length : 0;
-    return extra + 1;
+    var extra = Array.isArray(members)
+      ? members.filter(function (member) {
+          return member && member.isDeceased !== true;
+        }).length
+      : 0;
+    return extra + (record.isDeceased ? 0 : 1);
   }
 
   function renderPagination(totalCount, page, perPage) {

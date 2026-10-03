@@ -7,6 +7,9 @@ const userRoleSelect = document.querySelector(
 const usersTableBody = document.querySelector(
   "#users-table-body"
 );
+const userCitySelect = document.querySelector(
+  "#new-city-id"
+);
 
 const allowedUserRoles = Array.isArray(
   window.ALLOWED_USER_ROLES
@@ -23,11 +26,44 @@ function initializeUserManagement() {
   }
 
   renderRoleOptions();
+  if (userCitySelect) {
+    loadActiveCities();
+  }
   loadUsers();
   userForm.addEventListener(
     "submit",
     handleUserCreate
   );
+}
+
+async function loadActiveCities() {
+  userCitySelect.disabled = true;
+
+  try {
+    const response = await fetch("/api/cities/active");
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to load cities.");
+    }
+
+    const cities = Array.isArray(payload.items) ? payload.items : [];
+    userCitySelect.innerHTML = `
+      <option value="">Select city</option>
+      ${cities.map((city) => `
+        <option value="${escapeHtmlAttribute(city.id || "")}">
+          ${escapeHtml(city.name || "")}
+        </option>
+      `).join("")}
+    `;
+  } catch (error) {
+    userCitySelect.innerHTML = `
+      <option value="">Unable to load cities</option>
+    `;
+    window.alert(error.message || "Unable to load cities.");
+  } finally {
+    userCitySelect.disabled = false;
+  }
 }
 
 function renderRoleOptions() {
@@ -88,6 +124,13 @@ async function handleUserCreate(event) {
     "#new-password"
   ).value;
   const role = userRoleSelect.value;
+  const cityId = userCitySelect ? userCitySelect.value : "";
+
+  if (userCitySelect && !cityId) {
+    window.alert("Select a city for this user.");
+    userCitySelect.focus();
+    return;
+  }
 
   try {
     const response = await fetch("/api/users", {
@@ -98,7 +141,8 @@ async function handleUserCreate(event) {
       body: JSON.stringify({
         username,
         password,
-        role
+        role,
+        ...(userCitySelect ? { cityId } : {})
       })
     });
 
@@ -152,7 +196,8 @@ function renderUserRow(user) {
     <tr>
       <td>${escapeHtml(user.username || "")}</td>
       <td>${escapeHtml(formatRole(user.role || ""))}</td>
-      <td>${user.isActive ? "Yes" : "No"}</td>
+        <td>${escapeHtml(user.cityName || user.cityId || "-")}</td>
+        <td>${user.isActive ? "Yes" : "No"}</td>
       <td>${escapeHtml(user.createdBy || "-")}</td>
       <td>${escapeHtml(formatDate(user.createdAt))}</td>
       <td style="white-space:nowrap;">${actions}</td>

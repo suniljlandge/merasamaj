@@ -17,6 +17,7 @@ let configState = {
 initialize();
 
 function initialize() {
+  loadCityManagement();
   loadRoleConfig();
   loadExportFilters();
   loadExportColumns();
@@ -42,6 +43,52 @@ function initialize() {
   const reconnectAllBtn = document.querySelector("#sidecar-reconnect-all-btn");
   if (reconnectAllBtn) reconnectAllBtn.addEventListener("click", sidecarReconnectAll);
 }
+
+async function loadCityManagement() {
+  const cityBody = document.querySelector("#cities-management-body");
+  const transferBody = document.querySelector("#city-transfers-body");
+  if (!cityBody) return;
+  try {
+    const [citiesResp, transfersResp] = await Promise.all([
+      fetch("/api/cities/manage"), fetch("/api/city-transfers"),
+    ]);
+    const cities = await citiesResp.json();
+    const transfers = await transfersResp.json();
+    if (!citiesResp.ok) throw new Error(cities.error || "Unable to load cities.");
+    cityBody.innerHTML = (cities.items || []).map((city) => `
+      <tr><td>${escapeHtml(city.name || "")}</td><td>${city.isActive ? "Active" : "Inactive"}</td>
+      <td>${city.userCount || 0}</td><td>${city.recordCount || 0}</td>
+      <td><button type="button" class="button-ghost city-status-btn" data-city-id="${escapeHtmlAttribute(city.id)}" data-active="${city.isActive}">${city.isActive ? "Deactivate" : "Activate"}</button></td></tr>
+    `).join("") || "<tr><td colspan='5'>No cities found.</td></tr>";
+    cityBody.querySelectorAll(".city-status-btn").forEach((button) => button.addEventListener("click", async () => {
+      await fetch(`/api/cities/${encodeURIComponent(button.dataset.cityId)}/status`, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({isActive: button.dataset.active !== "true"})});
+      loadCityManagement();
+    }));
+    if (transferBody) transferBody.innerHTML = (transfers.items || []).map((row) => `<tr><td>${escapeHtml(row.entityLabel || row.entityType || "")}</td><td>${escapeHtml(row.sourceCityName || row.sourceCityId || "")}</td><td>${escapeHtml(row.destinationCityName || row.destinationCityId || "")}</td><td>${escapeHtml(row.changedBy || "")}</td><td>${escapeHtml(row.reason || "")}</td><td>${escapeHtml(formatDate(row.changedAt))}</td></tr>`).join("") || "<tr><td colspan='6'>No transfers found.</td></tr>";
+  } catch (error) {
+    cityBody.innerHTML = `<tr><td colspan='5'>${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+
+// Handle new city creation form
+  const createCityForm = document.querySelector("#create-city-form");
+  if (createCityForm) {
+    createCityForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const nameInput = document.querySelector("#new-city-name");
+      const districtInput = document.querySelector("#new-city-district");
+      const talukaInput = document.querySelector("#new-city-taluka");
+      const name = nameInput?.value.trim();
+      const district = districtInput?.value.trim();
+      const taluka = talukaInput?.value.trim();
+      if (!name) return;
+      await fetch("/api/cities", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({name, district, taluka})});
+      if (nameInput) nameInput.value = "";
+      if (districtInput) districtInput.value = "";
+      if (talukaInput) talukaInput.value = "";
+      loadCityManagement();
+    });
+  }
 
 let exportColsState = { columns: [], roles: [], matrix: {} };
 
@@ -357,6 +404,17 @@ function escapeHtml(value) {
 
 function escapeHtmlAttribute(value) {
   return escapeHtml(value).replace(/"/g, "&quot;");
+}
+
+function formatDate(value) {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleString();
 }
 
 // ---------------------------------------------------------------------------

@@ -1842,3 +1842,67 @@ input[readonly][lang="mr"] {
 .site-footer a:hover {
   text-decoration: underline;
 }
+
+/* =========================================
+   DECEASED HALO
+   Golden "angel" ring honoring a person who
+   has passed away. Records stay fully intact;
+   this is a display-only marker.
+========================================= */
+
+.deceased-name {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.deceased-halo {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  width: 42px;
+  height: 15px;
+  transform: translateX(-50%) rotateX(52deg);
+  border-radius: 50%;
+  border: 3px solid #f5b301;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 236, 179, 0.5),
+    rgba(255, 236, 179, 0) 72%
+  );
+  box-shadow:
+    0 0 8px 2px rgba(245, 179, 1, 0.65),
+    0 0 16px 6px rgba(245, 179, 1, 0.32),
+    inset 0 0 5px rgba(255, 214, 102, 0.75);
+  pointer-events: none;
+}
+
+/* Halo centered above an entire family member card. */
+.member-card--deceased {
+  position: relative;
+  border-color: #f3c969;
+}
+
+.member-card--deceased .deceased-halo {
+  top: -9px;
+}
+
+/* Compact inline gold ring for dense rows (directory list). */
+.deceased-badge {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  border-radius: 50%;
+  border: 2px solid #f5b301;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 236, 179, 0.35),
+    rgba(255, 236, 179, 0) 72%
+  );
+  box-shadow:
+    0 0 5px 1px rgba(245, 179, 1, 0.6),
+    inset 0 0 3px rgba(255, 214, 102, 0.7);
+  vertical-align: middle;
+  flex: none;
+}

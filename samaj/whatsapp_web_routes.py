@@ -42,6 +42,12 @@ def _require_auth(f):
     return decorated
 
 
+def _tenant_query(query=None):
+    """Resolve the request tenant without widening WhatsApp data access."""
+    from samaj.app import tenant_query
+    return tenant_query(query)
+
+
 # ===========================================================================
 # Service Health
 # ===========================================================================
@@ -485,12 +491,12 @@ def list_custom_templates():
 
     if is_admin:
         # Admin sees all templates (for approval/management)
-        templates = list(col.find({}).sort("createdAt", -1))
+        templates = list(col.find(_tenant_query()).sort("createdAt", -1))
     else:
         # Users see ONLY their own templates (any status)
-        templates = list(col.find({
+        templates = list(col.find(_tenant_query({
             "createdBy": user_id,
-        }).sort("createdAt", -1))
+        })).sort("createdAt", -1))
 
     for t in templates:
         t["_id"] = str(t["_id"])
@@ -519,6 +525,7 @@ def create_custom_template():
         return jsonify({"error": "name and bodyText are required"}), 400
 
     user_id = _get_user_id()
+    city_id = _tenant_query().get("cityId")
 
     template = {
         "name": name,
@@ -528,6 +535,7 @@ def create_custom_template():
         "mediaType": media_type,
         "status": "pending",  # pending, approved, rejected
         "createdBy": user_id,
+        "cityId": city_id,
         "createdAt": datetime.now(timezone.utc),
         "reviewedBy": None,
         "reviewedAt": None,
@@ -562,7 +570,7 @@ def approve_template(template_id):
         return jsonify({"error": "Invalid template ID"}), 400
 
     result = col.update_one(
-        {"_id": oid, "status": "pending"},
+        _tenant_query({"_id": oid, "status": "pending"}),
         {"$set": {
             "status": "approved",
             "reviewedBy": _get_user_id(),
@@ -601,7 +609,7 @@ def reject_template(template_id):
         return jsonify({"error": "Invalid template ID"}), 400
 
     result = col.update_one(
-        {"_id": oid, "status": "pending"},
+        _tenant_query({"_id": oid, "status": "pending"}),
         {"$set": {
             "status": "rejected",
             "reviewedBy": _get_user_id(),
@@ -633,7 +641,7 @@ def delete_template(template_id):
     except Exception:
         return jsonify({"error": "Invalid template ID"}), 400
 
-    template = col.find_one({"_id": oid})
+    template = col.find_one(_tenant_query({"_id": oid}))
     if not template:
         return jsonify({"error": "Template not found"}), 404
 
@@ -644,7 +652,7 @@ def delete_template(template_id):
     if not is_admin and template.get("createdBy") != user_id:
         return jsonify({"error": "You can only delete your own templates"}), 403
 
-    col.delete_one({"_id": oid})
+    col.delete_one(_tenant_query({"_id": oid}))
     return jsonify({"success": True})
 
 

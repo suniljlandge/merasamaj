@@ -87,6 +87,14 @@ def normalize_registration(
         source.get("birthYear")
     )
 
+    normalized["isDeceased"] = bool(
+        source.get("isDeceased")
+    )
+
+    normalized["deathDate"] = clean_text(
+        source.get("deathDate")
+    )
+
     normalized["state"] = clean_text(
         source.get("state")
     )
@@ -102,6 +110,10 @@ def normalize_registration(
     normalized["mobileNumber"] = normalize_phone(
         source.get("mobileNumber")
     )
+
+    normalized["profession"] = clean_text(
+        source.get("profession")
+    ) or "Not Added"
 
     normalized["familyId"] = clean_text(
         source.get("familyId")
@@ -256,6 +268,25 @@ def validate_registration(
             }
         )
 
+    death_date = value.get(
+        "deathDate",
+        "",
+    ).strip()
+
+    if (
+        death_date
+        and not re.match(
+            r"^\d{4}-\d{2}-\d{2}$",
+            death_date,
+        )
+    ):
+        errors.append(
+            {
+                "field": "deathDate",
+                "message": "Death date must be YYYY-MM-DD.",
+            }
+        )
+
     for index, member in enumerate(
         value["familyMembers"]
     ):
@@ -282,6 +313,44 @@ def validate_registration(
                 {
                     "field": f"familyMembers.{index}.contactNumber",
                     "message": "Contact number invalid.",
+                }
+            )
+
+        member_birth_date = member.get(
+            "birthDate",
+            "",
+        ).strip()
+
+        if (
+            member_birth_date
+            and not re.match(
+                r"^\d{4}-\d{2}-\d{2}$",
+                member_birth_date,
+            )
+        ):
+            errors.append(
+                {
+                    "field": f"familyMembers.{index}.birthDate",
+                    "message": "Birth date must be YYYY-MM-DD.",
+                }
+            )
+
+        member_death_date = member.get(
+            "deathDate",
+            "",
+        ).strip()
+
+        if (
+            member_death_date
+            and not re.match(
+                r"^\d{4}-\d{2}-\d{2}$",
+                member_death_date,
+            )
+        ):
+            errors.append(
+                {
+                    "field": f"familyMembers.{index}.deathDate",
+                    "message": "Death date must be YYYY-MM-DD.",
                 }
             )
 ########
@@ -500,6 +569,18 @@ def _normalize_family_member(
             member.get("contactNumber")
         ),
 
+        "birthDate": clean_text(
+            member.get("birthDate")
+        ),
+
+        "isDeceased": bool(
+            member.get("isDeceased")
+        ),
+
+        "deathDate": clean_text(
+            member.get("deathDate")
+        ),
+
         "isMarried": bool(
             member.get("isMarried")
         ),
@@ -509,6 +590,10 @@ def _normalize_family_member(
             overrides,
         ),
 
+
+        "profession": clean_text(
+            member.get("profession")
+        ) or "Not Added",
 
         "currentCity": clean_text(
             member.get("currentCity")
@@ -543,6 +628,15 @@ def normalize_relation_key(value=""):
 
 def calculate_family_members_count(members=None):
     total = 0
+    excluded_relations = {
+        normalize_relation_key(value)
+        for value in MARRIED_MEMBER_EXCLUDED_RELATIONS
+    }
+    spouse_relations = {
+        normalize_relation_key(value)
+        for value in SPOUSE_COUNTED_RELATIONS
+    }
+    spouse_relations.update({"son", "grandson", "brother", "uncle", "cousin", "nephew"})
 
     for member in members or []:
         relation = normalize_relation_key(
@@ -556,15 +650,19 @@ def calculate_family_members_count(members=None):
 
         if (
             is_married
-            and relation in MARRIED_MEMBER_EXCLUDED_RELATIONS
+            and relation in excluded_relations
         ):
             continue
 
-        total += 1
+        # Deceased members are preserved in the record but are not counted as
+        # living members. The embedded spouse (spouseName) carries no separate
+        # deceased flag, so a counted spouse is always treated as living.
+        if not bool(member.get("isDeceased")):
+            total += 1
 
         if (
             is_married
-            and relation in SPOUSE_COUNTED_RELATIONS
+            and relation in spouse_relations
             and (member.get("spouseName") or {}).get("en")
         ):
             total += 1

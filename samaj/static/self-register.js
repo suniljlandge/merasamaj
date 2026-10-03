@@ -8,14 +8,39 @@ const historyContainer = document.querySelector(
 const verifiedMobileCopy = document.querySelector(
   "#verified-mobile-copy"
 );
+const verifiedCityCopy = document.querySelector(
+  "#verified-city-copy"
+);
 
 initializeSelfRegistrationPage();
+
+function loadLocationsAndSetupDropdowns() {
+  if (
+    window.registrationFormApi &&
+    window.registrationFormApi.loadLocations
+  ) {
+    window.registrationFormApi.loadLocations().then(() => {
+      if (window.registrationFormApi.setupLocationDropdowns) {
+        window.registrationFormApi.setupLocationDropdowns();
+      }
+    });
+  }
+}
 
 function initializeSelfRegistrationPage() {
   if (verifiedMobileCopy) {
     verifiedMobileCopy.textContent =
       selfRegistrationAccount.mobileNumber || "";
   }
+
+  if (verifiedCityCopy) {
+    verifiedCityCopy.textContent =
+      selfRegistrationAccount.cityName || "";
+  }
+
+  // Load districts/talukas from the active superadmin cities, then
+  // populate the location dropdowns on the registration form.
+  loadLocationsAndSetupDropdowns();
 
   const initialRecord = normalizeInitialSubmission(
     initialSelfRegistration

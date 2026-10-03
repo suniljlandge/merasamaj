@@ -84,6 +84,20 @@
                 required
               ></select>
             </label>
+
+            {% if current_role == "super_admin" %}
+            <label class="field">
+              <span>
+                City
+              </span>
+              <select
+                id="new-city-id"
+                required
+              >
+                <option value="">Select city</option>
+              </select>
+            </label>
+            {% endif %}
           </div>
 
           <div class="form-actions">
@@ -115,6 +129,7 @@
               <tr>
                 <th>Username</th>
                 <th>Role</th>
+                <th>City</th>
                 <th>Active</th>
                 <th>Created by</th>
                 <th>Created at</th>
@@ -123,7 +138,7 @@
             </thead>
             <tbody id="users-table-body">
               <tr>
-                <td colspan="6">
+                <td colspan="7">
                   Loading users...
                 </td>
               </tr>

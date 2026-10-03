@@ -14,6 +14,7 @@ const otpPanel = document.querySelector("#otp-panel");
 const loginModeCopy = document.querySelector("#login-mode-copy");
 const mobileHelpText = document.querySelector("#mobile-help-text");
 const otpStatusNote = document.querySelector("#otp-status-note");
+const publicCitySelect = document.querySelector("#public-city");
 
 const MOBILE_PATTERN = /^[6-9]\d{9}$/;
 
@@ -111,6 +112,29 @@ if (otpInput) {
 }
 
 activateMode("staff");
+
+loadActiveCities();
+
+async function loadActiveCities() {
+  if (!publicCitySelect) return;
+
+  try {
+    const response = await fetch("/api/cities/active");
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body.error || "Unable to load cities.");
+    }
+    const items = Array.isArray(body.items) ? body.items : [];
+    publicCitySelect.innerHTML = [
+      '<option value="">Select city</option>',
+      ...items.map(
+        (item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`
+      )
+    ].join("");
+  } catch (error) {
+    setOtpStatus(error.message || "Unable to load cities.");
+  }
+}
 
 function activateMode(mode) {
   const isStaffMode = mode === "staff";
@@ -223,13 +247,19 @@ async function postOtpAction(url, successMessage) {
       throw new Error("Enter a valid 10-digit Indian mobile number.");
     }
 
+    const cityId = String(publicCitySelect?.value || "").trim();
+    if (!cityId) {
+      throw new Error("Select a city to continue.");
+    }
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        mobileNumber
+        mobileNumber,
+        cityId
       })
     });
     const body = await response.json();
@@ -312,4 +342,14 @@ function setOtpStatus(text) {
 
 function clearOtpStatus() {
   setOtpStatus("");
+}
+
+function escapeHtml(value = "") {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  }[character]));
 }

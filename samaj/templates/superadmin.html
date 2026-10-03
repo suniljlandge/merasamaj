@@ -21,6 +21,38 @@
 
     <main class="directory-layout">
 
+      <section class="directory-search-card" id="city-management-panel">
+        <div class="directory-table-header">
+          <div><p class="directory-eyebrow">Tenancy</p><h2>City management</h2></div>
+        </div>
+        <form id="create-city-form" class="form-surface" style="margin-top:16px;">
+          <div class="field-grid">
+            <label class="field">
+              <span>City name</span>
+              <input id="new-city-name" placeholder="City name" required>
+            </label>
+            <label class="field">
+              <span>District</span>
+              <input id="new-city-district" placeholder="District (e.g., Hingoli)">
+            </label>
+            <label class="field">
+              <span>Taluka</span>
+              <input id="new-city-taluka" placeholder="Taluka (e.g., Sengaon)">
+            </label>
+          </div>
+          <div class="form-actions">
+            <button class="button-primary" type="submit">Create city</button>
+          </div>
+        </form>
+        <div class="directory-table-wrapper"><table class="directory-table"><thead><tr><th>City</th><th>Status</th><th>Users</th><th>Records</th><th>Action</th></tr></thead><tbody id="cities-management-body"><tr><td colspan="5">Loading cities...</td></tr></tbody></table></div>
+        <span id="cities-management-status"></span>
+      </section>
+
+      <section class="directory-search-card" id="transfer-history-panel">
+        <div class="directory-table-header"><div><p class="directory-eyebrow">Audit</p><h2>City transfer history</h2></div></div>
+        <div class="directory-table-wrapper"><table class="directory-table"><thead><tr><th>Entity</th><th>From</th><th>To</th><th>Actor</th><th>Reason</th><th>Changed</th></tr></thead><tbody id="city-transfers-body"><tr><td colspan="6">Loading transfers...</td></tr></tbody></table></div>
+      </section>
+
       <!-- Role permissions -->
       <section class="directory-search-card">
         <div class="directory-table-header">

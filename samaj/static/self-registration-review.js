@@ -305,6 +305,7 @@ function renderFamilyMemberCard(member) {
       <strong>${escapeHtml(formatMemberName(member) || "Unnamed member")}</strong>
       <span>Relation: ${escapeHtml(member.relationToApplicant || member.relation || "-")}</span>
       <span>Mobile: ${escapeHtml(member.contactNumber || "-")}</span>
+      <span>DOB: ${escapeHtml(member.birthDate || "-")}</span>
       <span>Married: ${member.isMarried ? "Yes" : "No"}</span>
       <span>Spouse: ${escapeHtml(formatMemberName({ name: member.spouseName }) || "-")}</span>
       <span>Spouse mobile: ${escapeHtml(member.spouseContactNumber || "-")}</span>

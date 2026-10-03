@@ -316,10 +316,19 @@
             ? member.familyMembers
             : [];
 
-        document.querySelector(
-          "#member-name"
-        ).textContent =
-          fullName || "Unnamed member";
+        const memberNameEl =
+          document.querySelector("#member-name");
+
+        if (member.isDeceased) {
+          memberNameEl.innerHTML =
+            `<span class="deceased-name">`
+            + `<span class="deceased-halo" aria-hidden="true"></span>`
+            + escapeHtml(fullName || "Unnamed member")
+            + `</span>`;
+        } else {
+          memberNameEl.textContent =
+            fullName || "Unnamed member";
+        }
 
         document.querySelector(
           "#member-name-mr"
@@ -327,10 +336,16 @@
           marathiName || "Marathi name not available";
 
 
+        const livingFamilyCount =
+          member.membersCount
+          ?? familyMembers.filter(
+            (relative) => relative && relative.isDeceased !== true
+          ).length;
+
         document.querySelector(
           "#member-family-count"
         ).textContent =
-          String((member.membersCount ?? familyMembers.length) + 1);
+          String(livingFamilyCount + (member.isDeceased ? 0 : 1));
 
         document.querySelector(
           "#member-location-short"
@@ -392,6 +407,9 @@ document.querySelector(
         ).innerHTML = [
           renderInfo("Mobile", member.mobileNumber),
           renderInfo("Birth", member.birthDate || member.birthYear),
+          ...(member.isDeceased
+            ? [renderInfo("Died", member.deathDate || "Date not recorded")]
+            : []),
           renderInfo("State", member.state),
           renderInfo("District", member.district),
           renderInfo("Taluka", member.taluka),
@@ -435,7 +453,8 @@ document.querySelector(
 
       function renderFamilyMember(member, index, familyMembers = []) {
         return `
-          <section class="member-card">
+          <section class="member-card${member.isDeceased ? " member-card--deceased" : ""}">
+            ${member.isDeceased ? `<span class="deceased-halo" aria-hidden="true"></span>` : ""}
             <div class="member-card-header">
               <span class="member-card-title">
                 Family member ${index + 1}
@@ -453,6 +472,8 @@ document.querySelector(
               ${renderInfo("Marathi", member.name?.mr)}
               ${renderInfo("Relation to applicant", member.relationToApplicant || member.relation)}
               ${renderInfo("Contact", member.contactNumber)}
+              ${renderInfo("Birth", member.birthDate)}
+              ${member.isDeceased ? renderInfo("Died", member.deathDate || "Date not recorded") : ""}
               ${renderInfo("Married", member.isMarried ? "Yes" : "No")}
               ${
   member.isMarried && member.currentCity

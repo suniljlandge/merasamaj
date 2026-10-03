@@ -6,13 +6,21 @@ from .tenancy import normalize_city_name
 
 DEFAULT_CITY_NAME = "Washim"
 
-TENANT_COLLECTIONS = (
-    "registrations",
+# Default name used when no override is supplied.  In production the actual
+# collection name comes from the MONGO_COLLECTION env-var (often "data").
+DEFAULT_REGISTRATIONS_COLLECTION = "registrations"
+
+EXTRA_TENANT_COLLECTIONS = (
     *CITY_OWNED_COLLECTIONS,
     "public_otp",
     "wa_login_sessions",
     "whatsapp_templates",
 )
+
+
+def _tenant_collections(registrations_collection=DEFAULT_REGISTRATIONS_COLLECTION):
+    """Return the full ordered tuple of collections that need a cityId."""
+    return (registrations_collection, *EXTRA_TENANT_COLLECTIONS)
 
 
 def ensure_initial_city(cities_collection, actor="migration") -> dict:
@@ -58,10 +66,11 @@ def _is_city_owned_document(collection_name, document):
     )
 
 
-def backfill_city_ids(database, default_city_id, *, dry_run=False):
+def backfill_city_ids(database, default_city_id, *, dry_run=False,
+                      registrations_collection=DEFAULT_REGISTRATIONS_COLLECTION):
     counts = {}
 
-    for collection_name in TENANT_COLLECTIONS:
+    for collection_name in _tenant_collections(registrations_collection):
         collection = database[collection_name]
         count = 0
 
@@ -83,7 +92,8 @@ def backfill_city_ids(database, default_city_id, *, dry_run=False):
     return counts
 
 
-def validate_city_references(database, cities_collection):
+def validate_city_references(database, cities_collection,
+                              registrations_collection=DEFAULT_REGISTRATIONS_COLLECTION):
     valid_city_ids = {
         city.get("_id")
         for city in cities_collection.find({})
@@ -92,7 +102,7 @@ def validate_city_references(database, cities_collection):
     missing_by_collection = {}
     invalid_by_collection = {}
 
-    for collection_name in TENANT_COLLECTIONS:
+    for collection_name in _tenant_collections(registrations_collection):
         missing = 0
         invalid = 0
 
@@ -121,6 +131,7 @@ def migrate_legacy_tenants(
     database,
     *,
     default_city_name=DEFAULT_CITY_NAME,
+    registrations_collection=DEFAULT_REGISTRATIONS_COLLECTION,
     dry_run=False,
 ):
     display_name, name_key = normalize_city_name(default_city_name)
@@ -155,11 +166,13 @@ def migrate_legacy_tenants(
         database,
         city["_id"],
         dry_run=dry_run,
+        registrations_collection=registrations_collection,
     )
     validation = (
         {"missing_by_collection": {}, "invalid_by_collection": {}, "ok": True}
         if dry_run
-        else validate_city_references(database, cities)
+        else validate_city_references(database, cities,
+                                      registrations_collection=registrations_collection)
     )
 
     return {

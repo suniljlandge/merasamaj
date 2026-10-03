@@ -1,11 +1,11 @@
 # Graph Report - SAMAJ  (2026-08-30)
 
 ## Corpus Check
-- 69 files · ~149,735 words
+- 69 files · ~149,381 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1479 nodes · 2797 edges · 88 communities (79 shown, 9 thin omitted)
+- 1477 nodes · 2791 edges · 89 communities (80 shown, 9 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 116 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
@@ -27,7 +27,7 @@
 - _headers
 - Requirements
 - test_tn_lookup.py
-- route
+- whatsapp_web_routes.py
 - dependencies
 - login.js
 - /graphify
@@ -40,22 +40,22 @@
 - whatsapp-login.js
 - family-tree-module-check.mjs
 - UserManagementTests
-- create_app
+- test_user_management.py
 - clean_text
-- whatsapp_web_routes.py
+- _get_user_id
 - output_family_tree_module.js
 - tn-service.js
-- FamilyRelationshipSchemaTests
+- normalize_registration
 - test_tenancy.py
 - SelfRegistrationFlowTests
 - self-registration-review.js
-- _scoped_query
+- get_campaign_payments_collection
 - registration.py
 - Multi-City Tenant Isolation Implementation Plan
-- migration.py
+- create_app
 - campaign-directory.js
 - Correctness Properties
-- serialize_registration_document
+- build_directory_export_rows
 - campaign.py
 - data-tools.js
 - createBackupService
@@ -64,8 +64,8 @@
 - execute_campaign_send
 - RegistrationPermissionsTests
 - index.js
+- scope_for_session
 - TenantError
-- transliterate_to_marathi
 - useMongoDBAuthState
 - self-register.js
 - SAMAJ Registration
@@ -77,12 +77,12 @@
 - init
 - Design Document: Campaign Manager
 - escapeHtml
-- build_upi_link
-- get_campaigns_collection
+- create_campaign_with_upi
+- _get_database
 - handleSubmit
 - get_routing_config
 - createR2Client
-- FakeCursor
+- FakeIndexCollection
 - Algorithmic Pseudocode
 - Implementation Plan: Campaign Manager
 - renderFamilyMembers
@@ -99,6 +99,7 @@
 - otp-settings.js
 - health
 - wa-routing.js
+- app.py
 - start.sh
 
 ## God Nodes (most connected - your core abstractions)
@@ -114,29 +115,29 @@
 10. `TenantError` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `test_invalid_city_scope_fails_closed()` --uses--> `TenantError`  [INFERRED]
-  tests/test_tenancy.py → samaj/tenancy.py
-- `test_require_active_city_rejects_missing_or_inactive_city()` --uses--> `TenantError`  [INFERRED]
+- `test_transfer_registration_rejects_inactive_destination_or_cross_scope()` --uses--> `TenantError`  [INFERRED]
   tests/test_tenancy.py → samaj/tenancy.py
 - `UserManagementTests` --uses--> `TenantError`  [INFERRED]
   tests/test_user_management.py → samaj/tenancy.py
 - `main()` --calls--> `create_collections()`  [EXTRACTED]
   import_phrase_corrections.py → samaj/db.py
-- `main()` --calls--> `create_collections()`  [EXTRACTED]
-  import_whm_landmarks.py → samaj/db.py
+- `transliterate()` --calls--> `transliterate_to_marathi()`  [EXTRACTED]
+  import_whm_landmarks.py → samaj/transliterate.py
+- `test_ensure_tenant_indexes_covers_city_owned_collections_and_audit()` --calls--> `ensure_tenant_indexes()`  [EXTRACTED]
+  tests/test_tenancy.py → samaj/db.py
 
 ## Import Cycles
 - None detected.
 
-## Communities (88 total, 9 thin omitted)
+## Communities (89 total, 9 thin omitted)
 
 ### Community 0 - "campaign-wizard.js"
 Cohesion: 0.06
 Nodes (98): applyFilters(), buildQuery(), checkboxRow(), checkWebSendOption(), clearError(), clearPaymentError(), clearTemplateNavError(), deselectRecipientId() (+90 more)
 
 ### Community 1 - "samaj/app.py"
-Cohesion: 0.09
-Nodes (29): append_audit_event(), _applicant_full_name(), _bilingual_en(), _bilingual_mr(), build_directory_export_rows(), _build_person_name_map(), create_pending_submission_for_account(), default_role_config() (+21 more)
+Cohesion: 0.08
+Nodes (41): append_audit_event(), can_access_directory(), can_edit_registration(), can_view_family_tree(), can_view_registration(), create_pending_submission_for_account(), current_app_registration_database_lookup(), current_owned_registration_id() (+33 more)
 
 ### Community 2 - "DESIGN.md"
 Cohesion: 0.05
@@ -147,8 +148,8 @@ Cohesion: 0.11
 Nodes (42): collectConfigFromForm(), configState, configStatus, createCityForm, downloadExport(), escapeHtml(), escapeHtmlAttribute(), exportBtn (+34 more)
 
 ### Community 4 - "create_collections"
-Cohesion: 0.19
-Nodes (8): main(), create_collection(), create_collections(), ensure_tenant_indexes(), get_database(), FakeIndexCollection, FakeIndexDatabase, test_ensure_tenant_indexes_covers_city_owned_collections_and_audit()
+Cohesion: 0.29
+Nodes (9): main(), main(), normalize(), Uses your existing Google-based transliteration endpoint logic. Replace later…, transliterate(), create_collection(), create_collections(), ensure_tenant_indexes() (+1 more)
 
 ### Community 5 - "get"
 Cohesion: 0.67
@@ -160,7 +161,7 @@ Nodes (34): addMemberButton, connectionStatus, familyTypeInput, FIELD_GROUPS, fi
 
 ### Community 7 - "data_tools.py"
 Cohesion: 0.12
-Nodes (35): _addr_en(), _addr_mr(), address_report(), analyze_names(), apply_overrides_to_doc(), _apply_overrides_to_field(), _build_options(), clean_address() (+27 more)
+Nodes (34): _addr_en(), _addr_mr(), address_report(), analyze_names(), apply_overrides_to_doc(), _apply_overrides_to_field(), _build_options(), clean_address() (+26 more)
 
 ### Community 8 - "tn_service.py"
 Cohesion: 0.09
@@ -178,13 +179,13 @@ Nodes (32): Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Accep
 Cohesion: 0.44
 Nodes (8): fail(), header(), info(), lookup_numbers(), ok(), TN Lookup diagnostic test script Run: python test_tn_lookup.py [mobile1]…, test_pipeline(), warn()
 
-### Community 12 - "route"
-Cohesion: 0.10
-Nodes (27): route, backup_status(), download_media(), export_contacts(), get_messages(), profile_pic(), profile_pic_history(), profile_pics_batch() (+19 more)
+### Community 12 - "whatsapp_web_routes.py"
+Cohesion: 0.11
+Nodes (32): route, backup_status(), download_media(), export_contacts(), fetch_message_history(), get_messages(), profile_pic(), profile_pic_history() (+24 more)
 
 ### Community 13 - "dependencies"
-Cohesion: 0.06
-Nodes (30): @aws-sdk/client-s3, @aws-sdk/s3-request-presigner, cheerio, dotenv, express, @hapi/boom, mongodb, pino (+22 more)
+Cohesion: 0.07
+Nodes (28): @aws-sdk/client-s3, @aws-sdk/s3-request-presigner, cheerio, express, @hapi/boom, mongodb, pino, qrcode-terminal (+20 more)
 
 ### Community 14 - "login.js"
 Cohesion: 0.09
@@ -212,7 +213,7 @@ Nodes (26): applyPicToEl(), applyTnResultToCard(), approveTemplate(), autoLookup
 
 ### Community 20 - "directory.js"
 Cohesion: 0.12
-Nodes (22): calculateFamilyMembersCount(), closeInvitationModal(), createInvitationModal(), deleteMember(), directoryTableBody, escapeAttribute(), escapeHtml(), filterDistrict (+14 more)
+Nodes (21): calculateFamilyMembersCount(), closeInvitationModal(), createInvitationModal(), directoryTableBody, escapeAttribute(), escapeHtml(), filterDistrict, filterTaluka (+13 more)
 
 ### Community 21 - "user-management.js"
 Cohesion: 0.13
@@ -226,17 +227,17 @@ Nodes (24): getWaMobile(), handleWaMobileInput(), hideWaPanels(), pollWaStatus()
 Cohesion: 0.21
 Nodes (16): countElement, createDisplayGraph(), createStyledEdges(), createStyledNodes(), escapeHtml(), FamilyMemberNode(), FlowApp(), flowElement (+8 more)
 
-### Community 25 - "create_app"
+### Community 25 - "test_user_management.py"
 Cohesion: 0.12
-Nodes (10): create_app(), env_flag(), apply_projection(), apply_update(), FakeCollection, FakeDatabase, FakeDeleteResult, FakeInsertResult (+2 more)
+Nodes (8): apply_projection(), apply_update(), FakeCollection, FakeCursor, FakeDeleteResult, FakeInsertResult, FakeUpdateResult, matches_query()
 
 ### Community 26 - "clean_text"
-Cohesion: 0.22
-Nodes (17): add_family_tree_edge(), build_bilingual_name(), build_family_tree_graph_data(), build_registration_full_name(), canonical_tree_person_id(), clean_text(), default_otp_settings(), infer_generation_offset_from_relation() (+9 more)
+Cohesion: 0.15
+Nodes (23): add_family_tree_edge(), build_bilingual_name(), build_family_tree_graph_data(), build_registration_full_name(), canonical_tree_person_id(), clean_text(), default_otp_settings(), infer_generation_offset_from_relation() (+15 more)
 
-### Community 27 - "whatsapp_web_routes.py"
-Cohesion: 0.09
-Nodes (39): all_sessions(), approve_template(), backup_running(), connect(), connect_qr(), create_custom_template(), delete_template(), disconnect() (+31 more)
+### Community 27 - "_get_user_id"
+Cohesion: 0.13
+Nodes (22): backup_running(), connect(), connect_qr(), create_custom_template(), disconnect(), get_qr(), _get_user_id(), Poll for latest QR code. (+14 more)
 
 ### Community 28 - "output_family_tree_module.js"
 Cohesion: 0.26
@@ -246,33 +247,33 @@ Nodes (11): countElement, createStyledEdges(), createStyledNodes(), escapeHtml()
 Cohesion: 0.16
 Nodes (19): cheerio, DOMAINS, EXPIRY_MARKERS, getFormFields(), getPaymentId(), getPipelineToken(), getToken(), HEADERS (+11 more)
 
-### Community 30 - "FamilyRelationshipSchemaTests"
-Cohesion: 0.21
-Nodes (3): normalize_registration(), validate_registration(), FamilyRelationshipSchemaTests
+### Community 30 - "normalize_registration"
+Cohesion: 0.19
+Nodes (4): serialize_registration_document(), normalize_registration(), validate_registration(), FamilyRelationshipSchemaTests
 
 ### Community 32 - "test_tenancy.py"
-Cohesion: 0.19
-Nodes (19): parametrize, normalize_city_name(), require_active_city(), backfill_city_ids(), ensure_initial_city(), _is_city_owned_document(), migrate_legacy_tenants(), validate_city_references() (+11 more)
+Cohesion: 0.24
+Nodes (17): normalize_city_name(), Move a registration between active cities with a durable audit row., transfer_registration(), backfill_city_ids(), ensure_initial_city(), _is_city_owned_document(), migrate_legacy_tenants(), validate_city_references() (+9 more)
 
 ### Community 34 - "self-registration-review.js"
 Cohesion: 0.19
 Nodes (17): escapeHtml(), escapeHtmlAttribute(), formatDate(), formatFullName(), formatMemberName(), formatStatus(), loadReviewQueue(), openSubmissionViewer() (+9 more)
 
-### Community 35 - "_scoped_query"
-Cohesion: 0.16
-Nodes (16): confirm_upi_payment(), create_campaign_with_upi(), get_campaign_payments_collection(), get_distinct_surname_groups(), Return distinct surnameGroup values for the surname filter dropdown. Queries…, Return the 'campaign_payments' MongoDB collection., Create a campaign and generate a UPI payment link for it. Validates the…, Validate whether a campaign status transition is permitted. Args: current: The… (+8 more)
+### Community 35 - "get_campaign_payments_collection"
+Cohesion: 0.20
+Nodes (12): confirm_upi_payment(), get_campaign_payments_collection(), get_campaigns_collection(), Return the 'campaigns' MongoDB collection., Return the 'campaign_payments' MongoDB collection., Validate whether a campaign status transition is permitted. Args: current: The…, Record the user-submitted UPI transaction reference for a campaign. After…, Admin action: confirm a UPI payment and trigger campaign sending. Marks the… (+4 more)
 
 ### Community 36 - "registration.py"
-Cohesion: 0.15
-Nodes (18): Return the configured default account type for new mobile signups. Reads the…, read_default_account_type(), calculate_family_members_count(), get_redirect_for_account(), _is_blank_member(), normalize_account_type(), _normalize_family_member(), normalize_family_members() (+10 more)
+Cohesion: 0.27
+Nodes (12): calculate_family_members_count(), _is_blank_member(), _normalize_family_member(), normalize_family_members(), normalize_member_id_list(), normalize_phone(), normalize_public_mobile(), normalize_relation_key() (+4 more)
 
 ### Community 37 - "Multi-City Tenant Isolation Implementation Plan"
 Cohesion: 0.12
 Nodes (15): File Map and Ownership, Global Constraints, Multi-City Tenant Isolation Implementation Plan, Plan Self-Review, Task 10: Add Superadmin City and Transfer-History UI, Task 11: Disabled-City Enforcement, Full Regression Matrix, and Static Audit, Task 1: Add Pure Tenant Primitives and Collection Contracts, Task 2: Implement Idempotent Washim Migration and Validation (+7 more)
 
-### Community 38 - "migration.py"
-Cohesion: 0.34
-Nodes (12): _collect_bilingual_correction(), collect_transliteration_corrections(), load_corrections(), normalize_source(), save_corrections(), bulk_import(), clean(), find_duplicate() (+4 more)
+### Community 38 - "create_app"
+Cohesion: 0.19
+Nodes (19): build_corrected_phrase(), create_app(), env_flag(), get_ad_templates(), Return the list of available WhatsApp ad templates for the campaign wizard.…, _collect_bilingual_correction(), collect_transliteration_corrections(), load_corrections() (+11 more)
 
 ### Community 39 - "campaign-directory.js"
 Cohesion: 0.31
@@ -282,13 +283,13 @@ Nodes (15): bilingual(), escapeAttr(), escapeHtml(), init(), joinName(), loadMem
 Cohesion: 0.13
 Nodes (15): Correctness Properties, Property 10: Redirect determinism, Property 11: Template variable resolution length preservation, Property 12: Phone number normalization, Property 13: Webhook idempotency, Property 14: Session isolation, Property 1: Payment-before-send guarantee, Property 2: Payment amount correctness (+7 more)
 
-### Community 41 - "serialize_registration_document"
-Cohesion: 0.25
-Nodes (8): current_app_registration_database_lookup(), ensure_object_id(), object_id_or_none(), serialize_document(), serialize_public_account(), serialize_registration_document(), serialize_self_registration(), _staff_user_from_session()
+### Community 41 - "build_directory_export_rows"
+Cohesion: 0.20
+Nodes (15): _applicant_full_name(), _bilingual_en(), _bilingual_mr(), build_directory_export_rows(), _build_person_name_map(), export_relation_options(), _format_created_at(), _format_relationship_type() (+7 more)
 
 ### Community 42 - "campaign.py"
-Cohesion: 0.17
-Nodes (16): _address_en(), _family_members_count(), get_ad_templates(), get_areas_with_counts(), get_hof_by_area(), _hof_name(), Campaign Manager module. Provides MongoDB collection accessors, status…, Return the list of available WhatsApp ad templates for the campaign wizard.… (+8 more)
+Cohesion: 0.18
+Nodes (17): _address_en(), _family_members_count(), get_areas_with_counts(), get_distinct_surname_groups(), get_hof_by_area(), _hof_name(), Campaign Manager module. Provides MongoDB collection accessors, status…, Extract the English text from a bilingual {en, mr} field (or plain string). (+9 more)
 
 ### Community 43 - "data-tools.js"
 Cohesion: 0.23
@@ -303,24 +304,24 @@ Cohesion: 0.21
 Nodes (8): clearAuthState(), createSessionManager(), attachContactListeners(), connectWithOTP(), connectWithQR(), reconnect(), restoreSessions(), startPresenceKeepAlive()
 
 ### Community 46 - "role_can"
-Cohesion: 0.17
-Nodes (20): can_access_directory(), can_edit_registration(), can_view_family_tree(), can_view_registration(), current_owned_registration_id(), current_role(), _has_staff_session(), home_redirect() (+12 more)
+Cohesion: 0.18
+Nodes (14): Check whether a role has a capability per the configurable matrix., role_can(), all_sessions(), approve_template(), delete_template(), list_custom_templates(), Resolve the request tenant without widening WhatsApp data access., List custom templates. Admins see all; regular users see only their own. (+6 more)
 
 ### Community 47 - "execute_campaign_send"
 Cohesion: 0.16
-Nodes (14): execute_campaign_send(), normalize_wa_number(), Normalize an Indian mobile number to WhatsApp format (91XXXXXXXXXX). Strips all…, Best-effort conversion of a value to ObjectId, returning the raw value…, Send a paid campaign's WhatsApp template messages to every recipient. Called…, Resolve a salutation toggle answer into its display text. Accepts one of the…, Replace placeholders in template variables with recipient data. Recognized…, Truncate an error description to at most 500 characters (Requirement 7.3). (+6 more)
+Nodes (14): execute_campaign_send(), normalize_wa_number(), Best-effort conversion of a value to ObjectId, returning the raw value…, Normalize an Indian mobile number to WhatsApp format (91XXXXXXXXXX). Strips all…, Send a paid campaign's WhatsApp template messages to every recipient. Called…, Resolve a salutation toggle answer into its display text. Accepts one of the…, Replace placeholders in template variables with recipient data. Recognized…, Truncate an error description to at most 500 characters (Requirement 7.3). (+6 more)
 
 ### Community 49 - "index.js"
 Cohesion: 0.18
 Nodes (12): { createBackupService }, { createR2Client }, { createRoutes }, { createSessionManager }, { createUIRoutes }, express, logger, main() (+4 more)
 
-### Community 50 - "TenantError"
-Cohesion: 0.19
-Nodes (21): Any, current_tenant_scope(), ensure_active_staff_session(), tenant_query(), city_ids_match(), is_superadmin(), Move a registration between active cities with a durable audit row., Raised when a city-scoped request cannot establish a safe scope. (+13 more)
+### Community 50 - "scope_for_session"
+Cohesion: 0.27
+Nodes (12): Any, city_ids_match(), is_superadmin(), scope_for_session(), scoped_query(), TenantScope, test_global_scope_does_not_add_city_predicate(), test_is_superadmin_accepts_only_super_admin_role() (+4 more)
 
-### Community 51 - "transliterate_to_marathi"
-Cohesion: 0.43
-Nodes (6): main(), normalize(), Uses your existing Google-based transliteration endpoint logic. Replace later…, transliterate(), build_corrected_phrase(), transliterate_to_marathi()
+### Community 51 - "TenantError"
+Cohesion: 0.24
+Nodes (9): parametrize, Raised when a city-scoped request cannot establish a safe scope., require_active_city(), TenantError, FakeCitiesCollection, test_invalid_city_scope_fails_closed(), test_normalize_city_name_rejects_blank_or_non_text_values(), test_require_active_city_rejects_missing_or_inactive_city() (+1 more)
 
 ### Community 52 - "useMongoDBAuthState"
 Cohesion: 0.22
@@ -362,13 +363,13 @@ Nodes (7): Architecture, Dependencies, Design Document: Campaign Manager, Exampl
 Cohesion: 0.25
 Nodes (11): buildRelationshipTargetOptions(), escapeAttribute(), escapeHtml(), findMarathiPair(), loadRecentRecords(), renderApplicantFields(), renderBilingualField(), renderRecentCard() (+3 more)
 
-### Community 63 - "build_upi_link"
-Cohesion: 0.25
-Nodes (8): build_upi_link(), _get_upi_id(), _get_upi_payee_name(), Return the configured UPI ID (VPA) for receiving payments. Reads from Flask app…, Return the configured UPI payee display name. Reads from Flask app config first…, Return True when a UPI ID is configured for receiving payments., Build a UPI deep-link URL for the given amount and note. Format:…, upi_is_configured()
+### Community 63 - "create_campaign_with_upi"
+Cohesion: 0.17
+Nodes (12): send_otp_message(), build_upi_link(), create_campaign_with_upi(), _get_upi_id(), _get_upi_payee_name(), Return the configured UPI ID (VPA) for receiving payments. Reads from Flask app…, Return the configured UPI payee display name. Reads from Flask app config first…, Return True when a UPI ID is configured for receiving payments. (+4 more)
 
-### Community 64 - "get_campaigns_collection"
-Cohesion: 0.20
-Nodes (10): get_campaign_messages_collection(), get_campaigns_collection(), _get_database(), _get_settings_collection(), load_whatsapp_settings(), Return the 'app_settings' MongoDB collection (OTP / WhatsApp settings)., Load Meta WhatsApp delivery credentials from the settings collection. Reads the…, Return the app's MongoDB database instance via the registrations collection. (+2 more)
+### Community 64 - "_get_database"
+Cohesion: 0.25
+Nodes (8): get_campaign_messages_collection(), _get_database(), _get_settings_collection(), load_whatsapp_settings(), Return the 'app_settings' MongoDB collection (OTP / WhatsApp settings)., Load Meta WhatsApp delivery credentials from the settings collection. Reads the…, Return the app's MongoDB database instance via the registrations collection., Return the 'campaign_messages' MongoDB collection.
 
 ### Community 65 - "handleSubmit"
 Cohesion: 0.29
@@ -386,6 +387,10 @@ Nodes (4): createNullClient(), createR2Client(), { getSignedUrl }, {
   GetObjectCommand,
   DeleteObjectCommand,
 }
+
+### Community 68 - "FakeIndexCollection"
+Cohesion: 0.29
+Nodes (3): FakeIndexCollection, FakeIndexDatabase, test_ensure_tenant_indexes_covers_city_owned_collections_and_audit()
 
 ### Community 69 - "Algorithmic Pseudocode"
 Cohesion: 0.33
@@ -447,7 +452,9 @@ Nodes (4): is_service_available(), Check if the WhatsApp Web sidecar service is 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `create_app()` connect `create_app` to `get_campaigns_collection`, `samaj/app.py`, `test_tenancy.py`, `_scoped_query`, `create_collections`, `registration.py`, `migration.py`, `data_tools.py`, `tn_service.py`, `SelfRegistrationFlowTests`, `campaign.py`, `dependencies`, `TenantError`, `clean_text`, `whatsapp_web_routes.py`, `FamilyRelationshipSchemaTests`?**
+- **Why does `create_app()` connect `create_app` to `_get_database`, `samaj/app.py`, `test_tenancy.py`, `get_campaign_payments_collection`, `create_collections`, `registration.py`, `SelfRegistrationFlowTests`, `tn_service.py`, `campaign.py`, `RegistrationPermissionsTests`, `scope_for_session`, `TenantError`, `app.py`, `UserManagementTests`, `test_user_management.py`, `clean_text`, `normalize_registration`?**
+  _High betweenness centrality (0.014) - this node is a cross-community bridge._
+- **Why does `dependencies` connect `dependencies` to `app.py`?**
   _High betweenness centrality (0.014) - this node is a cross-community bridge._
 - **Are the 5 inferred relationships involving `create_app()` (e.g. with `current_tenant_scope()` and `get_campaign_messages_collection()`) actually correct?**
   _`create_app()` has 5 INFERRED edges - model-reasoned connections that need verification._
@@ -456,8 +463,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `campaign-wizard.js` be split into smaller, more focused modules?**
   _Cohesion score 0.05898989898989899 - nodes in this community are weakly interconnected._
 - **Should `samaj/app.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.08708708708708708 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07908163265306123 - nodes in this community are weakly interconnected._
 - **Should `DESIGN.md` be split into smaller, more focused modules?**
   _Cohesion score 0.047619047619047616 - nodes in this community are weakly interconnected._
-- **Should `superadmin.js` be split into smaller, more focused modules?**
-  _Cohesion score 0.10852713178294573 - nodes in this community are weakly interconnected._

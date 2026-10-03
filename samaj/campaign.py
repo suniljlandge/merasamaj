@@ -309,7 +309,16 @@ def _hof_name(doc):
     return " ".join(parts)
 
 
-def get_hof_by_area(filters, collection):
+def _scoped_query(query, query_scope=None):
+    merged = dict(query or {})
+    if query_scope:
+        if "cityId" in merged and str(merged["cityId"]) != str(query_scope.get("cityId")):
+            raise ValueError("Query city does not match the current scope")
+        merged["cityId"] = query_scope.get("cityId")
+    return merged
+
+
+def get_hof_by_area(filters, collection, query_scope=None):
     """
     Query registrations and return HOF (Head of Family) records for selection.
 
@@ -357,7 +366,7 @@ def get_hof_by_area(filters, collection):
     results = []
     seen_mobiles = set()
 
-    for doc in collection.find(query):
+    for doc in collection.find(_scoped_query(query, query_scope)):
         addr1 = _address_en(doc.get("address1"))
         addr2 = _address_en(doc.get("address2"))
         area = classify_area(addr1, addr2)
@@ -389,18 +398,27 @@ def get_hof_by_area(filters, collection):
 
 
 def _family_members_count(doc):
-    """Return the total number of members in a family record.
+    """Return the number of *living* members in a family record.
 
     A family's total is the head of family (the applicant) plus every entry in
-    the ``familyMembers`` array. Always at least 1 (the applicant), even when
-    no additional members are recorded.
+    the ``familyMembers`` array, excluding anyone marked deceased. Deceased
+    people are preserved in the record but are not counted as living members,
+    so this can be 0 when the head is deceased and no living members remain.
     """
     family_members = doc.get("familyMembers")
-    extra = len(family_members) if isinstance(family_members, list) else 0
-    return extra + 1
+    if isinstance(family_members, list):
+        extra = sum(
+            1
+            for member in family_members
+            if isinstance(member, dict) and not member.get("isDeceased")
+        )
+    else:
+        extra = 0
+    head = 0 if doc.get("isDeceased") else 1
+    return extra + head
 
 
-def resolve_recipients_by_ids(registration_ids, collection, salutations=None):
+def resolve_recipients_by_ids(registration_ids, collection, salutations=None, query_scope=None):
     """Resolve selected registration ids into recipient dicts server-side.
 
     Full mobile numbers are looked up from the registrations collection here so
@@ -445,7 +463,7 @@ def resolve_recipients_by_ids(registration_ids, collection, salutations=None):
     # any non-ObjectId ids (defensive — keeps the lookup working either way).
     query_ids = list(object_ids) + [r for r in raw_ids]
     docs_by_id = {}
-    for doc in collection.find({"_id": {"$in": query_ids}}):
+    for doc in collection.find(_scoped_query({"_id": {"$in": query_ids}}, query_scope)):
         docs_by_id[str(doc.get("_id"))] = doc
 
     recipients = []
@@ -472,7 +490,7 @@ def resolve_recipients_by_ids(registration_ids, collection, salutations=None):
     return recipients
 
 
-def get_areas_with_counts(filters, collection):
+def get_areas_with_counts(filters, collection, query_scope=None):
     """
     Compute available areas with family counts for the Area filter dropdown.
 
@@ -512,7 +530,7 @@ def get_areas_with_counts(filters, collection):
     projection = {"address1": 1, "address2": 1, "mobileNumber": 1}
     area_mobiles = {}
 
-    for doc in collection.find(query, projection):
+    for doc in collection.find(_scoped_query(query, query_scope), projection):
         addr1 = _address_en(doc.get("address1"))
         addr2 = _address_en(doc.get("address2"))
         area = classify_area(addr1, addr2)
@@ -535,7 +553,7 @@ def get_areas_with_counts(filters, collection):
     return results
 
 
-def get_distinct_surname_groups(filters, collection):
+def get_distinct_surname_groups(filters, collection, query_scope=None):
     """
     Return distinct surnameGroup values for the surname filter dropdown.
 
@@ -568,7 +586,7 @@ def get_distinct_surname_groups(filters, collection):
 
     # ---- Collect distinct, title-cased surname groups ----
     groups = set()
-    for doc in collection.find(query):
+    for doc in collection.find(_scoped_query(query, query_scope)):
         raw = doc.get("surnameGroup")
         if not raw or not str(raw).strip():
             continue
@@ -659,6 +677,7 @@ def create_campaign_with_upi(
     body_vars_template=None,
     audience_filters=None,
     name=None,
+    query_scope=None,
 ):
     """Create a campaign and generate a UPI payment link for it.
 
@@ -721,6 +740,7 @@ def create_campaign_with_upi(
         "recipients": recipients,
         "recipientCount": recipient_count,
         "audienceFilters": audience_filters or {},
+        "cityId": (query_scope or {}).get("cityId"),
         "paymentId": None,
         "status": PENDING_PAYMENT,
         "stats": {
@@ -750,6 +770,7 @@ def create_campaign_with_upi(
         "createdAt": now,
         "confirmedAt": None,
         "updatedAt": now,
+        "cityId": (query_scope or {}).get("cityId"),
     }
     payments = get_campaign_payments_collection()
     payment_result = payments.insert_one(payment_doc)
@@ -767,7 +788,7 @@ def create_campaign_with_upi(
     }
 
 
-def submit_upi_reference(campaign_id, upi_ref):
+def submit_upi_reference(campaign_id, upi_ref, query_scope=None):
     """Record the user-submitted UPI transaction reference for a campaign.
 
     After paying via UPI, the user enters their 12-digit UTR / UPI reference
@@ -793,7 +814,7 @@ def submit_upi_reference(campaign_id, upi_ref):
 
     payments = get_campaign_payments_collection()
     result = payments.update_one(
-        {"campaignId": cid},
+        _scoped_query({"campaignId": cid}, query_scope),
         {"$set": {
             "upiTransactionRef": upi_ref,
             "status": "submitted",
@@ -807,7 +828,7 @@ def submit_upi_reference(campaign_id, upi_ref):
     return {"ok": True}
 
 
-def confirm_upi_payment(campaign_id):
+def confirm_upi_payment(campaign_id, query_scope=None):
     """Admin action: confirm a UPI payment and trigger campaign sending.
 
     Marks the payment as confirmed, transitions the campaign from
@@ -825,7 +846,7 @@ def confirm_upi_payment(campaign_id):
         return {"ok": False, "error": "Invalid campaign id."}
 
     campaigns = get_campaigns_collection()
-    campaign_doc = campaigns.find_one({"_id": cid})
+    campaign_doc = campaigns.find_one(_scoped_query({"_id": cid}, query_scope))
 
     if campaign_doc is None:
         return {"ok": False, "error": "Campaign not found."}
@@ -842,7 +863,7 @@ def confirm_upi_payment(campaign_id):
     # Mark payment as confirmed.
     payments = get_campaign_payments_collection()
     payments.update_one(
-        {"campaignId": cid},
+        _scoped_query({"campaignId": cid}, query_scope),
         {"$set": {
             "status": "confirmed",
             "confirmedAt": now,
@@ -856,7 +877,7 @@ def confirm_upi_payment(campaign_id):
         return {"ok": False, "error": transition["error"]}
 
     campaigns.update_one(
-        {"_id": cid},
+        _scoped_query({"_id": cid}, query_scope),
         {"$set": {"status": PAYMENT_VERIFIED, "updatedAt": now}},
     )
 
@@ -869,7 +890,7 @@ def confirm_upi_payment(campaign_id):
     return {"ok": True, "reason": "confirmed_and_sent"}
 
 
-def reject_upi_payment(campaign_id, reason=""):
+def reject_upi_payment(campaign_id, reason="", query_scope=None):
     """Admin action: reject a UPI payment submission.
 
     Marks the payment as rejected with a reason, transitions the campaign
@@ -891,7 +912,7 @@ def reject_upi_payment(campaign_id, reason=""):
         return {"ok": False, "error": "Invalid campaign id."}
 
     campaigns = get_campaigns_collection()
-    campaign_doc = campaigns.find_one({"_id": cid})
+    campaign_doc = campaigns.find_one(_scoped_query({"_id": cid}, query_scope))
 
     if campaign_doc is None:
         return {"ok": False, "error": "Campaign not found."}
@@ -908,7 +929,7 @@ def reject_upi_payment(campaign_id, reason=""):
     # Mark payment as rejected with reason.
     payments = get_campaign_payments_collection()
     payments.update_one(
-        {"campaignId": cid},
+        _scoped_query({"campaignId": cid}, query_scope),
         {"$set": {
             "status": "rejected",
             "rejectionReason": reason,
@@ -923,7 +944,7 @@ def reject_upi_payment(campaign_id, reason=""):
         return {"ok": False, "error": transition["error"]}
 
     campaigns.update_one(
-        {"_id": cid},
+        _scoped_query({"_id": cid}, query_scope),
         {"$set": {
             "status": REJECTED,
             "rejectionReason": reason,
@@ -1239,6 +1260,7 @@ def execute_campaign_send(campaign):
 
         messages.insert_one({
             "campaignId": campaign_id,
+            "cityId": campaign.get("cityId"),
             "recipientMobile": recorded_mobile,
             "recipientName": recipient.get("name") or "",
             "registrationId": _to_object_id(recipient.get("registrationId")),
@@ -1330,7 +1352,7 @@ def _message_timestamp(message):
     return timestamp
 
 
-def build_campaign_report(campaign_doc, messages_collection):
+def build_campaign_report(campaign_doc, messages_collection, query_scope=None):
     """Build a delivery report for a single campaign.
 
     Aggregates the campaign_message records belonging to the campaign into
@@ -1351,7 +1373,7 @@ def build_campaign_report(campaign_doc, messages_collection):
     """
     campaign_id = campaign_doc.get("_id")
 
-    messages = list(messages_collection.find({"campaignId": campaign_id}))
+    messages = list(messages_collection.find(_scoped_query({"campaignId": campaign_id}, query_scope)))
 
     sent = 0
     failed = 0

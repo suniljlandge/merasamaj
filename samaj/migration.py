@@ -59,7 +59,19 @@ def normalize_phone(value=""):
 # ==========================================
 
 
-def find_duplicate(payload):
+def find_duplicate(payload, collection_override=None, query_scope=None):
+    target_collection = collection_override or collection
+
+    def scoped(query):
+        if query_scope:
+            if "cityId" in query and str(query["cityId"]) != str(query_scope.get("cityId")):
+                return {"_id": {"$exists": False}}
+            merged = dict(query_scope)
+            merged.update(query)
+            merged["cityId"] = query_scope.get("cityId")
+            return merged
+        return query
+
     mobile = normalize_phone(
         payload.get("mobileNumber")
     )
@@ -78,16 +90,16 @@ def find_duplicate(payload):
 
     # strict mobile match
     if mobile:
-        existing = collection.find_one({
+        existing = target_collection.find_one(scoped({
             "mobileNumber": mobile
-        })
+        }))
 
         if existing:
             return existing
 
     # soft identity match
     if first_name and last_name:
-        existing = collection.find_one({
+        existing = target_collection.find_one(scoped({
             "firstName.en": {
                 "$regex": f"^{re.escape(first_name)}$",
                 "$options": "i"
@@ -97,7 +109,7 @@ def find_duplicate(payload):
                 "$options": "i"
             },
             "birthYear": birth_year,
-        })
+        }))
 
         if existing:
             return existing
@@ -210,6 +222,15 @@ def transform_old_record(old_record, overrides):
             "contactNumber": normalize_phone(
                 item.get("mobile")
             ),
+            "birthDate": clean(
+                item.get("birth_date")
+            ),
+            "isDeceased": bool(
+                item.get("deceased")
+            ),
+            "deathDate": clean(
+                item.get("death_date")
+            ),
             "isMarried": bool(
                 item.get("married")
             ),
@@ -257,6 +278,14 @@ def transform_old_record(old_record, overrides):
 
         "birthYear": clean(
             old_record.get("birth_year")
+        ),
+
+        "isDeceased": bool(
+            old_record.get("deceased")
+        ),
+
+        "deathDate": clean(
+            old_record.get("death_date")
         ),
 
         "gender": clean(

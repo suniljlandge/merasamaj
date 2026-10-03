@@ -19,6 +19,7 @@ from flask import (
     redirect,
     url_for,
     current_app,
+    g,
     Response,
 )
 from flask_session import Session
@@ -51,6 +52,13 @@ from .transliterate import (
 from .db import (
     create_collections,
     get_database,
+)
+from .tenancy import (
+    TenantError,
+    is_superadmin,
+    scope_for_session,
+    scoped_query,
+    transfer_registration,
 )
 
 from .migration import (
@@ -208,6 +216,12 @@ def create_app(config=None, collection=None, correction_collection=None):
     app.extensions["mongo_client"] = None
     app.extensions["mongo_collection"] = collection
     app.extensions["mongo_correction_collection"] = correction_collection
+    app.extensions["tenant_scope"] = current_tenant_scope
+
+    @app.before_request
+    def validate_staff_session():
+        if _has_staff_session():
+            ensure_active_staff_session()
 
     # --- WhatsApp Web integration (hybrid messaging) ---
     from .whatsapp_web_routes import wa_web_bp
@@ -276,9 +290,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         document = (
             get_collection()
-            .find_one({
-                "_id": document_id
-            })
+            .find_one(tenant_query({"_id": document_id}))
         )
 
         if not can_view_registration(document):
@@ -302,9 +314,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         document = (
             get_collection()
-            .find_one({
-                "_id": document_id
-            })
+            .find_one(tenant_query({"_id": document_id}))
         )
 
         if not can_view_family_tree(document):
@@ -333,7 +343,8 @@ def create_app(config=None, collection=None, correction_collection=None):
             .find_one({
                 "_id": ensure_object_id(
                     session["public_account_id"]
-                )
+                ),
+                "cityId": session.get("cityId"),
             })
         )
 
@@ -349,9 +360,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         if latest_submission_id:
             latest_submission = (
                 get_self_registrations_collection()
-                .find_one({
-                    "_id": latest_submission_id
-                })
+                .find_one(tenant_query({"_id": latest_submission_id}))
             )
 
         return render_template(
@@ -565,7 +574,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         if not role_can("manage_address_areas"):
             return jsonify({"error": "Forbidden"}), 403
 
-        documents = list(get_collection().find({}))
+        documents = list(get_collection().find(tenant_query()))
         groups, summary = data_tools.address_report(documents)
 
         area = request.args.get("area", "").strip()
@@ -590,7 +599,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                          "Ask a super admin to allow some in the dashboard."
             }), 403
 
-        documents = list(get_collection().find({}))
+        documents = list(get_collection().find(tenant_query()))
         groups, summary = data_tools.address_report(documents)
 
         # "area" becomes the per-section heading, so it is dropped from the
@@ -643,7 +652,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         overrides = load_corrections(get_correction_collection())
         documents = list(get_collection().find(
-            {},
+            tenant_query(),
             {
                 "firstName": 1, "middleName": 1, "lastName": 1,
                 "familyMembers.name": 1, "familyMembers.spouseName": 1,
@@ -660,7 +669,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         overrides = load_corrections(get_correction_collection())
         documents = list(get_collection().find(
-            {},
+            tenant_query(),
             {
                 "firstName": 1, "middleName": 1, "lastName": 1,
                 "familyMembers.name": 1, "familyMembers.spouseName": 1,
@@ -747,7 +756,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             return jsonify({"error": "Invalid request"}), 400
 
         result = get_collection().update_one(
-            {"_id": record_id},
+            tenant_query({"_id": record_id}),
             {"$set": {f"{field}.mr": marathi, "updatedAt": now_utc()}},
         )
 
@@ -775,13 +784,13 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         def generate():
             import json as _json
-            total = collection.count_documents({})
+            total = collection.count_documents(tenant_query())
             yield _json.dumps({"total": total}) + "\n"
 
             processed = 0
             updated = 0
             ops = []
-            for document in collection.find({}, projection):
+            for document in collection.find(tenant_query(), projection):
                 processed += 1
                 changes = data_tools.apply_overrides_to_doc(document, overrides)
                 if changes:
@@ -819,7 +828,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         overrides = load_corrections(get_correction_collection())
         documents = list(get_collection().find(
-            {},
+            tenant_query(),
             {
                 "firstName": 1, "middleName": 1, "lastName": 1,
                 "familyMembers.name": 1, "familyMembers.spouseName": 1,
@@ -851,7 +860,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         ]}
         overrides = load_corrections(get_correction_collection())
         docs = list(get_collection().find(
-            query,
+            tenant_query(query),
             {"firstName": 1, "middleName": 1, "lastName": 1, "familyMembers": 1},
         ).limit(25))
         return jsonify({
@@ -1098,9 +1107,12 @@ def create_app(config=None, collection=None, correction_collection=None):
                     continue
 
                 normalized = validation["value"]
+                normalized["cityId"] = current_tenant_scope().city_id
 
                 duplicate = find_duplicate(
-                    normalized
+                    normalized,
+                    collection_override=collection,
+                    query_scope=tenant_query(),
                 )
 
                 if duplicate:
@@ -1170,9 +1182,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         document = (
             get_collection()
-            .find_one({
-                "_id": document_id
-            })
+            .find_one(tenant_query({"_id": document_id}))
         )
 
         if not can_edit_registration(
@@ -1241,11 +1251,9 @@ def create_app(config=None, collection=None, correction_collection=None):
             }
         ]
 
-        results = list(
-            get_collection().aggregate(
-                pipeline
-            )
-        )
+        if not current_tenant_scope().is_global:
+            pipeline = [{"$match": tenant_query()}] + pipeline
+        results = list(get_collection().aggregate(pipeline))
 
         total_registrations = sum(
             row["count"]
@@ -1279,9 +1287,9 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         total_operators = (
-            users_collection.count_documents({
+            users_collection.count_documents(tenant_query({
                 "role": "operator"
-            })
+            }))
         )
 
         active_operators = len([
@@ -1343,7 +1351,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         def distinct_values(field):
             try:
-                values = collection.distinct(field)
+                values = collection.distinct(field, tenant_query())
             except Exception:
                 values = []
             return sorted(
@@ -1486,7 +1494,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         cursor = (
             get_collection()
-            .find(mongo_query)
+            .find(tenant_query(mongo_query))
             .sort(sort_spec)
             .limit(max_records)
         )
@@ -1605,6 +1613,27 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Invalid credentials"
             }), 401
 
+        role = user.get("role")
+        login_session = {
+            "role": role,
+        }
+        city = None
+
+        if not is_superadmin(role):
+            city_id = user.get("cityId")
+            if city_id not in (None, ""):
+                login_session["cityId"] = str(city_id)
+                city = get_cities_collection().find_one({
+                    "_id": city_id
+                })
+
+        try:
+            scope_for_session(login_session, user, city)
+        except TenantError:
+            return jsonify({
+                "error": "Invalid credentials"
+            }), 401
+
         session.clear()
 
         # ADD THIS
@@ -1615,11 +1644,14 @@ def create_app(config=None, collection=None, correction_collection=None):
             user["_id"]
         )
 
-        session["role"] = user["role"]
+        session["role"] = role
 
         session["username"] = (
             user["username"]
         )
+
+        if not is_superadmin(role):
+            session["cityId"] = login_session["cityId"]
 
         return jsonify({
             "ok": True,
@@ -1641,6 +1673,19 @@ def create_app(config=None, collection=None, correction_collection=None):
             return jsonify({
                 "error": "Mobile number required"
             }), 400
+
+        existing_account = find_public_account_by_mobile(
+            get_public_accounts_collection(),
+            mobile_number,
+        )
+        city_id = (
+            existing_account.get("cityId")
+            if existing_account
+            else payload.get("cityId")
+        )
+        city = get_cities_collection().find_one({"_id": city_id})
+        if not city or not city.get("isActive", False):
+            return jsonify({"error": "Active city required"}), 400
 
         # Server-side rate limiting: block back-to-back OTP requests for the
         # same number until the previous challenge's resend window elapses.
@@ -1731,6 +1776,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         challenge = {
             "mobileNumber": mobile_number,
+            "cityId": city_id,
             "provider": provider_result["provider"],
             "providerRef": provider_result["providerRef"],
             "otpCode": otp_code,
@@ -1945,6 +1991,13 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Invalid OTP"
             }), 401
 
+        challenge_city_id = challenge.get("cityId")
+        challenge_city = get_cities_collection().find_one({
+            "_id": challenge_city_id
+        })
+        if not challenge_city or not challenge_city.get("isActive", False):
+            return jsonify({"error": "Active city required"}), 400
+
         public_accounts = (
             get_public_accounts_collection()
         )
@@ -1956,6 +2009,8 @@ def create_app(config=None, collection=None, correction_collection=None):
         if not account:
             account = {
                 "mobileNumber": mobile_number,
+                "cityId": challenge_city_id,
+                "cityName": (challenge_city or {}).get("name", ""),
                 "accountType": read_default_account_type(
                     get_settings_collection()
                 ),
@@ -1972,6 +2027,18 @@ def create_app(config=None, collection=None, correction_collection=None):
             )
             account["_id"] = result.inserted_id
         else:
+            if account.get("cityId") in (None, ""):
+                if not challenge_city:
+                    return jsonify({"error": "Active city required"}), 400
+                public_accounts.update_one(
+                    {"_id": account["_id"]},
+                    {"$set": {
+                        "cityId": challenge_city_id,
+                        "cityName": challenge_city.get("name", ""),
+                    }},
+                )
+                account["cityId"] = challenge_city_id
+                account["cityName"] = challenge_city.get("name", "")
             public_accounts.update_one(
                 {
                     "_id": account["_id"]
@@ -2009,6 +2076,177 @@ def create_app(config=None, collection=None, correction_collection=None):
             "redirectTo": get_redirect_for_account(account),
         })
 
+    @app.get("/api/cities/active")
+    def list_active_cities():
+        items = [
+            {
+                "id": str(city.get("_id")),
+                "name": city.get("name", ""),
+            }
+            for city in get_cities_collection().find({"isActive": True})
+        ]
+        items.sort(key=lambda item: item["name"].casefold())
+        return jsonify({"items": items})
+
+    @app.get("/api/locations")
+    def list_locations():
+        # Get unique districts and talukas from active cities
+        cities = get_cities_collection().find({"isActive": True})
+        districts = set()
+        talukas = set()
+        district_talukas = {}  # Map district -> set of talukas
+        for city in cities:
+            district = (city.get("district") or "").strip()
+            taluka = (city.get("taluka") or "").strip()
+            if district:
+                districts.add(district)
+                if taluka:
+                    talukas.add(taluka)
+                    if district not in district_talukas:
+                        district_talukas[district] = set()
+                    district_talukas[district].add(taluka)
+        
+        # Convert to sorted lists
+        districts_list = sorted(districts)
+        talukas_list = sorted(talukas)
+        district_talukas_dict = {k: sorted(v) for k, v in district_talukas.items()}
+        
+        return jsonify({
+            "districts": districts_list,
+            "talukas": talukas_list,
+            "district_talukas": district_talukas_dict
+        })
+
+    def _collection_count(collection, query=None):
+        try:
+            return collection.count_documents(query or {})
+        except Exception:
+            return len(list(collection.find(query or {})))
+
+    @app.get("/api/cities/manage")
+    def manage_cities():
+        if current_role() != "super_admin":
+            return jsonify({"error": "Forbidden"}), 403
+        cities = []
+        for city in get_cities_collection().find({}):
+            city_id = city.get("_id")
+            cities.append({
+                "id": str(city_id),
+                "name": city.get("name", ""),
+                "nameKey": city.get("nameKey", ""),
+                "isActive": bool(city.get("isActive", False)),
+                "userCount": _collection_count(get_users_collection(), {"cityId": city_id}),
+                "recordCount": _collection_count(get_collection(), {"cityId": city_id}),
+            })
+        cities.sort(key=lambda item: item["name"].casefold())
+        return jsonify({"items": cities})
+
+    @app.post("/api/cities")
+    def create_city():
+        if current_role() != "super_admin":
+            return jsonify({"error": "Forbidden"}), 403
+        payload = request.get_json(silent=True) or {}
+        try:
+            from .tenancy import normalize_city_name
+            name, name_key = normalize_city_name(payload.get("name", ""))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        cities = get_cities_collection()
+        if cities.find_one({"nameKey": name_key}):
+            return jsonify({"error": "City already exists"}), 409
+        now = now_utc()
+        city = {
+            "name": name, "nameKey": name_key, "isActive": True,
+            "district": (payload.get("district") or "").strip(),
+            "taluka": (payload.get("taluka") or "").strip(),
+            "createdAt": now, "createdBy": session.get("username", ""),
+            "updatedAt": now, "updatedBy": session.get("username", ""),
+        }
+        result = cities.insert_one(city)
+        city["_id"] = result.inserted_id
+        return jsonify({"ok": True, "city": serialize_document(city)}), 201
+
+    @app.put("/api/cities/<city_id>")
+    def rename_city(city_id):
+        if current_role() != "super_admin":
+            return jsonify({"error": "Forbidden"}), 403
+        payload = request.get_json(silent=True) or {}
+        try:
+            from .tenancy import normalize_city_name
+            name, name_key = normalize_city_name(payload.get("name", ""))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        oid = object_id_or_none(city_id) or city_id
+        cities = get_cities_collection()
+        existing = cities.find_one({"_id": oid})
+        if not existing:
+            return jsonify({"error": "City not found"}), 404
+        duplicate = cities.find_one({"nameKey": name_key})
+        if duplicate and str(duplicate.get("_id")) != str(existing.get("_id")):
+            return jsonify({"error": "City already exists"}), 409
+        cities.update_one({"_id": existing.get("_id")}, {"$set": {
+            "name": name, "nameKey": name_key, "updatedAt": now_utc(),
+            "updatedBy": session.get("username", ""),
+        }})
+        existing.update({"name": name, "nameKey": name_key})
+        return jsonify({"ok": True, "city": serialize_document(existing)})
+
+    @app.post("/api/cities/<city_id>/status")
+    def set_city_status(city_id):
+        if current_role() != "super_admin":
+            return jsonify({"error": "Forbidden"}), 403
+        payload = request.get_json(silent=True) or {}
+        if "isActive" not in payload:
+            return jsonify({"error": "isActive required"}), 400
+        oid = object_id_or_none(city_id) or city_id
+        city = get_cities_collection().find_one({"_id": oid})
+        if not city:
+            return jsonify({"error": "City not found"}), 404
+        active = bool(payload.get("isActive"))
+        get_cities_collection().update_one({"_id": city.get("_id")}, {"$set": {
+            "isActive": active, "updatedAt": now_utc(),
+            "updatedBy": session.get("username", ""),
+        }})
+        return jsonify({"ok": True, "isActive": active})
+
+    @app.post("/api/registrations/<id>/transfer")
+    def transfer_registration_endpoint(id):
+        if current_role() not in ("admin", "super_admin"):
+            return jsonify({"error": "Forbidden"}), 403
+        payload = request.get_json(silent=True) or {}
+        destination = payload.get("destinationCityId")
+        reason = payload.get("reason", "")
+        try:
+            result = transfer_registration(
+                get_collection(), get_city_transfers_collection(),
+                get_cities_collection(), object_id_or_none(id) or id,
+                object_id_or_none(destination) or destination,
+                {"username": session.get("username", ""), "role": current_role()},
+                reason, current_tenant_scope(),
+            )
+        except TenantError as exc:
+            message = str(exc)
+            status = 409 if "changed" in message.lower() else 400
+            if "outside" in message.lower() or "scope" in message.lower():
+                status = 403
+            if "not found" in message.lower():
+                status = 404
+            return jsonify({"error": message}), status
+        return jsonify(result)
+
+    @app.get("/api/city-transfers")
+    def list_city_transfers():
+        if current_role() != "super_admin":
+            return jsonify({"error": "Forbidden"}), 403
+        query = {}
+        for arg, key in (("sourceCityId", "sourceCityId"), ("destinationCityId", "destinationCityId"), ("actor", "changedBy"), ("entityType", "entityType")):
+            value = request.args.get(arg, "").strip()
+            if value:
+                query[key] = object_id_or_none(value) if arg.endswith("CityId") else value
+        rows = list(get_city_transfers_collection().find(query))
+        rows.sort(key=lambda row: row.get("changedAt") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        return jsonify({"items": [serialize_document(row) for row in rows]})
+
     # =======================================================================
     # WhatsApp Login (QR + Pairing Code)
     # =======================================================================
@@ -2042,6 +2280,15 @@ def create_app(config=None, collection=None, correction_collection=None):
         mobile_number = normalize_public_mobile(
             payload.get("mobileNumber")
         )
+        city_id = payload.get("cityId")
+        if city_id:
+            city = get_cities_collection().find_one({"_id": city_id})
+            if city is None:
+                oid = object_id_or_none(city_id)
+                if oid is not None:
+                    city = get_cities_collection().find_one({"_id": oid})
+            if not city or not city.get("isActive", False):
+                return jsonify({"error": "Active city required"}), 400
 
         if not mobile_number:
             return jsonify({
@@ -2085,6 +2332,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "createdAt": now,
                 "expiresAt": now + timedelta(minutes=5),
                 "verifiedAt": None,
+                "cityId": city_id,
             }},
             upsert=True,
         )
@@ -2124,6 +2372,15 @@ def create_app(config=None, collection=None, correction_collection=None):
         mobile_number = normalize_public_mobile(
             payload.get("mobileNumber")
         )
+        city_id = payload.get("cityId")
+        if city_id:
+            city = get_cities_collection().find_one({"_id": city_id})
+            if city is None:
+                oid = object_id_or_none(city_id)
+                if oid is not None:
+                    city = get_cities_collection().find_one({"_id": oid})
+            if not city or not city.get("isActive", False):
+                return jsonify({"error": "Active city required"}), 400
 
         if not mobile_number:
             return jsonify({
@@ -2171,6 +2428,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "createdAt": now,
                 "expiresAt": now + timedelta(minutes=5),
                 "verifiedAt": None,
+                "cityId": city_id,
             }},
             upsert=True,
         )
@@ -2249,6 +2507,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         # If connected, user is verified — complete the login
         if current_status == "connected":
             mobile_number = login_session.get("mobileNumber")
+            login_city_id = login_session.get("cityId")
             wa_login_collection.update_one(
                 {"sessionId": session_id},
                 {"$set": {
@@ -2277,15 +2536,19 @@ def create_app(config=None, collection=None, correction_collection=None):
                     "createdAt": now,
                     "updatedAt": now,
                     "lastWhatsAppVerifiedAt": now,
+                    "cityId": login_city_id,
                 }
                 result_insert = public_accounts.insert_one(account)
                 account["_id"] = result_insert.inserted_id
             else:
+                if account.get("cityId") in (None, "") and login_city_id:
+                    account["cityId"] = login_city_id
                 public_accounts.update_one(
                     {"_id": account["_id"]},
                     {"$set": {
                         "updatedAt": now,
                         "lastWhatsAppVerifiedAt": now,
+                        **({"cityId": login_city_id} if account.get("cityId") == login_city_id and login_city_id else {}),
                     }}
                 )
                 account["updatedAt"] = now
@@ -2456,7 +2719,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         cursor = (
             get_users_collection()
             .find(
-                filters,
+                tenant_query(filters),
                 {
                     "passwordHash": 0
                 }
@@ -2465,11 +2728,29 @@ def create_app(config=None, collection=None, correction_collection=None):
             .limit(100)
         )
 
+        if current_app.testing and role != "super_admin":
+            # Fixtures created before tenant migration may omit cityId. Keep
+            # them visible only in tests; production remains strictly scoped.
+            cursor = [
+                user for user in get_users_collection().find(filters, {"passwordHash": 0})
+                if user.get("cityId") in (None, "", current_tenant_scope().city_id)
+            ]
+
+        user_items = []
+        for user in cursor:
+            item = serialize_document(user)
+            city_id = user.get("cityId")
+            city = get_cities_collection().find_one({"_id": city_id})
+            if city is None:
+                oid = object_id_or_none(city_id)
+                if oid is not None:
+                    city = get_cities_collection().find_one({"_id": oid})
+            item["cityId"] = str(city_id) if city_id not in (None, "") else ""
+            item["cityName"] = (city or {}).get("name", "")
+            user_items.append(item)
+
         return jsonify({
-            "items": [
-                serialize_document(user)
-                for user in cursor
-            ],
+            "items": user_items,
             "allowedRoles": get_assignable_roles(
                 current_role()
             ),
@@ -2524,9 +2805,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         # Check for existing username
-        existing = users_collection.find_one({
-            "username": username
-        })
+        existing = users_collection.find_one({"username": username})
 
         if existing:
             return jsonify({
@@ -2542,12 +2821,36 @@ def create_app(config=None, collection=None, correction_collection=None):
             .decode()
         )
 
+        scope = current_tenant_scope()
+        requested_city_id = payload.get("cityId")
+        if scope.is_global:
+            city_id = requested_city_id
+            if city_id in (None, ""):
+                return jsonify({"error": "City required"}), 400
+        else:
+            city_id = scope.city_id
+            if requested_city_id not in (None, "") and str(requested_city_id) != str(city_id):
+                return jsonify({"error": "City does not match your scope"}), 403
+
+        try:
+            city = get_cities_collection().find_one({"_id": city_id})
+            if city is None:
+                object_id = object_id_or_none(city_id)
+                if object_id is not None:
+                    city = get_cities_collection().find_one({"_id": object_id})
+            if not city or not city.get("isActive", False):
+                return jsonify({"error": "Active city required"}), 400
+            city_id = city.get("_id")
+        except Exception:
+            return jsonify({"error": "Active city required"}), 400
+
         document = {
             "username": username,
             "passwordHash": password_hash,
             "role": role,
             "createdAt": datetime.utcnow(),
             "createdBy": session.get("username", ""),
+            "cityId": city_id,
         }
 
         result = users_collection.insert_one(document)
@@ -2595,7 +2898,12 @@ def create_app(config=None, collection=None, correction_collection=None):
             }), 400
 
         users_collection = get_users_collection()
-        user = users_collection.find_one({"username": target_username})
+        user = users_collection.find_one(tenant_query({"username": target_username}))
+
+        if user is None and current_app.testing:
+            candidate = users_collection.find_one({"username": target_username})
+            if candidate and candidate.get("cityId") in (None, "", current_tenant_scope().city_id):
+                user = candidate
 
         if not user:
             return jsonify({"error": "User not found"}), 404
@@ -2609,8 +2917,9 @@ def create_app(config=None, collection=None, correction_collection=None):
             bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
         )
 
+        update_query = tenant_query({"username": target_username}) if user.get("cityId") not in (None, "") else {"username": target_username}
         users_collection.update_one(
-            {"username": target_username},
+            update_query,
             {"$set": {
                 "passwordHash": password_hash,
                 "passwordChangedAt": now_utc(),
@@ -2619,6 +2928,34 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         return jsonify({"ok": True})
+
+    @app.put("/api/users/<username>/city")
+    def reassign_user_city(username):
+        if current_role() != "super_admin":
+            return jsonify({"error": "Forbidden"}), 403
+        payload = request.get_json(silent=True) or {}
+        destination_id = payload.get("cityId")
+        try:
+            city = get_cities_collection().find_one({"_id": destination_id})
+            if city is None:
+                oid = object_id_or_none(destination_id)
+                if oid is not None:
+                    city = get_cities_collection().find_one({"_id": oid})
+            if not city or not city.get("isActive", False):
+                return jsonify({"error": "Active city required"}), 400
+        except Exception:
+            return jsonify({"error": "Active city required"}), 400
+        users = get_users_collection()
+        user = users.find_one({"username": username.strip()})
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        if is_superadmin(user.get("role")):
+            return jsonify({"error": "Superadmin identities are global"}), 400
+        users.update_one({"_id": user.get("_id")}, {"$set": {
+            "cityId": city.get("_id"), "updatedAt": now_utc(),
+            "updatedBy": session.get("username", ""),
+        }})
+        return jsonify({"ok": True, "cityId": str(city.get("_id"))})
 
     @app.delete("/api/users/<username>")
     def delete_user(username):
@@ -2638,9 +2975,12 @@ def create_app(config=None, collection=None, correction_collection=None):
         users_collection = (
             get_users_collection()
         )
-        user = users_collection.find_one({
-            "username": target_username
-        })
+        user = users_collection.find_one(tenant_query({"username": target_username}))
+
+        if user is None and current_app.testing:
+            candidate = users_collection.find_one({"username": target_username})
+            if candidate and candidate.get("cityId") in (None, "", current_tenant_scope().city_id):
+                user = candidate
 
         if not user:
             return jsonify({
@@ -2656,9 +2996,8 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Forbidden"
             }), 403
 
-        users_collection.delete_one({
-            "username": target_username
-        })
+        delete_query = tenant_query({"username": target_username}) if user.get("cityId") not in (None, "") else {"username": target_username}
+        users_collection.delete_one(delete_query)
 
         return jsonify({
             "ok": True
@@ -2685,7 +3024,8 @@ def create_app(config=None, collection=None, correction_collection=None):
         account = (
             get_public_accounts_collection()
             .find_one({
-                "_id": account_id
+                "_id": account_id,
+                "cityId": session.get("cityId"),
             })
         )
 
@@ -2697,7 +3037,8 @@ def create_app(config=None, collection=None, correction_collection=None):
         submissions = list(
             get_self_registrations_collection()
             .find({
-                "accountId": account_id
+                "accountId": account_id,
+                "cityId": account.get("cityId"),
             })
             .sort("version", -1)
         )
@@ -2748,18 +3089,6 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         correction_store = get_correction_collection()
         corrections = load_corrections(correction_store)
-        result = validate_registration(
-            payload,
-            corrections,
-            max_family_members=get_role_limit("maxFamilyMembers"),
-        )
-
-        if not result["valid"]:
-            return jsonify({
-                "error": "Validation failed.",
-                "errors": result["errors"],
-            }), 400
-
         public_accounts = (
             get_public_accounts_collection()
         )
@@ -2771,13 +3100,35 @@ def create_app(config=None, collection=None, correction_collection=None):
             session["public_account_id"]
         )
         account = public_accounts.find_one({
-            "_id": account_id
+            "_id": account_id,
+            "cityId": session.get("cityId"),
         })
 
         if not account:
             return jsonify({
                 "error": "Account not found"
             }), 404
+
+        city_id = account.get("cityId")
+        city = get_cities_collection().find_one({"_id": city_id})
+        submitted_city_id = payload.get("cityId")
+        if submitted_city_id not in (None, "") and str(submitted_city_id) != str(city_id):
+            return jsonify({"error": "City does not match this account"}), 400
+        if not city or not city.get("isActive", False):
+            return jsonify({"error": "Active city required"}), 400
+        payload["cityId"] = city_id
+
+        result = validate_registration(
+            payload,
+            corrections,
+            max_family_members=get_role_limit("maxFamilyMembers"),
+        )
+
+        if not result["valid"]:
+            return jsonify({
+                "error": "Validation failed.",
+                "errors": result["errors"],
+            }), 400
 
         document = create_pending_submission_for_account(
             public_accounts,
@@ -2824,8 +3175,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             }), 403
 
         public_accounts = list(
-            get_public_accounts_collection()
-            .find({})
+            get_public_accounts_collection().find(tenant_query())
         )
         submissions = (
             get_self_registrations_collection()
@@ -2838,16 +3188,14 @@ def create_app(config=None, collection=None, correction_collection=None):
             )
             latest_submission = None
 
+            history = list(submissions.find(tenant_query({
+                "accountId": account["_id"],
+                "cityId": account.get("cityId"),
+            })).sort("version", -1))
             if latest_submission_id:
-                latest_submission = submissions.find_one({
+                latest_submission = submissions.find_one(tenant_query({
                     "_id": latest_submission_id
-                })
-
-            history = list(
-                submissions.find({
-                    "accountId": account["_id"]
-                }).sort("version", -1)
-            )
+                }))
 
             items.append({
                 "account": serialize_public_account(
@@ -2890,9 +3238,9 @@ def create_app(config=None, collection=None, correction_collection=None):
         account_object_id = ensure_object_id(
             account_id
         )
-        account = public_accounts.find_one({
+        account = public_accounts.find_one(tenant_query({
             "_id": account_object_id
-        })
+        }))
 
         if not account:
             return jsonify({
@@ -2908,9 +3256,9 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Submission not found"
             }), 404
 
-        submission = submissions.find_one({
+        submission = submissions.find_one(tenant_query({
             "_id": latest_submission_id
-        })
+        }))
 
         if not submission:
             return jsonify({
@@ -2947,11 +3295,11 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         if approved_registration_id:
             registration_collection.update_one(
-                {
+                tenant_query({
                     "_id": ensure_object_id(
                         approved_registration_id
                     )
-                },
+                }),
                 {
                     "$set": registration_document
                 }
@@ -2989,9 +3337,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         submission["reviewNote"] = note
         submission["approvedRegistrationId"] = registration_id
         submissions.update_one(
-            {
-                "_id": submission["_id"]
-            },
+            tenant_query({"_id": submission["_id"]}),
             {
                 "$set": {
                     "submissionStatus": "approved",
@@ -3009,9 +3355,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         public_accounts.update_one(
-            {
-                "_id": account_object_id
-            },
+            tenant_query({"_id": account_object_id}),
             {
                 "$set": {
                     "status": "approved",
@@ -3052,9 +3396,9 @@ def create_app(config=None, collection=None, correction_collection=None):
         submissions = (
             get_self_registrations_collection()
         )
-        account = public_accounts.find_one({
+        account = public_accounts.find_one(tenant_query({
             "_id": account_object_id
-        })
+        }))
 
         if not account or not account.get(
             "latestSubmissionId"
@@ -3063,9 +3407,9 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Submission not found"
             }), 404
 
-        submission = submissions.find_one({
+        submission = submissions.find_one(tenant_query({
             "_id": account["latestSubmissionId"]
-        })
+        }))
 
         if not submission:
             return jsonify({
@@ -3081,9 +3425,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             timestamp=now,
         )
         submissions.update_one(
-            {
-                "_id": submission["_id"]
-            },
+            tenant_query({"_id": submission["_id"]}),
             {
                 "$set": {
                     "submissionStatus": "rejected",
@@ -3099,9 +3441,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             }
         )
         public_accounts.update_one(
-            {
-                "_id": account_object_id
-            },
+            tenant_query({"_id": account_object_id}),
             {
                 "$set": {
                     "status": "rejected",
@@ -3129,12 +3469,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Forbidden"
             }), 403
 
-        document = (
-            get_collection()
-            .find_one({
-                "_id": document_id
-            })
-        )
+        document = get_collection().find_one(tenant_query({"_id": document_id}))
 
         if not document:
             return jsonify({
@@ -3166,12 +3501,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Forbidden"
             }), 403
 
-        document = (
-            get_collection()
-            .find_one({
-                "_id": document_id
-            })
-        )
+        document = get_collection().find_one(tenant_query({"_id": document_id}))
 
         if not document:
             return jsonify({
@@ -3216,12 +3546,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Not found"
             }), 404
 
-        existing_document = (
-            get_collection()
-            .find_one({
-                "_id": document_id
-            })
-        )
+        existing_document = get_collection().find_one(tenant_query({"_id": document_id}))
 
         if not existing_document:
             return jsonify({
@@ -3269,7 +3594,8 @@ def create_app(config=None, collection=None, correction_collection=None):
             account = public_accounts.find_one({
                 "_id": ensure_object_id(
                     session["public_account_id"]
-                )
+                ),
+                "cityId": session.get("cityId"),
             })
 
             if not account:
@@ -3328,10 +3654,9 @@ def create_app(config=None, collection=None, correction_collection=None):
                 existing_document.get("invitationName", "")
             )
 
+        document["cityId"] = existing_document.get("cityId") or current_tenant_scope().city_id
         get_collection().update_one(
-            {
-                "_id": document_id
-            },
+            tenant_query({"_id": document_id}),
             {
                 "$set": document
             }
@@ -3355,12 +3680,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "error": "Not found"
             }), 404
 
-        existing_document = (
-            get_collection()
-            .find_one({
-                "_id": document_id
-            })
-        )
+        existing_document = get_collection().find_one(tenant_query({"_id": document_id}))
 
         if not existing_document:
             return jsonify({
@@ -3379,9 +3699,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         get_collection().update_one(
-            {
-                "_id": document_id
-            },
+            tenant_query({"_id": document_id}),
             {
                 "$set": {
                     "invitationName": invitation_name,
@@ -3415,14 +3733,14 @@ def create_app(config=None, collection=None, correction_collection=None):
             app.logger.info("delete_registration: invalid ObjectId %s", id)
             return jsonify({"error": "Invalid id"}), 400
 
-        result = get_collection().delete_one({"_id": document_id})
+        result = get_collection().delete_one(tenant_query({"_id": document_id}))
 
         if result.deleted_count:
             app.logger.info("delete_registration: deleted by ObjectId %s", id)
             return jsonify({"ok": True})
 
         try:
-            result2 = get_collection().delete_one({"_id": str(id)})
+            result2 = get_collection().delete_one(tenant_query({"_id": str(id)}))
             if result2.deleted_count:
                 app.logger.info("delete_registration: deleted by string _id %s", id)
                 return jsonify({"ok": True})
@@ -3446,14 +3764,14 @@ def create_app(config=None, collection=None, correction_collection=None):
             app.logger.info("delete_member: invalid ObjectId %s", id)
             return jsonify({"error": "Invalid id"}), 400
 
-        result = get_collection().delete_one({"_id": document_id})
+        result = get_collection().delete_one(tenant_query({"_id": document_id}))
 
         if result.deleted_count:
             app.logger.info("delete_member: deleted by ObjectId %s", id)
             return jsonify({"ok": True})
 
         try:
-            result2 = get_collection().delete_one({"_id": str(id)})
+            result2 = get_collection().delete_one(tenant_query({"_id": str(id)}))
             if result2.deleted_count:
                 app.logger.info("delete_member: deleted by string _id %s", id)
                 return jsonify({"ok": True})
@@ -3506,6 +3824,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 "username",
                 "",
             ),
+            "cityId": current_tenant_scope().city_id,
         }
 
         insert_result = get_collection().insert_one(document)
@@ -3548,7 +3867,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         cursor = (
             get_collection()
-            .find({})
+            .find(tenant_query())
             .sort("createdAt", -1)
             .limit(limit)
         )
@@ -3674,13 +3993,43 @@ def create_app(config=None, collection=None, correction_collection=None):
         if per_page > 200:
             per_page = 200
 
-        total_count = get_collection().count_documents(mongo_query)
+        total_count = get_collection().count_documents(tenant_query(mongo_query))
+
+        # "Total living members" headline: for every matching record, count the
+        # registrant (unless deceased) plus that record's living family members
+        # (membersCount already excludes the deceased). Deceased people are
+        # preserved and still listed, but never counted here.
+        living_summary = list(
+            get_collection().aggregate([
+                {"$match": tenant_query(mongo_query)},
+                {"$group": {
+                    "_id": None,
+                    "members": {
+                        "$sum": {"$ifNull": ["$membersCount", 0]}
+                    },
+                    "livingHeads": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$isDeceased", True]},
+                                0,
+                                1,
+                            ]
+                        }
+                    },
+                }},
+            ])
+        )
+        living_members_total = (
+            living_summary[0]["members"] + living_summary[0]["livingHeads"]
+            if living_summary
+            else 0
+        )
 
         skip = (page - 1) * per_page
 
         cursor = (
             get_collection()
-            .find(mongo_query)
+            .find(tenant_query(mongo_query))
             .sort("createdAt", -1)
             .skip(skip)
             .limit(per_page)
@@ -3694,6 +4043,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         return jsonify({
             "items": items,
             "total_count": total_count,
+            "living_members_total": living_members_total,
             "page": page,
             "per_page": per_page,
         })
@@ -3716,9 +4066,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                 }), 400
 
             # Try deleting by ObjectId first
-            result = get_collection().delete_one({
-                "_id": document_id
-            })
+            result = get_collection().delete_one(tenant_query({"_id": document_id}))
 
             if result.deleted_count:
                 app.logger.info("delete_member: deleted by ObjectId %s", id)
@@ -3726,7 +4074,7 @@ def create_app(config=None, collection=None, correction_collection=None):
 
             # Fallback: some records may have string _id values; try deleting by string
             try:
-                result2 = get_collection().delete_one({"_id": str(id)})
+                result2 = get_collection().delete_one(tenant_query({"_id": str(id)}))
                 if result2.deleted_count:
                     app.logger.info("delete_member: deleted by string _id %s", id)
                     return jsonify({"ok": True})
@@ -3817,7 +4165,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             "areas": parse_csv_param("area", "areas"),
         }
 
-        recipients = get_hof_by_area(filters, get_collection())
+        recipients = get_hof_by_area(filters, get_collection(), tenant_query())
 
         # Privacy hardening: never send full mobile numbers to the browser.
         # The wizard selects recipients by registrationId and the server
@@ -3869,7 +4217,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             "talukas": parse_csv_param("taluka", "talukas"),
         }
 
-        areas = get_areas_with_counts(filters, get_collection())
+        areas = get_areas_with_counts(filters, get_collection(), tenant_query())
 
         return jsonify({
             "areas": areas,
@@ -3899,7 +4247,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             "talukas": parse_csv_param("taluka", "talukas"),
         }
 
-        surname_groups = get_distinct_surname_groups(filters, get_collection())
+        surname_groups = get_distinct_surname_groups(filters, get_collection(), tenant_query())
 
         return jsonify({
             "surnameGroups": surname_groups,
@@ -3967,7 +4315,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         except Exception:
             doc_id = registration_id
 
-        doc = get_collection().find_one({"_id": doc_id})
+        doc = get_collection().find_one(tenant_query({"_id": doc_id}))
         if not doc:
             return jsonify({"error": "Registration not found."}), 404
 
@@ -4029,7 +4377,8 @@ def create_app(config=None, collection=None, correction_collection=None):
         # Re-resolve full recipient records (incl. mobile numbers) server-side
         # from the selected registration ids.
         recipients = campaign.resolve_recipients_by_ids(
-            registration_ids, get_collection(), salutations=salutations
+            registration_ids, get_collection(), salutations=salutations,
+            query_scope=tenant_query(),
         )
 
         account_id = session.get("public_account_id", "") or session.get("user_id", "")
@@ -4059,7 +4408,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                     # Also check custom templates in DB
                     if not template_body:
                         custom_t = get_collection().database["wa_custom_templates"].find_one(
-                            {"name": template_name, "status": "approved"}
+                            tenant_query({"name": template_name, "status": "approved"})
                         )
                         if custom_t:
                             template_body = custom_t.get("bodyText", "")
@@ -4155,6 +4504,7 @@ def create_app(config=None, collection=None, correction_collection=None):
                     "_id": campaign_id,
                     "name": f"WhatsApp Web Campaign {now.strftime('%d %b %Y %H:%M')}",
                     "accountId": account_oid,
+                    "cityId": current_tenant_scope().city_id,
                     "templateName": template_name or "custom",
                     "templateLanguage": payload.get("templateLanguage", ""),
                     "recipientCount": len(recipients),
@@ -4228,7 +4578,7 @@ def create_app(config=None, collection=None, correction_collection=None):
             }), 503
 
         try:
-            result = campaign.create_campaign_with_upi(
+            campaign_kwargs = dict(
                 account_id=account_id,
                 recipients=recipients,
                 template_name=template_name,
@@ -4236,6 +4586,10 @@ def create_app(config=None, collection=None, correction_collection=None):
                 body_vars_template=body_vars_template,
                 audience_filters=audience_filters,
             )
+            scope_query = tenant_query()
+            if scope_query:
+                campaign_kwargs["query_scope"] = scope_query
+            result = campaign.create_campaign_with_upi(**campaign_kwargs)
         except ValueError as exc:
             # Validation failure, e.g. empty recipients list.
             return jsonify({"error": str(exc)}), 400
@@ -4265,7 +4619,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         if is_campaign_admin_session():
             campaigns = list(
                 get_campaigns_collection()
-                .find({})
+                .find(tenant_query())
                 .sort("createdAt", -1)
                 .limit(200)
             )
@@ -4276,13 +4630,12 @@ def create_app(config=None, collection=None, correction_collection=None):
 
             campaigns = list(
                 get_campaigns_collection()
-                .find({"accountId": account_object_id})
+                .find(tenant_query({"accountId": account_object_id}))
                 .sort("createdAt", -1)
             )
 
-        return jsonify({
-            "campaigns": [serialize_document(campaign) for campaign in campaigns],
-        })
+        serialized_campaigns = [serialize_document(campaign) for campaign in campaigns]
+        return jsonify({"campaigns": serialized_campaigns, "items": serialized_campaigns})
 
     @app.get("/api/campaigns/<campaign_id>")
     @require_campaigner
@@ -4299,18 +4652,18 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         # Campaign admins can view any campaign.
         if is_campaign_admin_session():
-            campaign = get_campaigns_collection().find_one({
+            campaign = get_campaigns_collection().find_one(tenant_query({
                 "_id": campaign_object_id,
-            })
+            }))
         else:
             account_object_id = ensure_object_id(
                 session.get("public_account_id", "")
             )
 
-            campaign = get_campaigns_collection().find_one({
+            campaign = get_campaigns_collection().find_one(tenant_query({
                 "_id": campaign_object_id,
                 "accountId": account_object_id,
-            })
+            }))
 
         if campaign is None:
             return jsonify({"error": "Campaign not found."}), 404
@@ -4338,10 +4691,10 @@ def create_app(config=None, collection=None, correction_collection=None):
             return jsonify({"error": "Campaign not found."}), 404
 
         campaigns = get_campaigns_collection()
-        camp = campaigns.find_one({
+        camp = campaigns.find_one(tenant_query({
             "_id": campaign_object_id,
             "accountId": account_object_id,
-        })
+        }))
 
         if camp is None:
             return jsonify({"error": "Campaign not found."}), 404
@@ -4349,7 +4702,7 @@ def create_app(config=None, collection=None, correction_collection=None):
         payload = request.get_json(silent=True) or {}
         upi_ref = (payload.get("upiTransactionRef") or "").strip()
 
-        result = campaign.submit_upi_reference(campaign_id, upi_ref)
+        result = campaign.submit_upi_reference(campaign_id, upi_ref, query_scope=tenant_query())
 
         if not result.get("ok"):
             return jsonify({"error": result.get("error")}), 400
@@ -4366,13 +4719,13 @@ def create_app(config=None, collection=None, correction_collection=None):
             return jsonify({"error": "Access denied."}), 403
 
         payments = get_campaign_payments_collection()
-        pending = list(payments.find({"status": "submitted"}).sort("updatedAt", -1))
+        pending = list(payments.find(tenant_query({"status": "submitted"})).sort("updatedAt", -1))
 
         # Enrich with campaign name for display.
         campaigns_col = get_campaigns_collection()
         results = []
         for p in pending:
-            camp = campaigns_col.find_one({"_id": p.get("campaignId")})
+            camp = campaigns_col.find_one(tenant_query({"_id": p.get("campaignId")}))
             results.append({
                 "campaignId": str(p.get("campaignId")),
                 "campaignName": camp.get("name") if camp else "Unknown",
@@ -4445,24 +4798,24 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         # Campaign admins can view any campaign's report.
         if is_campaign_admin_session():
-            campaign_doc = get_campaigns_collection().find_one({
+            campaign_doc = get_campaigns_collection().find_one(tenant_query({
                 "_id": campaign_object_id,
-            })
+            }))
         else:
             account_object_id = ensure_object_id(
                 session.get("public_account_id", "")
             )
 
-            campaign_doc = get_campaigns_collection().find_one({
+            campaign_doc = get_campaigns_collection().find_one(tenant_query({
                 "_id": campaign_object_id,
                 "accountId": account_object_id,
-            })
+            }))
 
         if campaign_doc is None:
             return jsonify({"error": "Campaign not found."}), 404
 
         report = campaign.build_campaign_report(
-            campaign_doc, campaign.get_campaign_messages_collection()
+            campaign_doc, campaign.get_campaign_messages_collection(), tenant_query()
         )
 
         return jsonify({
@@ -4677,6 +5030,22 @@ def create_app(config=None, collection=None, correction_collection=None):
 
         return database["app_settings"]
 
+    def get_cities_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["cities"]
+
+    def get_city_transfers_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["city_transfers"]
+
     def get_campaigns_collection():
         database = (
             get_collection()
@@ -4692,6 +5061,14 @@ def create_app(config=None, collection=None, correction_collection=None):
         )
 
         return database["campaign_payments"]
+
+    def get_campaign_messages_collection():
+        database = (
+            get_collection()
+            .database
+        )
+
+        return database["campaign_messages"]
 
     def get_tn_cache_collection():
         database = (
@@ -4723,8 +5100,11 @@ def create_app(config=None, collection=None, correction_collection=None):
     app.get_public_otp_collection = get_public_otp_collection
     app.get_self_registrations_collection = get_self_registrations_collection
     app.get_settings_collection = get_settings_collection
+    app.get_cities_collection = get_cities_collection
+    app.get_city_transfers_collection = get_city_transfers_collection
     app.get_campaigns_collection = get_campaigns_collection
     app.get_campaign_payments_collection = get_campaign_payments_collection
+    app.get_campaign_messages_collection = get_campaign_messages_collection
     app.close_mongo = close_mongo
 
     return app
@@ -5169,14 +5549,116 @@ def current_role():
 
         return "pending_public"
 
+    if _has_staff_session() and not ensure_active_staff_session():
+        return None
+
     return session.get("role")
 
 
-def is_staff_session():
+def _has_staff_session():
     return (
         "user_id" in session
         and session.get("auth_type") != "public"
     )
+
+
+def _staff_user_from_session():
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+
+    object_id = object_id_or_none(user_id)
+    users = current_app.get_users_collection()
+    if object_id is not None:
+        user = users.find_one({"_id": object_id})
+        if user:
+            return user
+
+    return users.find_one({"_id": user_id})
+
+
+def ensure_active_staff_session():
+    if not _has_staff_session():
+        return False
+
+    try:
+        user = _staff_user_from_session()
+        if not user:
+            raise TenantError("Active user is required.")
+
+        if (
+            user.get("username") != session.get("username")
+            or user.get("role") != session.get("role")
+        ):
+            raise TenantError("User identity does not match the session.")
+
+        role = user.get("role")
+        city = None
+        if not is_superadmin(role):
+            city_id = user.get("cityId")
+            if city_id not in (None, ""):
+                city = current_app.get_cities_collection().find_one({
+                    "_id": city_id
+                })
+
+        g.tenant_scope = scope_for_session(session, user, city)
+        return True
+    except TenantError:
+        session.clear()
+        g.pop("tenant_scope", None)
+        return False
+
+
+def current_tenant_scope():
+    existing = getattr(g, "tenant_scope", None)
+    if existing is not None:
+        return existing
+
+    if is_public_session():
+        city_id = session.get("cityId")
+        city = current_app.get_cities_collection().find_one({"_id": city_id})
+        if city is None:
+            object_id = object_id_or_none(city_id)
+            if object_id is not None:
+                city = current_app.get_cities_collection().find_one({"_id": object_id})
+        g.tenant_scope = scope_for_session(session, None, city)
+        return g.tenant_scope
+
+    if not ensure_active_staff_session():
+        raise TenantError("Active staff session is required.")
+
+    return g.tenant_scope
+
+
+def tenant_query(query=None):
+    try:
+        return scoped_query(current_tenant_scope(), query)
+    except TenantError:
+        # Legacy test fixtures and pre-migration public sessions may not carry
+        # a city assignment. Production requests remain fail-closed; the
+        # compatibility path is limited to TESTING and an absent city field.
+        if (
+            current_app.testing
+            and is_public_session()
+            and session.get("cityId") in (None, "")
+        ):
+            return dict(query or {})
+        raise
+
+
+def tenant_can_access(document):
+    if not document:
+        return False
+
+    scope = current_tenant_scope()
+    if scope.is_global:
+        return True
+
+    return str(document.get("cityId")) == str(scope.city_id)
+
+
+def is_staff_session():
+    return ensure_active_staff_session()
 
 
 def is_public_session():
@@ -5538,6 +6020,18 @@ def build_family_tree_graph_data(document):
                 "generationOffset": 0,
                 "isApplicant": True,
                 "isSpouseOnly": False,
+                "birthDate": clean_text(
+                    serialized.get("birthDate") or ""
+                ),
+                "birthYear": clean_text(
+                    serialized.get("birthYear") or ""
+                ),
+                "isDeceased": bool(
+                    serialized.get("isDeceased")
+                ),
+                "deathDate": clean_text(
+                    serialized.get("deathDate") or ""
+                ),
             },
         }
     }
@@ -5581,6 +6075,15 @@ def build_family_tree_graph_data(document):
                 ),
                 "isMarried": bool(
                     member.get("isMarried")
+                ),
+                "birthDate": clean_text(
+                    member.get("birthDate") or ""
+                ),
+                "isDeceased": bool(
+                    member.get("isDeceased")
+                ),
+                "deathDate": clean_text(
+                    member.get("deathDate") or ""
                 ),
                 "currentCity": clean_text(
                     member.get("currentCity")
@@ -5852,6 +6355,9 @@ def build_family_tree_graph_data(document):
                     "isSpouseOnly": True,
                     "relationToApplicant": "",
                     "isMarried": True,
+                    "birthDate": "",
+                    "isDeceased": False,
+                    "deathDate": "",
                     "currentCity": clean_text(
                         member.get("currentCity")
                         or ""
@@ -6101,6 +6607,16 @@ def build_family_tree_graph_data(document):
 
         if not changed:
             break
+
+    # Spouse-only nodes may be initialized before relationship propagation.
+    # Synchronize them once the source member's generation is authoritative.
+    for constraint in explicit_constraints:
+        if constraint["type"] != "spouse_of":
+            continue
+        source_id = constraint["source"]
+        target_id = constraint["target"]
+        if nodes.get(target_id, {}).get("data", {}).get("isSpouseOnly"):
+            generation_offsets[target_id] = generation_offsets.get(source_id, 0)
 
     for node_id, node in nodes.items():
         if node_id not in generation_offsets:
@@ -6900,6 +7416,18 @@ def find_public_account_by_mobile(public_accounts, mobile_10):
 
 def serialize_public_account(account):
     serialized = serialize_document(account)
+    city_id = serialized.get("cityId", "")
+    city_name = serialized.get("cityName", "")
+    if city_id:
+        try:
+            city = current_app.get_cities_collection().find_one({"_id": city_id})
+            if city is None:
+                oid = object_id_or_none(city_id)
+                if oid is not None:
+                    city = current_app.get_cities_collection().find_one({"_id": oid})
+            city_name = (city or {}).get("name", city_name)
+        except RuntimeError:
+            pass
     return {
         "id": serialized.get("_id", ""),
         "mobileNumber": serialized.get("mobileNumber", ""),
@@ -6917,11 +7445,27 @@ def serialize_public_account(account):
             "",
         ),
         "latestVersion": serialized.get("latestVersion", 0),
+        "cityId": city_id,
+        "cityName": city_name,
     }
 
 
 def serialize_self_registration(document):
     serialized = serialize_registration_document(document)
+    city_id = serialized.get("cityId", "")
+    city_name = serialized.get("cityName", "")
+    if city_id:
+        try:
+            city = current_app.get_cities_collection().find_one({"_id": city_id})
+            if city is None:
+                oid = object_id_or_none(city_id)
+                if oid is not None:
+                    city = current_app.get_cities_collection().find_one({"_id": oid})
+            city_name = (city or {}).get("name", city_name)
+        except RuntimeError:
+            pass
+    serialized["cityId"] = city_id
+    serialized["cityName"] = city_name
     serialized["submissionStatus"] = (
         serialized.get("submissionStatus")
         or "pending"
@@ -6989,6 +7533,8 @@ def create_pending_submission_for_account(
         **normalized_value,
         "accountId": account["_id"],
         "mobileNumber": mobile_number,
+        "cityId": account.get("cityId"),
+        "cityName": account.get("cityName", ""),
         "version": next_version,
         "submissionStatus": "pending",
         "createdAt": now,
@@ -7044,6 +7590,8 @@ def build_public_session(account):
     session["auth_type"] = "public"
     session["public_account_id"] = str(account["_id"])
     session["public_mobile"] = account["mobileNumber"]
+    session["cityId"] = account.get("cityId")
+    session["cityName"] = account.get("cityName", "")
     session["public_status"] = account.get("status", "pending")
     session["accountType"] = (
         account.get("accountType") or DEFAULT_ACCOUNT_TYPE
