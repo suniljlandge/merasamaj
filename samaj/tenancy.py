@@ -29,6 +29,13 @@ def is_superadmin(role: str | None) -> bool:
     return role == "super_admin"
 
 
+def city_ids_match(left: Any, right: Any) -> bool:
+    if left in (None, "") or right in (None, ""):
+        return False
+
+    return str(left) == str(right)
+
+
 def scope_for_session(
     session_data: Mapping[str, Any],
     user_doc: Mapping[str, Any] | None,
@@ -50,19 +57,19 @@ def scope_for_session(
 
     session_city_id = session_data.get("cityId")
     user_city_id = user_doc.get("cityId")
-    if not session_city_id or session_city_id != user_city_id:
+    if not city_ids_match(session_city_id, user_city_id):
         raise TenantError("User city does not match the session.")
 
     if (
         not city_doc
-        or city_doc.get("_id") != session_city_id
+        or not city_ids_match(city_doc.get("_id"), user_city_id)
         or not city_doc.get("isActive", False)
     ):
         raise TenantError("Active city is required.")
 
     return TenantScope(
         is_global=False,
-        city_id=session_city_id,
+        city_id=user_city_id,
         reason="staff",
     )
 
