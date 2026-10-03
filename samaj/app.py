@@ -1054,6 +1054,147 @@ def create_app(config=None, collection=None, correction_collection=None):
             "config": serialize_document(config),
         })
 
+    # ------------------------------------------------------------------
+    # Campaign Pricing Config  (superadmin-only)
+    # ------------------------------------------------------------------
+
+    @app.get("/api/campaign-pricing")
+    def get_campaign_pricing():
+        """Return the current campaign pricing config.
+
+        Only accessible to superadmin (manage_role_config capability).
+        Returns basePriceRupees and per-city commission percentages.
+        Also embeds the city list so the UI can label each city by name.
+        """
+        if not role_can("manage_role_config"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        pricing = campaign.get_campaign_pricing_config()
+
+        # Embed city names so the UI can show "Mumbai – 50%" instead of raw ids.
+        cities_cursor = get_cities_collection().find(
+            {}, {"_id": 1, "name": 1, "isActive": 1}
+        )
+        cities = [
+            {
+                "id": str(c["_id"]),
+                "name": c.get("name", str(c["_id"])),
+                "isActive": c.get("isActive", True),
+            }
+            for c in cities_cursor
+        ]
+
+        return jsonify({
+            "basePriceRupees": pricing["basePriceRupees"],
+            "cityCommissions": pricing["cityCommissions"],
+            "cities": cities,
+        })
+
+    @app.put("/api/campaign-pricing")
+    def update_campaign_pricing():
+        """Update the campaign pricing config.
+
+        Superadmin-only (manage_role_config capability).
+
+        Expected JSON body::
+
+            {
+                "basePriceRupees": 1.5,
+                "cityCommissions": {
+                    "<cityId>": 100.0,
+                    "<cityId>": 50.0
+                }
+            }
+
+        ``basePriceRupees`` must be a positive number.
+        Each commission value must be >= 0 (percentage).
+        """
+        if not role_can("manage_role_config"):
+            return jsonify({"error": "Forbidden"}), 403
+
+        payload = request.get_json(silent=True) or {}
+
+        # Validate base price.
+        try:
+            base_price = float(payload.get("basePriceRupees", 1.0))
+            if base_price <= 0:
+                raise ValueError("basePriceRupees must be positive.")
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        # Validate per-city commissions.
+        raw_commissions = payload.get("cityCommissions") or {}
+        if not isinstance(raw_commissions, dict):
+            return jsonify({"error": "cityCommissions must be an object."}), 400
+
+        city_commissions = {}
+        for city_id, pct in raw_commissions.items():
+            try:
+                pct_val = float(pct)
+                if pct_val < 0:
+                    raise ValueError(f"Commission for {city_id} must be >= 0.")
+                city_commissions[str(city_id)] = pct_val
+            except (TypeError, ValueError) as exc:
+                return jsonify({"error": str(exc)}), 400
+
+        doc = {
+            "key": campaign._CAMPAIGN_PRICING_KEY,
+            "basePriceRupees": base_price,
+            "cityCommissions": city_commissions,
+            "updatedAt": now_utc(),
+            "updatedBy": session.get("username", ""),
+        }
+
+        settings = get_settings_collection()
+        existing = settings.find_one({"key": campaign._CAMPAIGN_PRICING_KEY})
+        if existing:
+            settings.update_one(
+                {"key": campaign._CAMPAIGN_PRICING_KEY},
+                {"$set": doc},
+            )
+        else:
+            settings.insert_one(doc)
+
+        return jsonify({
+            "ok": True,
+            "basePriceRupees": base_price,
+            "cityCommissions": city_commissions,
+        })
+
+    # ------------------------------------------------------------------
+    # Pricing preview for campaigners (city-scoped, no auth restriction
+    # beyond being a valid campaigner session)
+    # ------------------------------------------------------------------
+
+    @app.get("/api/campaigns/pricing-preview")
+    @require_campaigner
+    def campaign_pricing_preview():
+        """Return the effective per-recipient price for the current city.
+
+        Called by the campaign wizard (Step 3) before the user pays so the
+        UI can display the correct amount instead of the hardcoded ₹1.
+
+        Returns::
+
+            {
+                "pricePerRecipient": 3.0,
+                "basePriceRupees": 1.5,
+                "commissionPct": 100.0
+            }
+        """
+        scope = tenant_query()
+        city_id = scope.get("cityId") if scope else None
+
+        pricing = campaign.get_campaign_pricing_config()
+        commission_pct = pricing["cityCommissions"].get(str(city_id), 0.0) if city_id else 0.0
+        price = campaign.get_price_per_recipient(city_id)
+
+        return jsonify({
+            "pricePerRecipient": price,
+            "basePriceRupees": pricing["basePriceRupees"],
+            "commissionPct": commission_pct,
+        })
+
     @app.post("/api/bulk-import")
     def bulk_import_endpoint():
 

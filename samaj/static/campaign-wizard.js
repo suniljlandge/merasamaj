@@ -92,6 +92,10 @@
   /* on window.CampaignWizard for Steps 4 and 5).                  */
   state.campaignId = null;
   var paying = false;
+  /* pricePerRecipient is fetched from /api/campaigns/pricing-preview
+   * when Step 3 is entered. Defaults to 1 so existing behaviour is
+   * preserved if the fetch fails.                                   */
+  var pricePerRecipient = 1;
 
   /* Step 4 (confirmation / execution status) DOM references.      */
   var elCStatus;
@@ -1668,8 +1672,9 @@
   /* ========================================================== */
   /* STEP 3 — Payment via UPI QR Code                           */
   /* ---------------------------------------------------------- */
-  /* On entry the payment summary is computed from the selected  */
-  /* recipient count: "N recipients x Rs.1 = Rs.N total".        */
+  /* On entry the payment summary is fetched from the server     */
+  /* (/api/campaigns/pricing-preview) and computed as:           */
+  /*   N recipients × ₹<pricePerRecipient> = ₹<total>           */
   /* The Pay button POSTs to /api/campaigns/create-with-payment  */
   /* to create the campaign and get a UPI deep-link back. A QR   */
   /* code is rendered from the link. The user pays via any UPI   */
@@ -1677,7 +1682,35 @@
   /* awaits admin confirmation before messages are sent.         */
   /* ========================================================== */
 
-  /* ₹ amount equals the selected recipient count (₹1 each). */
+  /* Fetch the city-specific per-recipient price from the server, then
+   * re-render the payment summary. Called once each time Step 3 is shown
+   * so the price stays up-to-date if the superadmin changes it between
+   * wizard sessions. Falls back silently to pricePerRecipient = 1 on error. */
+  function fetchPricingAndRender() {
+    fetch("/api/campaigns/pricing-preview", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var p = parseFloat(data.pricePerRecipient);
+        if (!isNaN(p) && p > 0) {
+          pricePerRecipient = p;
+        }
+        renderPaymentSummary();
+      })
+      .catch(function () {
+        /* Keep existing pricePerRecipient value; still render. */
+        renderPaymentSummary();
+      });
+  }
+
+  /* Format a rupee amount to at most 2 decimal places, stripping
+   * trailing zeros (e.g. 3.00 → "3", 1.50 → "1.5", 2.25 → "2.25"). */
+  function formatRupees(amount) {
+    var s = parseFloat(amount).toFixed(2);
+    /* Remove trailing zeros after decimal point. */
+    return s.replace(/\.?0+$/, "");
+  }
+
+  /* ₹ amount = pricePerRecipient × recipient count. */
   function selectedRecipientCount() {
     var recipients = window.CampaignWizard.selectedRecipients;
     return recipients && recipients.length ? recipients.length : 0;
@@ -1685,25 +1718,30 @@
 
   function renderPaymentSummary() {
     var count = selectedRecipientCount();
+    var total = Math.round(pricePerRecipient * count * 100) / 100;
+    var priceStr = formatRupees(pricePerRecipient);
+    var totalStr = formatRupees(total);
+
     if (elPCount) {
       elPCount.textContent = String(count);
     }
     if (elPTotal) {
-      elPTotal.textContent = String(count);
+      elPTotal.textContent = totalStr;
     }
     var summaryShort = document.getElementById("cm-p-summary-short");
     if (summaryShort) {
-      summaryShort.textContent = "\u20B91 × " + count;
+      summaryShort.textContent = "\u20B9" + priceStr + " \u00D7 " + count;
     }
     if (elPSummary) {
-      elPSummary.textContent = count + " recipients × ₹1 = ₹" + count;
+      elPSummary.textContent =
+        count + " recipients \u00D7 \u20B9" + priceStr + " = \u20B9" + totalStr;
     }
     var webSavings = document.getElementById("cm-p-web-savings");
     if (webSavings) {
       webSavings.textContent = String(count);
     }
     if (elPPay) {
-      elPPay.textContent = "Pay \u20B9" + count + " & Send via Cloud API";
+      elPPay.textContent = "Pay \u20B9" + totalStr + " & Send via Cloud API";
       elPPay.disabled = paying || count < 1;
     }
 
@@ -2017,7 +2055,8 @@
   function onEnterPayment() {
     clearPaymentError();
     setPaymentStatus("");
-    renderPaymentSummary();
+    /* Fetch the current city-specific price from the server, then render. */
+    fetchPricingAndRender();
   }
 
   /* Render a QR code for the UPI deep-link into #cm-p-qr. */

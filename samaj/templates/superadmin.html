@@ -304,6 +304,50 @@
         </div>
       </section>
 
+      <!-- Campaign Pricing -->
+      <section class="directory-search-card" id="campaign-pricing-panel">
+        <div class="directory-table-header">
+          <div>
+            <p class="directory-eyebrow">Billing</p>
+            <h2>Campaign pricing</h2>
+            <p>
+              Set the base price per recipient and per-city admin commission.
+              Campaigners see: <strong>base price × (1 + commission %)</strong> per recipient.
+              Example: ₹1.50 base + 100% commission → ₹3.00 per recipient.
+            </p>
+          </div>
+        </div>
+
+        <form id="campaign-pricing-form" class="form-surface" style="margin-top:16px;">
+          <div class="field-grid">
+            <label class="field">
+              <span>Base price per recipient (₹)</span>
+              <input
+                id="cp-base-price"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="1.00"
+                style="max-width:160px;"
+              >
+            </label>
+          </div>
+
+          <h3 style="margin:20px 0 8px;font-size:14px;font-weight:600;color:var(--steel);">
+            City commission (%)
+          </h3>
+          <p style="font-size:13px;color:var(--steel);margin-bottom:12px;">
+            Leave a city at 0% to charge only the base price.
+          </p>
+          <div id="cp-city-rows" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+          <div class="form-actions" style="margin-top:20px;">
+            <button class="button-primary" type="submit">Save pricing</button>
+            <span id="cp-status" style="margin-left:12px;font-size:13px;"></span>
+          </div>
+        </form>
+      </section>
+
       <!-- WhatsApp Sidecar Control -->
       <section class="directory-search-card" id="sidecar-section">
         <div class="directory-table-header">

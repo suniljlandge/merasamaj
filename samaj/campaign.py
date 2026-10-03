@@ -710,8 +710,11 @@ def create_campaign_with_upi(
     if recipient_count == 0:
         raise ValueError("At least 1 recipient is required.")
 
-    # ₹1 per recipient.
-    amount_rupees = recipient_count
+    # Determine per-recipient price from the city-aware pricing config.
+    # Formula: base_price * (1 + city_commission_pct / 100)
+    city_id = (query_scope or {}).get("cityId")
+    price_per_recipient = get_price_per_recipient(city_id)
+    amount_rupees = round(price_per_recipient * recipient_count, 2)
 
     campaign_id = ObjectId()
 
@@ -742,6 +745,7 @@ def create_campaign_with_upi(
         "audienceFilters": audience_filters or {},
         "cityId": (query_scope or {}).get("cityId"),
         "paymentId": None,
+        "pricePerRecipient": price_per_recipient,
         "status": PENDING_PAYMENT,
         "stats": {
             "totalRecipients": recipient_count,
@@ -762,8 +766,9 @@ def create_campaign_with_upi(
         "upiLink": upi_link,
         "transactionNote": transaction_note,
         "upiTransactionRef": None,
-        "amount": amount_rupees * 100,  # Store in paise for consistency.
+        "amount": round(amount_rupees * 100),  # Store in paise for consistency.
         "amountRupees": amount_rupees,
+        "pricePerRecipient": price_per_recipient,
         "currency": "INR",
         "recipientCount": recipient_count,
         "status": "awaiting_upi",
@@ -784,6 +789,7 @@ def create_campaign_with_upi(
         "campaignId": str(campaign_id),
         "upiLink": upi_link,
         "amount": amount_rupees,
+        "pricePerRecipient": price_per_recipient,
         "transactionNote": transaction_note,
     }
 
@@ -1090,11 +1096,88 @@ def send_single_template_message(
 # a nested "metaWhatsApp" object holding the Meta WhatsApp credentials).
 _SETTINGS_COLLECTION_NAME = "app_settings"
 _OTP_SETTINGS_KEY = "otp_settings"
+_CAMPAIGN_PRICING_KEY = "campaign_pricing"
+
+# Default base price when no config has been saved yet.
+_DEFAULT_BASE_PRICE = 1.0
 
 
 def _get_settings_collection():
     """Return the 'app_settings' MongoDB collection (OTP / WhatsApp settings)."""
     return _get_database()[_SETTINGS_COLLECTION_NAME]
+
+
+def get_campaign_pricing_config():
+    """Load the campaign pricing configuration from the settings collection.
+
+    Returns a dict with the shape::
+
+        {
+            "basePriceRupees": float,   # superadmin-set base price, e.g. 1.5
+            "cityCommissions": {
+                "<cityId_str>": float,  # commission percentage, e.g. 100.0
+                ...
+            },
+        }
+
+    Falls back to ``{"basePriceRupees": 1.0, "cityCommissions": {}}`` when
+    no config has been stored yet.
+    """
+    try:
+        doc = (
+            _get_settings_collection().find_one({"key": _CAMPAIGN_PRICING_KEY})
+            or {}
+        )
+    except Exception:
+        doc = {}
+
+    base = doc.get("basePriceRupees")
+    try:
+        base = float(base)
+        if base <= 0:
+            base = _DEFAULT_BASE_PRICE
+    except (TypeError, ValueError):
+        base = _DEFAULT_BASE_PRICE
+
+    raw_commissions = doc.get("cityCommissions") or {}
+    city_commissions = {}
+    for city_id, pct in raw_commissions.items():
+        try:
+            pct_val = float(pct)
+            if pct_val < 0:
+                pct_val = 0.0
+            city_commissions[str(city_id)] = pct_val
+        except (TypeError, ValueError):
+            city_commissions[str(city_id)] = 0.0
+
+    return {"basePriceRupees": base, "cityCommissions": city_commissions}
+
+
+def get_price_per_recipient(city_id=None):
+    """Return the effective per-recipient price (in rupees) for a given city.
+
+    Formula: base_price * (1 + commission_pct / 100)
+
+    Args:
+        city_id: The city's id string (or None / empty for global / no-commission).
+
+    Returns:
+        float — rounded to 2 decimal places.
+
+    Examples:
+        base=1.5, commission=100% → 1.5 * (1 + 1.0) = 3.0
+        base=1.0, commission=0%   → 1.0 * 1.0       = 1.0
+    """
+    config = get_campaign_pricing_config()
+    base = config["basePriceRupees"]
+    commissions = config["cityCommissions"]
+
+    commission_pct = 0.0
+    if city_id:
+        commission_pct = commissions.get(str(city_id), 0.0)
+
+    price = base * (1 + commission_pct / 100.0)
+    return round(price, 2)
 
 
 def load_whatsapp_settings():

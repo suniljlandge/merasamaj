@@ -24,6 +24,7 @@ function initialize() {
   loadPublicAccounts();
   loadSignupDefault();
   loadSidecarStatus();
+  loadCampaignPricing();
 
   if (saveConfigBtn) saveConfigBtn.addEventListener("click", saveRoleConfig);
   if (exportBtn) exportBtn.addEventListener("click", downloadExport);
@@ -42,6 +43,9 @@ function initialize() {
 
   const reconnectAllBtn = document.querySelector("#sidecar-reconnect-all-btn");
   if (reconnectAllBtn) reconnectAllBtn.addEventListener("click", sidecarReconnectAll);
+
+  const pricingForm = document.querySelector("#campaign-pricing-form");
+  if (pricingForm) pricingForm.addEventListener("submit", saveCampaignPricing);
 }
 
 async function loadCityManagement() {
@@ -664,5 +668,121 @@ async function sidecarReconnectAll() {
     if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = err.message; }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Reconnect All"; }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Campaign Pricing                                                     */
+/* ------------------------------------------------------------------ */
+
+let pricingCities = [];
+
+async function loadCampaignPricing() {
+  const statusEl = document.querySelector("#cp-status");
+  const basePriceInput = document.querySelector("#cp-base-price");
+  const cityRowsEl = document.querySelector("#cp-city-rows");
+  if (!basePriceInput || !cityRowsEl) return;
+
+  try {
+    const resp = await fetch("/api/campaign-pricing");
+    if (!resp.ok) throw new Error("Unable to load pricing config.");
+    const data = await resp.json();
+
+    basePriceInput.value = data.basePriceRupees ?? 1;
+    pricingCities = data.cities || [];
+
+    cityRowsEl.innerHTML = pricingCities.map((city) => {
+      const existingPct = data.cityCommissions?.[city.id] ?? 0;
+      const effectivePrice = parseFloat(data.basePriceRupees ?? 1) * (1 + existingPct / 100);
+      return `
+        <div class="form-surface" style="display:flex;align-items:center;gap:12px;padding:10px 14px;" data-city-row="${escapeHtmlAttribute(city.id)}">
+          <span style="flex:1;font-size:14px;font-weight:500;">${escapeHtml(city.name)}</span>
+          <span style="font-size:12px;color:var(--steel);white-space:nowrap;">Commission %</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value="${existingPct}"
+            data-city-id="${escapeHtmlAttribute(city.id)}"
+            class="cp-commission-input"
+            style="width:90px;text-align:right;"
+          >
+          <span class="cp-effective-price" style="font-size:13px;color:var(--steel);white-space:nowrap;min-width:90px;text-align:right;">
+            → ₹${effectivePrice.toFixed(2).replace(/\.?0+$/, "")} / recipient
+          </span>
+        </div>`;
+    }).join("");
+
+    /* Live-preview: update effective price labels as inputs change. */
+    cityRowsEl.querySelectorAll(".cp-commission-input").forEach((input) => {
+      input.addEventListener("input", function () {
+        const row = input.closest("[data-city-row]");
+        if (!row) return;
+        const baseVal = parseFloat(basePriceInput.value) || 1;
+        const pct = parseFloat(input.value) || 0;
+        const effective = baseVal * (1 + pct / 100);
+        const label = row.querySelector(".cp-effective-price");
+        if (label) {
+          label.textContent = "→ ₹" + effective.toFixed(2).replace(/\.?0+$/, "") + " / recipient";
+        }
+      });
+    });
+
+    /* Also update all rows when base price changes. */
+    basePriceInput.addEventListener("input", function () {
+      const baseVal = parseFloat(basePriceInput.value) || 1;
+      cityRowsEl.querySelectorAll(".cp-commission-input").forEach((input) => {
+        const row = input.closest("[data-city-row]");
+        if (!row) return;
+        const pct = parseFloat(input.value) || 0;
+        const effective = baseVal * (1 + pct / 100);
+        const label = row.querySelector(".cp-effective-price");
+        if (label) {
+          label.textContent = "→ ₹" + effective.toFixed(2).replace(/\.?0+$/, "") + " / recipient";
+        }
+      });
+    });
+
+  } catch (err) {
+    if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = err.message; }
+  }
+}
+
+async function saveCampaignPricing(e) {
+  e.preventDefault();
+  const statusEl = document.querySelector("#cp-status");
+  const basePriceInput = document.querySelector("#cp-base-price");
+  const cityRowsEl = document.querySelector("#cp-city-rows");
+  if (!basePriceInput) return;
+
+  const basePrice = parseFloat(basePriceInput.value);
+  if (isNaN(basePrice) || basePrice <= 0) {
+    if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = "Base price must be a positive number."; }
+    return;
+  }
+
+  const cityCommissions = {};
+  if (cityRowsEl) {
+    cityRowsEl.querySelectorAll(".cp-commission-input").forEach((input) => {
+      const cityId = input.getAttribute("data-city-id");
+      const pct = parseFloat(input.value);
+      if (cityId) cityCommissions[cityId] = isNaN(pct) ? 0 : Math.max(0, pct);
+    });
+  }
+
+  if (statusEl) { statusEl.style.color = ""; statusEl.textContent = "Saving…"; }
+
+  try {
+    const resp = await fetch("/api/campaign-pricing", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ basePriceRupees: basePrice, cityCommissions }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || "Save failed.");
+    if (statusEl) { statusEl.style.color = "var(--success, green)"; statusEl.textContent = "✓ Saved"; }
+    setTimeout(() => { if (statusEl) statusEl.textContent = ""; }, 3000);
+  } catch (err) {
+    if (statusEl) { statusEl.style.color = "var(--danger)"; statusEl.textContent = err.message; }
   }
 }
